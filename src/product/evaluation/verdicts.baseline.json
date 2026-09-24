@@ -1,0 +1,1507 @@
+{
+ "golden": [
+  {
+   "id": "EVAL-001",
+   "passed": true,
+   "checks": [
+    "PASS Investigation opened",
+    "PASS Release correlated",
+    "PASS States correlation, not causation",
+    "PASS PM notified once"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout conversion declined — sources conflict",
+      "status": "CONFIRMED",
+      "attention": "HIGH",
+      "confidence": 0.62,
+      "correlated": [
+       "ga4"
+      ],
+      "release": "4.8.1@30",
+      "hypotheses": [
+       "release_related:open:weak",
+       "shared_product_issue:contested:weak",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:supported:moderate",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:change",
+       "app_store:stable",
+       "ga4:degraded",
+       "ga4:stable",
+       "ga4:stable",
+       "google_play:change",
+       "jira:change",
+       "jira:stable"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "1:ga4",
+       "1:app_store",
+       "1:app_store",
+       "1:google_play",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "2:ga4",
+       "2:app_store",
+       "2:app_store",
+       "2:google_play",
+       "3:ga4",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "3:ga4",
+       "3:app_store",
+       "3:app_store",
+       "3:google_play"
+      ],
+      "toolCalls": 24,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended"
+      ],
+      "notified": [
+       "HIGH"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:HIGH:Jagr: Checkout conversion dropped 18%"
+    ],
+    "briefs": [
+     [
+      "HIGH:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-002",
+   "passed": true,
+   "checks": [
+    "PASS No investigation needing attention",
+    "PASS No email"
+   ],
+   "result": {
+    "investigations": [],
+    "emails": [],
+    "briefs": [
+     []
+    ]
+   }
+  },
+  {
+   "id": "EVAL-003",
+   "passed": true,
+   "checks": [
+    "PASS Single investigation",
+    "PASS Correlates App Store, Google Play and Jira",
+    "PASS Jira release in the evidence"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "stability",
+      "title": "App stability degraded",
+      "status": "CONFIRMED",
+      "attention": "HIGH",
+      "confidence": 0.88,
+      "correlated": [
+       "app_store",
+       "google_play",
+       "jira"
+      ],
+      "release": "4.8.1@30",
+      "hypotheses": [
+       "release_related:supported:moderate",
+       "shared_product_issue:supported:strong",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:degraded",
+       "app_store:stable",
+       "google_play:degraded",
+       "jira:change",
+       "jira:degraded"
+      ],
+      "consulted": [
+       "1:app_store",
+       "1:jira",
+       "1:jira",
+       "1:google_play",
+       "1:app_store",
+       "2:app_store",
+       "2:jira",
+       "2:jira",
+       "2:google_play",
+       "2:app_store",
+       "3:app_store",
+       "3:jira",
+       "3:jira",
+       "3:google_play",
+       "3:app_store",
+       "rollout-check 2:app_store",
+       "rollout-check 2:google_play",
+       "rollout-check 3:app_store",
+       "rollout-check 3:google_play"
+      ],
+      "toolCalls": 19,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended",
+       "link_issues:LOW:executed"
+      ],
+      "notified": [
+       "HIGH"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:HIGH:Jagr: Crash-free sessions (iOS) fell 0.78 pts"
+    ],
+    "briefs": [
+     [
+      "HIGH:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-004",
+   "passed": true,
+   "checks": [
+    "PASS Customer signal investigated",
+    "PASS Analytics checked and stable",
+    "PASS Morning brief, not an email"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout complaints rising",
+      "status": "RESOLVED",
+      "attention": "MEDIUM",
+      "confidence": 0.39,
+      "correlated": [
+       "app_store",
+       "google_play"
+      ],
+      "release": null,
+      "hypotheses": [
+       "customer_only:supported:moderate",
+       "shared_product_issue:contested:moderate",
+       "release_related:ruled_out:none",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:degraded",
+       "app_store:stable",
+       "ga4:stable",
+       "google_play:degraded",
+       "google_play:stable",
+       "jira:stable",
+       "jira:stable"
+      ],
+      "consulted": [
+       "1:app_store",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "1:app_store",
+       "1:google_play",
+       "1:google_play",
+       "2:app_store",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "2:app_store",
+       "2:google_play",
+       "2:google_play",
+       "3:app_store",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "3:app_store",
+       "3:google_play",
+       "3:google_play"
+      ],
+      "toolCalls": 21,
+      "actions": [
+       "create_jira_task:MEDIUM:recommended"
+      ],
+      "notified": []
+     }
+    ],
+    "emails": [],
+    "briefs": [
+     [
+      "MEDIUM:RESOLVED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-005",
+   "passed": true,
+   "checks": [
+    "PASS Investigated",
+    "PASS Confidence below 60%",
+    "PASS Says it is single-source",
+    "PASS No email"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "signup",
+      "title": "Signup conversion declined",
+      "status": "CONFIRMED",
+      "attention": "MEDIUM",
+      "confidence": 0.55,
+      "correlated": [
+       "ga4"
+      ],
+      "release": null,
+      "hypotheses": [
+       "release_related:ruled_out:none",
+       "shared_product_issue:contested:weak",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:open:weak",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "ga4:degraded",
+       "ga4:stable",
+       "jira:stable",
+       "jira:stable"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4"
+      ],
+      "toolCalls": 8,
+      "actions": [
+       "create_jira_task:MEDIUM:recommended"
+      ],
+      "notified": []
+     }
+    ],
+    "emails": [],
+    "briefs": [
+     [
+      "MEDIUM:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-006",
+   "passed": true,
+   "checks": [
+    "PASS Three or more sources correlated",
+    "PASS Confidence ≥ 85%"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout health degraded",
+      "status": "CONFIRMED",
+      "attention": "HIGH",
+      "confidence": 0.91,
+      "correlated": [
+       "app_store",
+       "ga4",
+       "jira"
+      ],
+      "release": "4.8.1@30",
+      "hypotheses": [
+       "release_related:supported:moderate",
+       "shared_product_issue:supported:strong",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:ruled_out:none",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:degraded",
+       "app_store:degraded",
+       "ga4:degraded",
+       "ga4:degraded",
+       "ga4:stable",
+       "jira:change",
+       "jira:degraded"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "1:app_store",
+       "1:ga4",
+       "1:app_store",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "2:app_store",
+       "2:ga4",
+       "2:app_store",
+       "3:ga4",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "3:app_store",
+       "3:ga4",
+       "3:app_store",
+       "4:ga4",
+       "4:jira",
+       "4:jira",
+       "4:ga4",
+       "4:app_store",
+       "4:ga4",
+       "4:app_store",
+       "rollout-check 2:app_store",
+       "rollout-check 2:google_play"
+      ],
+      "toolCalls": 30,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended",
+       "link_issues:LOW:executed",
+       "pause_rollout:HIGH:awaiting_approval"
+      ],
+      "notified": [
+       "HIGH"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:HIGH:Jagr: Checkout conversion dropped 18%"
+    ],
+    "briefs": [
+     [
+      "HIGH:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-007",
+   "passed": true,
+   "checks": [
+    "PASS One investigation",
+    "PASS Both watches linked",
+    "PASS Seen many times",
+    "PASS One email"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout health degraded",
+      "status": "CONFIRMED",
+      "attention": "HIGH",
+      "confidence": 0.91,
+      "correlated": [
+       "app_store",
+       "ga4",
+       "jira"
+      ],
+      "release": "4.8.1@30",
+      "hypotheses": [
+       "release_related:supported:moderate",
+       "shared_product_issue:supported:strong",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:ruled_out:none",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:degraded",
+       "app_store:degraded",
+       "ga4:degraded",
+       "ga4:degraded",
+       "ga4:stable",
+       "jira:change",
+       "jira:degraded"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "1:ga4",
+       "1:app_store",
+       "1:app_store",
+       "1:google_play",
+       "1:google_play",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "2:app_store",
+       "2:ga4",
+       "2:app_store",
+       "3:ga4",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "3:app_store",
+       "3:ga4",
+       "3:app_store",
+       "4:ga4",
+       "4:jira",
+       "4:jira",
+       "4:ga4",
+       "4:app_store",
+       "4:ga4",
+       "4:app_store",
+       "5:ga4",
+       "5:jira",
+       "5:jira",
+       "5:ga4",
+       "5:app_store",
+       "5:ga4",
+       "5:app_store",
+       "6:ga4",
+       "6:jira",
+       "6:jira",
+       "6:ga4",
+       "6:app_store",
+       "6:ga4",
+       "6:app_store",
+       "rollout-check 3:app_store",
+       "rollout-check 3:google_play"
+      ],
+      "toolCalls": 46,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended",
+       "link_issues:LOW:executed",
+       "pause_rollout:HIGH:awaiting_approval"
+      ],
+      "notified": [
+       "HIGH"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:HIGH:Jagr: Checkout conversion dropped 18%"
+    ],
+    "briefs": [
+     [
+      "HIGH:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-008",
+   "passed": true,
+   "checks": [
+    "PASS No evidence from unavailable sources",
+    "PASS Gaps stated as unknowns",
+    "PASS Connection states preserved",
+    "PASS Confidence reduced"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout conversion declined",
+      "status": "CONFIRMED",
+      "attention": "HIGH",
+      "confidence": 0.6,
+      "correlated": [
+       "ga4",
+       "jira"
+      ],
+      "release": "4.8.1@30",
+      "hypotheses": [
+       "release_related:supported:moderate",
+       "shared_product_issue:supported:moderate",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:ruled_out:none",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:gap",
+       "ga4:degraded",
+       "ga4:stable",
+       "google_play:gap",
+       "jira:change",
+       "jira:degraded"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "3:ga4",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "rollout-check 2:app_store",
+       "rollout-check 2:google_play",
+       "rollout-check 3:app_store",
+       "rollout-check 3:google_play"
+      ],
+      "toolCalls": 16,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended",
+       "link_issues:LOW:executed"
+      ],
+      "notified": [
+       "HIGH"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:HIGH:Jagr: Checkout conversion dropped 18%"
+    ],
+    "briefs": [
+     [
+      "HIGH:CONFIRMED"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "EVAL-009",
+   "passed": true,
+   "checks": [
+    "PASS No alert",
+    "PASS Quiet brief"
+   ],
+   "result": {
+    "investigations": [],
+    "emails": [],
+    "briefs": [
+     []
+    ]
+   }
+  },
+  {
+   "id": "EVAL-010",
+   "passed": true,
+   "checks": [
+    "PASS Rated CRITICAL",
+    "PASS Immediate email",
+    "PASS Sent on first detection, before confirmation",
+    "PASS Exactly one email"
+   ],
+   "result": {
+    "investigations": [
+     {
+      "area": "checkout",
+      "title": "Checkout health degraded",
+      "status": "CONFIRMED",
+      "attention": "CRITICAL",
+      "confidence": 0.88,
+      "correlated": [
+       "app_store",
+       "ga4",
+       "jira"
+      ],
+      "release": null,
+      "hypotheses": [
+       "release_related:ruled_out:none",
+       "shared_product_issue:supported:strong",
+       "demand_shift:ruled_out:none",
+       "measurement_artifact:contested:moderate",
+       "external_or_unobserved:open:weak"
+      ],
+      "evidence": [
+       "app_store:degraded",
+       "app_store:stable",
+       "ga4:degraded",
+       "ga4:stable",
+       "ga4:stable",
+       "jira:degraded",
+       "jira:stable"
+      ],
+      "consulted": [
+       "1:ga4",
+       "1:jira",
+       "1:jira",
+       "1:ga4",
+       "1:app_store",
+       "1:ga4",
+       "1:app_store",
+       "2:ga4",
+       "2:jira",
+       "2:jira",
+       "2:ga4",
+       "2:app_store",
+       "2:ga4",
+       "2:app_store",
+       "3:ga4",
+       "3:jira",
+       "3:jira",
+       "3:ga4",
+       "3:app_store",
+       "3:ga4",
+       "3:app_store"
+      ],
+      "toolCalls": 21,
+      "actions": [
+       "create_jira_incident:MEDIUM:recommended",
+       "link_issues:LOW:executed",
+       "notify_customers:CRITICAL:awaiting_approval"
+      ],
+      "notified": [
+       "CRITICAL"
+      ]
+     }
+    ],
+    "emails": [
+     "alert:CRITICAL:[Critical] Jagr: Checkout conversion dropped 60%"
+    ],
+    "briefs": [
+     [
+      "CRITICAL:CONFIRMED"
+     ]
+    ]
+   }
+  }
+ ],
+ "goldenMetrics": [
+  "false_interruption_rate=0",
+  "precision=1",
+  "recall=1",
+  "correlation=1",
+  "grounding=1",
+  "overclaim=0",
+  "severity=1",
+  "dedupe=1",
+  "deep_links=1",
+  "actionability=1",
+  "scheduler=1"
+ ],
+ "adversarial": [
+  {
+   "id": "ADV-01",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Release kept as a hypothesis, not a conclusion",
+    "PASS Unknowns say causation is not established",
+    "PASS HIGH: core funnel + release in window",
+    "PASS Stopped before exhausting the tool budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-02",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No email for an improvement",
+    "PASS No investigation needing attention",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-03",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Release explanation ruled out",
+    "PASS Checked release history before ruling it out",
+    "PASS No rollout or rollback proposed",
+    "PASS Explanation does not tie the change to a release",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-04",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No interruption",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-05",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No conversion figures invented",
+    "PASS Says Analytics is unavailable",
+    "PASS Still investigates from the sources that work",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-06",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No Jira evidence fabricated",
+    "PASS Falls back to store release history",
+    "PASS Says Jira is returning an error",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-07",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No email",
+    "PASS Checked an independent measure (revenue)",
+    "PASS Keeps \"measurement artifact\" open",
+    "PASS Says the sources conflict",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-08",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS One investigation",
+    "PASS One email",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-09",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Both explanations stay open",
+    "PASS Explanation names both",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-10",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No email and nothing open",
+    "PASS Quiet brief",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-11",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Checked analytics for real impact",
+    "PASS MEDIUM — brief, not email",
+    "PASS \"Customer-reported only\" supported",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-12",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No email",
+    "PASS \"Real product issue\" not claimed as supported",
+    "PASS Stops without guessing a cause",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-13",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS One investigation, reopened",
+    "PASS One email",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-14",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Consequential actions proposed, none executed",
+    "PASS Executor refuses them without approval",
+    "PASS CRITICAL",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-15",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Low-risk action done without asking",
+    "PASS Recorded in the trace",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-16",
+   "passed": false,
+   "knownFailure": true,
+   "checks": [
+    "FAIL Revenue-confirmed drop reaches HIGH and emails",
+    "FAIL Real product issue not marked contested",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-17",
+   "passed": false,
+   "knownFailure": true,
+   "checks": [
+    "FAIL Release-linked complaints stay in the brief",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  }
+ ],
+ "adversarialModelPlanned": [
+  {
+   "id": "ADV-01",
+   "passed": false,
+   "checks": [
+    "PASS Release kept as a hypothesis, not a conclusion",
+    "PASS Unknowns say causation is not established",
+    "PASS HIGH: core funnel + release in window",
+    "FAIL Stopped before exhausting the tool budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-02",
+   "passed": true,
+   "checks": [
+    "PASS No email for an improvement",
+    "PASS No investigation needing attention",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-03",
+   "passed": true,
+   "checks": [
+    "PASS Release explanation ruled out",
+    "PASS Checked release history before ruling it out",
+    "PASS No rollout or rollback proposed",
+    "PASS Explanation does not tie the change to a release",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-04",
+   "passed": true,
+   "checks": [
+    "PASS No interruption",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-05",
+   "passed": true,
+   "checks": [
+    "PASS No conversion figures invented",
+    "PASS Says Analytics is unavailable",
+    "PASS Still investigates from the sources that work",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-06",
+   "passed": true,
+   "checks": [
+    "PASS No Jira evidence fabricated",
+    "PASS Falls back to store release history",
+    "PASS Says Jira is returning an error",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-07",
+   "passed": true,
+   "checks": [
+    "PASS No email",
+    "PASS Checked an independent measure (revenue)",
+    "PASS Keeps \"measurement artifact\" open",
+    "PASS Says the sources conflict",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-08",
+   "passed": true,
+   "checks": [
+    "PASS One investigation",
+    "PASS One email",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-09",
+   "passed": true,
+   "checks": [
+    "PASS Both explanations stay open",
+    "PASS Explanation names both",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-10",
+   "passed": true,
+   "checks": [
+    "PASS No email and nothing open",
+    "PASS Quiet brief",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-11",
+   "passed": true,
+   "checks": [
+    "PASS Checked analytics for real impact",
+    "PASS MEDIUM — brief, not email",
+    "PASS \"Customer-reported only\" supported",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-12",
+   "passed": false,
+   "checks": [
+    "PASS No email",
+    "PASS \"Real product issue\" not claimed as supported",
+    "FAIL Stops without guessing a cause",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-13",
+   "passed": true,
+   "checks": [
+    "PASS One investigation, reopened",
+    "PASS One email",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-14",
+   "passed": true,
+   "checks": [
+    "PASS Consequential actions proposed, none executed",
+    "PASS Executor refuses them without approval",
+    "PASS CRITICAL",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-15",
+   "passed": true,
+   "checks": [
+    "PASS Low-risk action done without asking",
+    "PASS Recorded in the trace",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-16",
+   "passed": false,
+   "checks": [
+    "FAIL Revenue-confirmed drop reaches HIGH and emails",
+    "FAIL Real product issue not marked contested",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "ADV-17",
+   "passed": false,
+   "checks": [
+    "FAIL Release-linked complaints stay in the brief",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  }
+ ],
+ "planner": [
+  {
+   "id": "PLN-01",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Model plans were approved and executed",
+    "PASS Order is not the deterministic sequence",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-02",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as SOURCE_UNAVAILABLE",
+    "PASS Jira never called",
+    "PASS No Jira evidence claimed",
+    "PASS Jira marked unavailable, not \"no issues\"",
+    "PASS Used other sources for release timing",
+    "PASS Jira incident is a draft",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-03",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as UNKNOWN_TOOL",
+    "PASS Deterministic fallback labelled",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-04",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Repeats rejected as ALREADY_QUERIED",
+    "PASS At most one Jira issues call per pass",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-05",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as NO_INFORMATION_VALUE",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-06",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as ACTION_NOT_TOOL",
+    "PASS No rollback executed",
+    "PASS Executor still refuses HIGH/CRITICAL without approval",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-07",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Recorded as INVALID_JSON, fallback used",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-08",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Recorded as TIMEOUT",
+    "PASS Stops calling a dead planner (circuit open)",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-09",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as CAUSAL_CLAIM",
+    "PASS Causal text withheld from the trace",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-10",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS No email",
+    "PASS Measurement artifact kept open",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-11",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS App Store stated as unavailable",
+    "PASS No App Store evidence claimed",
+    "PASS Still HIGH from the other sources",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-12",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS One investigation",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-13",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as SCHEMA_VIOLATION",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-14",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Recorded as EMPTY_RESPONSE, fallback used",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-15",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as INVALID_HYPOTHESIS",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-16",
+   "passed": true,
+   "knownFailure": false,
+   "checks": [
+    "PASS Rejected as ALREADY_QUERIED",
+    "PASS Real product issue strong",
+    "PASS Release-related at most moderate",
+    "PASS Demand shift and tracking problem ruled out",
+    "PASS HIGH",
+    "PASS Rollout pause awaiting approval",
+    "PASS One email",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-17",
+   "passed": false,
+   "knownFailure": true,
+   "checks": [
+    "FAIL Revenue-confirmed drop reaches HIGH and emails",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  },
+  {
+   "id": "PLN-18",
+   "passed": false,
+   "knownFailure": true,
+   "checks": [
+    "FAIL Release-linked complaints stay in the brief",
+    "PASS Every tool call was validated or policy-initiated",
+    "PASS Only LOW-risk actions executed on their own",
+    "PASS No pass exceeds the 9-call budget",
+    "PASS No sentence asserts causation",
+    "PASS Every evidence item cites a record or a traced query"
+   ]
+  }
+ ],
+ "sample": {
+  "investigations": [
+   {
+    "area": "checkout",
+    "title": "Checkout health degraded",
+    "status": "CONFIRMED",
+    "attention": "HIGH",
+    "confidence": 0.91,
+    "correlated": [
+     "app_store",
+     "ga4",
+     "jira"
+    ],
+    "release": "4.8.1@30",
+    "hypotheses": [
+     "release_related:supported:moderate",
+     "shared_product_issue:supported:strong",
+     "demand_shift:ruled_out:none",
+     "measurement_artifact:ruled_out:none",
+     "external_or_unobserved:open:weak"
+    ],
+    "evidence": [
+     "app_store:degraded",
+     "app_store:degraded",
+     "ga4:degraded",
+     "ga4:degraded",
+     "ga4:stable",
+     "jira:change",
+     "jira:degraded"
+    ],
+    "consulted": [
+     "1:ga4",
+     "1:jira",
+     "1:jira",
+     "1:ga4",
+     "1:app_store",
+     "1:ga4",
+     "1:app_store",
+     "2:ga4",
+     "2:jira",
+     "2:jira",
+     "2:ga4",
+     "2:app_store",
+     "2:ga4",
+     "2:app_store",
+     "3:ga4",
+     "3:jira",
+     "3:jira",
+     "3:ga4",
+     "3:app_store",
+     "3:ga4",
+     "3:app_store",
+     "4:ga4",
+     "4:jira",
+     "4:jira",
+     "4:ga4",
+     "4:app_store",
+     "4:ga4",
+     "4:app_store",
+     "rollout-check 2:app_store",
+     "rollout-check 2:google_play"
+    ],
+    "toolCalls": 30,
+    "actions": [
+     "create_jira_incident:MEDIUM:recommended",
+     "link_issues:LOW:executed",
+     "pause_rollout:HIGH:awaiting_approval"
+    ],
+    "notified": [
+     "HIGH"
+    ]
+   },
+   {
+    "area": "signup",
+    "title": "Signup conversion declined",
+    "status": "CONFIRMED",
+    "attention": "MEDIUM",
+    "confidence": 0.5,
+    "correlated": [
+     "ga4"
+    ],
+    "release": null,
+    "hypotheses": [
+     "release_related:ruled_out:none",
+     "shared_product_issue:contested:weak",
+     "demand_shift:ruled_out:none",
+     "measurement_artifact:open:weak",
+     "external_or_unobserved:open:weak"
+    ],
+    "evidence": [
+     "ga4:degraded",
+     "ga4:stable",
+     "jira:stable",
+     "jira:stable"
+    ],
+    "consulted": [
+     "1:ga4",
+     "1:jira",
+     "1:jira",
+     "1:ga4",
+     "2:ga4",
+     "2:jira",
+     "2:jira",
+     "2:ga4"
+    ],
+    "toolCalls": 8,
+    "actions": [
+     "create_jira_task:MEDIUM:recommended"
+    ],
+    "notified": []
+   }
+  ],
+  "emails": [
+   "alert:HIGH:Jagr: Checkout conversion dropped 18%"
+  ],
+  "briefs": [
+   [
+    "HIGH:CONFIRMED",
+    "MEDIUM:CONFIRMED"
+   ]
+  ]
+ }
+}
