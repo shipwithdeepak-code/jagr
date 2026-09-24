@@ -16,7 +16,7 @@ import { severityRank } from './detection';
  *
  * Every action type has a fixed risk level and a minimum autonomy level. Level-4 actions
  * (production, payments, pricing, refunds, customer communication) can only ever be
- * "require approval" or "disabled" — there is no setting that lets Nightwatch execute them alone.
+ * "require approval" or "disabled" — there is no setting that lets JAGR execute them alone.
  */
 
 export interface ActionSpec {
@@ -89,7 +89,7 @@ export interface PolicyEvaluation {
   reason: string;
 }
 
-/** Decide what Nightwatch may do with an action. Pure and exhaustively tested. */
+/** Decide what JAGR may do with an action. Pure and exhaustively tested. */
 export function evaluatePolicy(type: ActionType, severity: Severity, settings: WorkspaceSettings): PolicyEvaluation {
   const policy = settings.autonomy;
   const spec = ACTION_CATALOG[type];
@@ -102,7 +102,7 @@ export function evaluatePolicy(type: ActionType, severity: Severity, settings: W
     const gate = settings.autonomy.gates[spec.gatedBy!];
     return gate === 'require_approval'
       ? { decision: 'require_approval', reason: `${GATE_LABELS[spec.gatedBy!]} always require human approval` }
-      : { decision: 'recommend_only', reason: `${GATE_LABELS[spec.gatedBy!]} are disabled for Nightwatch — recommendation only` };
+      : { decision: 'recommend_only', reason: `${GATE_LABELS[spec.gatedBy!]} are disabled for JAGR — recommendation only` };
   }
 
   switch (type) {

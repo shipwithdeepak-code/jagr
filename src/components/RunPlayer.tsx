@@ -11,7 +11,7 @@ import { LogoMark } from './Logo';
  */
 
 const PIPELINE = [
-  'PM leaves · Nightwatch starts',
+  'PM leaves · JAGR starts',
   'Signals arrive',
   'Detect anomalies',
   'Investigate',
@@ -129,7 +129,7 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
   ];
 
   const caption = idx < 0
-    ? { time: '6:00 PM', text: 'The PM leaves for the day. Nightwatch takes the watch.' }
+    ? { time: '6:00 PM', text: 'The PM leaves for the day. Your product doesn’t sleep. Neither does JAGR.' }
     : finished
       ? { time: '8:00 AM', text: 'Morning brief ready. Nothing in production was changed without a human.' }
       : { time: fmt12h(clock), text: current?.action ?? '' };

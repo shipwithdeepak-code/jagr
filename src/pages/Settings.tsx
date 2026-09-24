@@ -43,10 +43,10 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description="What Nightwatch watches, who owns what, how much it may do on its own, and when it interrupts people. Changes apply to the next run and are recorded in the audit log." />
+      <PageHeader title="Settings" description="What JAGR watches, who owns what, how much it may do on its own, and when it interrupts people. Changes apply to the next run and are recorded in the audit log." />
 
       <div className="space-y-6">
-        <Panel title="What Nightwatch watches" hint="Thresholds are the relative move (in the bad direction) required before a signal can be anomalous.">
+        <Panel title="What JAGR watches" hint="Thresholds are the relative move (in the bad direction) required before a signal can be anomalous.">
           <div className="divide-y divide-line">
             {WATCH.map((w) => (
               <div key={w.key} className="flex flex-wrap items-center gap-3 py-2.5">
@@ -86,7 +86,7 @@ export function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel title="Who owns what" hint="Nightwatch files work to the team that owns the implicated component — not the metric that moved.">
+        <Panel title="Who owns what" hint="JAGR files work to the team that owns the implicated component — not the metric that moved.">
           <div className="grid gap-3 sm:grid-cols-2">
             {s.owners.map((o) => (
               <div key={o.area} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
@@ -175,7 +175,7 @@ export function SettingsPage() {
           <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5">
             <div>
               <div className="text-[13.5px] font-medium">Critical escalation</div>
-              <div className="text-[12px] text-ink-3">Allow Nightwatch to notify on-call during the night for critical findings.</div>
+              <div className="text-[12px] text-ink-3">Allow JAGR to notify on-call during the night for critical findings.</div>
             </div>
             <Toggle checked={s.criticalEscalation} onChange={(v) => save({ ...s, criticalEscalation: v }, `Critical escalation ${v ? 'on' : 'off'}`)} label="Critical escalation" />
           </div>

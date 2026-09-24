@@ -70,7 +70,7 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** A task Nightwatch prepared but did not file — the PM reviews and clicks Create Task. */
+/** A task JAGR prepared but did not file — the PM reviews and clicks Create Task. */
 export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: boolean }) {
   const { createTaskFromDraft, state } = useWorkspace();
   const toast = useToast();
@@ -114,7 +114,7 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
         <FilePlus2 size={14} className="text-ink-2" />
         <span className="text-[12px] font-semibold tracking-wide text-ink-2 uppercase">Create {draft.kind === 'incident' ? 'incident' : 'task'}</span>
         <SimulationBadge label="Simulated issue tracker" />
-        <span className="ml-auto text-[12px] text-ink-3">Drafted by Nightwatch</span>
+        <span className="ml-auto text-[12px] text-ink-3">Drafted by JAGR</span>
       </div>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -150,7 +150,7 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
   );
 }
 
-/** Full task view, including why Nightwatch created it. */
+/** Full task view, including why JAGR created it. */
 export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { state, setTaskStatus } = useWorkspace();
   if (!task) return null;
@@ -179,7 +179,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
       {task.createdBy === 'nightwatch' && (
         <div className="mt-5 rounded-xl border border-accent/25 bg-accent-soft/50 p-4">
           <div className="flex items-center gap-2 text-[13px] font-semibold">
-            <Info size={14} className="text-accent" /> Why Nightwatch created this
+            <Info size={14} className="text-accent" /> Why JAGR created this
           </div>
           <KeyValue
             className="mt-3"
@@ -187,7 +187,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
               { k: 'Finding', v: inv ? <Link className="font-medium text-accent hover:underline" to={`/investigations/${inv.id}`}>{inv.title}</Link> : task.investigationId ? 'From an earlier night' : '—' },
               { k: 'Leading hypothesis', v: task.description.hypothesis },
               { k: 'Confidence', v: task.description.confidence },
-              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by Nightwatch, filed by you' : 'Filed on an earlier night' },
+              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by JAGR, filed by you' : 'Filed on an earlier night' },
               { k: 'Autonomy level', v: 'Level 3 — execute low-risk actions' },
             ]}
           />
@@ -205,7 +205,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
             {task.comments.map((c, i) => (
               <li key={i} className="rounded-lg border border-line bg-canvas/60 p-3 text-[13px]">
                 <div className="mb-0.5 text-[12px] text-ink-3">
-                  {c.author === 'nightwatch' ? 'Nightwatch' : 'You'} · {fmtTime(c.at)}
+                  {c.author === 'nightwatch' ? 'JAGR' : 'You'} · {fmtTime(c.at)}
                 </div>
                 {c.body}
               </li>
@@ -245,7 +245,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
     setLoading(true);
     await requestMoreEvidence(approval.id);
     setLoading(false);
-    toast({ tone: 'info', title: 'Nightwatch gathered more evidence', body: 'Follow-up queries were attached to the request.' });
+    toast({ tone: 'info', title: 'JAGR gathered more evidence', body: 'Follow-up queries were attached to the request.' });
   };
 
   return (
@@ -342,7 +342,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
                 onClick={() => {
                   reject(approval.id);
                   setConfirm(null);
-                  toast({ tone: 'info', title: 'Rejected', body: 'Nightwatch will not perform this action. Recorded in the audit log.' });
+                  toast({ tone: 'info', title: 'Rejected', body: 'JAGR will not perform this action. Recorded in the audit log.' });
                 }}
               >
                 Reject
@@ -358,7 +358,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
             In this demo environment approval updates the <strong>simulated</strong> state only. The decision is recorded in the audit log.
           </>
         ) : (
-          'Nightwatch will not perform this action for this finding. The rejection is recorded in the audit log and shown in the brief.'
+          'JAGR will not perform this action for this finding. The rejection is recorded in the audit log and shown in the brief.'
         )}
       </Modal>
     </article>

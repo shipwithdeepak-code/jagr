@@ -39,7 +39,7 @@ export function InvestigationsPage() {
   if (!run) {
     return (
       <>
-        <PageHeader title="Investigations" description="Every anomaly Nightwatch looks into, with the evidence, hypotheses and work it produced." />
+        <PageHeader title="Investigations" description="Every anomaly JAGR looks into, with the evidence, hypotheses and work it produced." />
         <EmptyState icon={Telescope} title="No investigations yet" action={<div className="flex gap-2"><RunButtons /></div>}>
           Investigations open automatically when a signal crosses its threshold and persists. Run the overnight watch to see one.
         </EmptyState>
@@ -51,7 +51,7 @@ export function InvestigationsPage() {
     <>
       <PageHeader
         title="Investigations"
-        description="Every anomaly Nightwatch looked into overnight, with the evidence, hypotheses and work it produced."
+        description="Every anomaly JAGR looked into overnight, with the evidence, hypotheses and work it produced."
         actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'dismissed', label: 'Dismissed' }, { value: 'all', label: 'All' }]} />}
       />
       <Card padded={false} className="overflow-hidden">
@@ -451,7 +451,7 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
           <span className={cx('absolute top-1.5 -left-[20.5px] size-2 rounded-full ring-2 ring-surface', t.kind === 'release' || t.kind === 'pr' ? 'bg-accent' : t.kind === 'agent' ? 'bg-ink' : t.kind === 'metric' ? 'bg-crit' : t.kind === 'experiment' ? 'bg-high' : 'bg-ink-3')} />
           <span className="tabular mr-2 font-mono text-[12px] text-ink-3">{fmtTime(t.at)}</span>
           <span className={t.kind === 'agent' ? 'text-ink-2' : ''}>{t.label}</span>
-          <span className="ml-2 text-[11.5px] text-ink-3">{t.source === 'nightwatch' ? 'Nightwatch' : SOURCE_LABELS[t.source]}</span>
+          <span className="ml-2 text-[11.5px] text-ink-3">{t.source === 'nightwatch' ? 'JAGR' : SOURCE_LABELS[t.source]}</span>
         </li>
       ))}
     </ol>
@@ -460,7 +460,7 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
 
 function ConfidenceCard({ inv }: { inv: Investigation }) {
   if (inv.status === 'dismissed') {
-    return <Card><p className="text-[13px] text-ink-2">Not scored. The metric recovered before the persistence rule was met, so Nightwatch recorded a re-check instead of a finding.</p></Card>;
+    return <Card><p className="text-[13px] text-ink-2">Not scored. The metric recovered before the persistence rule was met, so JAGR recorded a re-check instead of a finding.</p></Card>;
   }
   const leading = inv.hypotheses.find((h) => h.id === inv.leadingHypothesisId) ?? inv.hypotheses[0];
   const alt = inv.hypotheses.filter((h) => h !== leading).reduce((a, h) => a + h.confidence, 0);

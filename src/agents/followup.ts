@@ -31,7 +31,7 @@ export function executeApprovedAction(approval: ApprovalRequest, at: string): st
 }
 
 /**
- * "Request more evidence": Nightwatch runs targeted follow-up queries for this specific action
+ * "Request more evidence": JAGR runs targeted follow-up queries for this specific action
  * and attaches what it finds to the request, so the approver can decide with more context.
  */
 export async function gatherSupplementalEvidence(
@@ -138,7 +138,7 @@ export async function gatherSupplementalEvidence(
       );
     }
   } catch (err) {
-    notes.push(`A follow-up query failed: ${err instanceof Error ? err.message : String(err)}. Nightwatch attached what it could.`);
+    notes.push(`A follow-up query failed: ${err instanceof Error ? err.message : String(err)}. JAGR attached what it could.`);
   }
 
   if (!out.length) notes.push('No additional evidence was available for this action.');

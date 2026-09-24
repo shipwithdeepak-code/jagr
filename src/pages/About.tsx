@@ -41,10 +41,11 @@ export function AboutPage() {
   return (
     <div className="grid gap-10 lg:grid-cols-[1fr_200px]">
       <article className="max-w-[720px]">
-        <Eyebrow>About this build</Eyebrow>
-        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em]">An agent that runs while the team sleeps.</h1>
+        <Eyebrow>About this build · JAGR — AI Product Operations Agent</Eyebrow>
+        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em]">Investigate what changed. Act before it becomes an incident.</h1>
+        <p className="mt-2 text-[15px] font-medium text-ink">Your product doesn’t sleep. Neither does JAGR.</p>
         <p className="mt-3 text-[16px] leading-relaxed text-ink-2">
-          Product Nightwatch is a portfolio build: a working product-operations agent with a real orchestration loop, a real evaluation suite and a simulated enterprise behind typed adapters. These notes explain the product decisions behind it.
+          JAGR is a portfolio build: a working product-operations agent with a real orchestration loop, a real evaluation suite and a simulated enterprise behind typed adapters. These notes explain the product decisions behind it.
         </p>
 
         <H id="problem">Problem</H>
@@ -65,7 +66,7 @@ export function AboutPage() {
 
         <H id="thesis">Product thesis</H>
         <P>
-          <strong className="text-ink">The unit of value is a finished piece of work, not an insight.</strong> A summary saying “conversion is down, possibly Klarna” still leaves the PM with the work. A P1 ticket in the right team’s queue that says what broke, why Nightwatch thinks so, how sure it is and what to check first — plus an incident draft and the risky mitigations queued for approval — is work done.
+          <strong className="text-ink">The unit of value is a finished piece of work, not an insight.</strong> A summary saying “conversion is down, possibly Klarna” still leaves the PM with the work. A P1 ticket in the right team’s queue that says what broke, why JAGR thinks so, how sure it is and what to check first — plus an incident draft and the risky mitigations queued for approval — is work done.
         </P>
         <P>
           The morning brief is therefore organised as <em>what happened, what I did, what I did not do and why</em>. The last part matters as much as the first: trust comes from seeing the agent’s boundaries.
@@ -93,7 +94,7 @@ export function AboutPage() {
           Five levels: <strong className="text-ink">Observe</strong>, <strong className="text-ink">Investigate</strong>, <strong className="text-ink">Recommend</strong>, <strong className="text-ink">Execute low-risk</strong> (tasks, incident drafts, on-call notifications, adding evidence to issues) and <strong className="text-ink">Human approval</strong> (production rollback, disabling payment methods, pricing, refunds, customer communication, production config).
         </P>
         <P>
-          The PM can dial levels 0–3 down, and choose whether tasks are auto-filed or drafted for review. Level 4 has only two settings: requires approval, or disabled. There is deliberately no setting that lets Nightwatch roll back production on its own. That is a product decision, not a missing feature.
+          The PM can dial levels 0–3 down, and choose whether tasks are auto-filed or drafted for review. Level 4 has only two settings: requires approval, or disabled. There is deliberately no setting that lets JAGR roll back production on its own. That is a product decision, not a missing feature.
         </P>
 
         <H id="tools">Tool architecture</H>
@@ -114,7 +115,7 @@ export function AboutPage() {
 
         <H id="hitl">Human-in-the-loop design</H>
         <P>
-          Approval requests are designed for a decision, not a notification: the action, its risk and gate, the reason, the evidence and sources, the confidence, the potential impact including side effects (“rollback also reverts two unrelated PRs”), and reversibility. <strong className="text-ink">Request more evidence</strong> makes Nightwatch run targeted follow-up queries for that specific action and attach them.
+          Approval requests are designed for a decision, not a notification: the action, its risk and gate, the reason, the evidence and sources, the confidence, the potential impact including side effects (“rollback also reverts two unrelated PRs”), and reversibility. <strong className="text-ink">Request more evidence</strong> makes JAGR run targeted follow-up queries for that specific action and attach them.
         </P>
         <P>
           Guardrails are enforced twice: the policy decides what to request, and the executor independently refuses any level-4 action without an approved record. Every agent step and every human response lands in one audit log with tool, input, output, decision, risk and approval status.
@@ -123,7 +124,7 @@ export function AboutPage() {
         <H id="decisions">Key product decisions</H>
         <div className="space-y-4">
           <Decision title="Findings, not alerts">Clustering related anomalies into one investigation was the single biggest noise reduction. Five red metrics from one broken integration should read as one problem.</Decision>
-          <Decision title="Persistence before paging">Nightwatch waited 30 minutes after the first bad bucket before opening the investigation. Slower by design: a transient dip that pages someone at 2 AM costs trust that’s hard to win back.</Decision>
+          <Decision title="Persistence before paging">JAGR waited 30 minutes after the first bad bucket before opening the investigation. Slower by design: a transient dip that pages someone at 2 AM costs trust that’s hard to win back.</Decision>
           <Decision title="Ownership follows the cause, not the symptom">Subscription conversion belongs to Growth, but the task went to Payments Engineering because the leading hypothesis implicates payments.</Decision>
           <Decision title="Say “I don’t know”">The export decline has no explanation in the data, and the product says so plainly. It feels less impressive in a demo, but a confident wrong answer does far more damage.</Decision>
           <Decision title="Draft vs file">Critical findings are filed automatically; lower severities are drafted for the PM. Auto-filing everything turns an agent into a backlog polluter.</Decision>

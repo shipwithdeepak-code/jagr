@@ -1,5 +1,5 @@
 /**
- * Product Nightwatch — domain model.
+ * JAGR — domain model.
  *
  * The chain every finding follows:
  *   Signal → Observation → Evidence → Investigation → Hypothesis → Decision → Action → Task → Outcome
@@ -26,7 +26,7 @@ export type SignalCategory =
   | 'engagement'
   | 'reliability';
 
-/** What the PM can switch on/off in "What Nightwatch watches". */
+/** What the PM can switch on/off in "What JAGR watches". */
 export type WatchArea =
   | 'activation'
   | 'conversion'
@@ -396,7 +396,7 @@ export interface Task {
   tracker: 'simulated';
 }
 
-/** A task Nightwatch has prepared but not filed (policy said draft, or the PM wants to review first). */
+/** A task JAGR has prepared but not filed (policy said draft, or the PM wants to review first). */
 export interface TaskDraft {
   investigationId: string;
   kind: 'task' | 'incident';
@@ -513,7 +513,7 @@ export interface AutonomyPolicy {
   investigate: boolean;
   recommend: boolean;
   createTasks: boolean;
-  /** Findings at or above this severity get tasks filed automatically; below it Nightwatch drafts them. */
+  /** Findings at or above this severity get tasks filed automatically; below it JAGR drafts them. */
   autoFileMinSeverity: AlertSeverity | 'never';
   createIncidents: boolean;
   gates: Record<GatedCategory, GateSetting>;

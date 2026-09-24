@@ -38,7 +38,7 @@ function ScrollAndTitle() {
   useEffect(() => {
     if (!hash) window.scrollTo(0, 0);
     const key = '/' + (pathname.split('/')[1] ?? '');
-    document.title = `${TITLES[key] ?? 'Investigation'} · Nightwatch`;
+    document.title = `${TITLES[key] ?? 'Investigation'} · JAGR`;
   }, [pathname, hash]);
   return null;
 }

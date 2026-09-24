@@ -40,7 +40,7 @@ export function TracePage() {
   if (!state.run) {
     return (
       <>
-        <PageHeader title="Agent Trace" description="A timestamped record of every step Nightwatch takes: tool calls, results, decisions and approvals." />
+        <PageHeader title="Agent Trace" description="A timestamped record of every step JAGR takes: tool calls, results, decisions and approvals." />
         <EmptyState icon={ScrollText} title="No trace yet" action={<div className="flex gap-2"><RunButtons /></div>}>
           Run the overnight watch and every sweep, query, hypothesis and decision will appear here.
         </EmptyState>
@@ -155,7 +155,7 @@ export function AuditTable({ events }: { events: AgentEvent[] }) {
             <Fragment key={e.id}>
               <tr className={cx('border-b border-line align-top last:border-b-0', e.agent === 'you' && 'bg-accent-soft/30')}>
                 <td className="tabular px-3 py-2 font-mono whitespace-nowrap text-ink-3">{fmtTime(e.at, true)}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{e.agent === 'you' ? <Badge tone="accent">You</Badge> : <Badge>Nightwatch</Badge>}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{e.agent === 'you' ? <Badge tone="accent">You</Badge> : <Badge>JAGR</Badge>}</td>
                 <td className="px-3 py-2 font-medium">{e.action}</td>
                 <td className="px-3 py-2">{e.tool ? <Mono className="text-ink-2">{e.tool}</Mono> : '—'}</td>
                 <td className="max-w-[220px] px-3 py-2 text-ink-2">{e.input ?? '—'}</td>

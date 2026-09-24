@@ -37,9 +37,9 @@ export function SignalsPage() {
   if (!run) {
     return (
       <>
-        <PageHeader title="Signals" description="Every metric Nightwatch monitors, compared with the same hours on the previous 28 nights." />
+        <PageHeader title="Signals" description="Every metric JAGR monitors, compared with the same hours on the previous 28 nights." />
         <EmptyState icon={Activity} title="No readings yet" action={<div className="flex gap-2"><RunButtons /></div>}>
-          Nightwatch reads 42 product, payment, support and reliability metrics every 30 minutes during the watch.
+          JAGR reads 42 product, payment, support and reliability metrics every 30 minutes during the watch.
         </EmptyState>
       </>
     );

@@ -94,7 +94,7 @@ export function summariseInvestigation(inv: Investigation): string {
     case 'concluded':
       return `Likely related to ${lowerFirst(leading?.statement ?? 'an unidentified cause')}.`;
     case 'low_confidence':
-      return `Possibly ${lowerFirst(leading?.statement ?? 'unexplained')} — confidence is low, so Nightwatch filed work but did not recommend production changes.`;
+      return `Possibly ${lowerFirst(leading?.statement ?? 'unexplained')} — confidence is low, so JAGR filed work but did not recommend production changes.`;
     case 'insufficient_evidence':
       return 'Insufficient evidence. No release, experiment, provider or support signal explains the change.';
     case 'dismissed':

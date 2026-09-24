@@ -31,7 +31,7 @@ export const ModelHypothesesSchema = z.object({
 
 export type ModelHypotheses = z.infer<typeof ModelHypothesesSchema>;
 
-export const MODEL_SYSTEM_PROMPT = `You are Nightwatch, a product-operations investigator.
+export const MODEL_SYSTEM_PROMPT = `You are JAGR, a product-operations investigator.
 You receive typed evidence gathered from analytics, payments, GitHub, support and experiments.
 Propose up to 6 candidate explanations. Rules:
 - Cite evidence only by the ids provided. Never invent evidence or ids.

@@ -138,7 +138,7 @@ function buildReasoning(inv: Investigation, leading: Hypothesis | undefined, ass
         ? `No explanation cleared the bar. The best candidate — "${best.statement}" — reaches ${fmtConfidence(best.confidence)}. ${assessmentReason}`
         : `No candidate explanations could be formed. ${assessmentReason}`,
     );
-    out.push('Nightwatch will not assert a cause without evidence. It will keep monitoring and include this in the digest.');
+    out.push('JAGR will not assert a cause without evidence. It will keep monitoring and include this in the digest.');
     return out;
   }
   const weighted = [...leading.weights].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
@@ -154,7 +154,7 @@ function buildReasoning(inv: Investigation, leading: Hypothesis | undefined, ass
   const alts = inv.hypotheses.filter((h) => h.id !== leading.id).slice(0, 3);
   if (alts.length) out.push(`Alternatives considered: ${alts.map((h) => `${h.statement} (${fmtConfidence(h.confidence)})`).join('; ')}.`);
   out.push(
-    `Confidence ${fmtConfidence(inv.confidence)} (${inv.confidenceBand}): ${assessmentReason} ${fmtConfidence(unexplainedMass(inv.hypotheses))} is reserved for causes Nightwatch cannot observe.`,
+    `Confidence ${fmtConfidence(inv.confidence)} (${inv.confidenceBand}): ${assessmentReason} ${fmtConfidence(unexplainedMass(inv.hypotheses))} is reserved for causes JAGR cannot observe.`,
   );
   return out;
 }
@@ -227,7 +227,7 @@ export async function investigateSignal(ctx: RunContext, st: RunState, cluster: 
 
   if (!ctx.settings.autonomy.investigate) {
     inv.status = 'insufficient_evidence';
-    inv.conclusion = 'Investigation is turned off in the autonomy policy. Nightwatch reported the anomaly only.';
+    inv.conclusion = 'Investigation is turned off in the autonomy policy. JAGR reported the anomaly only.';
     inv.reasoning = [inv.conclusion];
     inv.problem = `${primary.name} moved ${fmtPct(primary.changePct)}.`;
     inv.impact = [{ label: primary.name, value: fmtPct(primary.changePct), detail: `${fmtMetric(primary.current, primary.unit)} vs ${fmtMetric(primary.baseline.mean, primary.unit)} baseline` }];
@@ -478,7 +478,7 @@ export async function runOvernight(opts: RunOptions): Promise<OvernightRun> {
 
   ctx.log({
     stage: 'start',
-    action: 'Nightwatch started overnight run',
+    action: 'JAGR started overnight run',
     result: `Watch ${opts.settings.schedule.start} → ${opts.settings.schedule.end} · reasoning: ${opts.reasoner.name}`,
     status: 'ok',
     input: `Autonomy: observe ${on(autonomy.observe)}, investigate ${on(autonomy.investigate)}, recommend ${on(autonomy.recommend)}, tasks ${on(autonomy.createTasks)}, incidents ${on(autonomy.createIncidents)}; production/payments/customer comms gated`,
@@ -487,12 +487,12 @@ export async function runOvernight(opts: RunOptions): Promise<OvernightRun> {
   const finish = (note?: string) => finalize(ctx, st, opts, nightEnd, note);
 
   if (!autonomy.observe) {
-    ctx.log({ stage: 'start', action: 'Observation is turned off', result: 'Nightwatch did not monitor tonight', status: 'skipped' });
+    ctx.log({ stage: 'start', action: 'Observation is turned off', result: 'JAGR did not monitor tonight', status: 'skipped' });
     return finish('Observation is turned off in the autonomy policy.');
   }
 
   const defsRes = await callTool(ctx, { tool: 'analytics.listMetrics', source: 'analytics', stage: 'collect', action: 'Loaded metric catalogue' }, () => opts.adapters.analytics.listMetrics(), (v) => `${v.length} metrics`);
-  if (!defsRes.ok) return finish('Product analytics was unavailable, so Nightwatch could not monitor signals.');
+  if (!defsRes.ok) return finish('Product analytics was unavailable, so JAGR could not monitor signals.');
   st.defs = defsRes.value;
 
   const baseRes = await callTool(

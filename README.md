@@ -1,8 +1,12 @@
-# Product Nightwatch
+# JAGR
 
-> Your product team gets a morning briefing without doing the overnight analysis.
+**AI Product Operations Agent**
 
-Nightwatch is an AI product-operations agent that works while the team is away. It monitors product signals overnight, investigates meaningful changes, gathers evidence across systems, decides what needs attention, files the work, and prepares a morning brief. Consequential actions wait for a human.
+> Investigate what changed. Act before it becomes an incident.
+>
+> Your product doesn't sleep. Neither does JAGR.
+
+JAGR is an AI product-operations agent that works while the team is away. It monitors product signals overnight, investigates meaningful changes, gathers evidence across systems, decides what needs attention, files the work, and prepares a morning brief. Consequential actions wait for a human.
 
 This is a portfolio build. **Every integration is a deterministic simulation** behind a typed adapter interface. No external system is connected.
 
@@ -20,11 +24,11 @@ No API key is needed. The whole product runs in the browser.
 
 ## The 3-minute demo
 
-1. **Overview** — "This is Product Nightwatch, an autonomous product operations agent."
+1. **Overview** — "This is JAGR, an autonomous product operations agent."
 2. **Demo Mode** (sidebar) — resets the workspace and replays the night from 6:00 PM in ~30s. Every line shown is a real event from the orchestrator.
-3. **Morning brief** — Subscription conversion −11.8%, 87% confidence, Klarna regression after v4.8.1. What Nightwatch did / did not do.
+3. **Morning brief** — Subscription conversion −11.8%, 87% confidence, Klarna regression after v4.8.1. What JAGR did / did not do.
 4. **Open investigation** → evidence graph (click a node for source data; click a hypothesis to see what it rests on) → confidence breakdown.
-5. **Task PAY-284** — why Nightwatch created it, the policy decision, and the evidence refreshed at 08:00.
+5. **Task PAY-284** — why JAGR created it, the policy decision, and the evidence refreshed at 08:00.
 6. **Approvals** — why disabling Klarna or rolling back needs a human. Try *Request More Evidence*.
 7. **Evaluations** — 7 scenarios, 0 false alerts, 0 approval violations. "An agent that acts without evaluation isn't something I'd trust."
 8. Back to the **brief**.

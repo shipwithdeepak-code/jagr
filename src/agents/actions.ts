@@ -38,7 +38,7 @@ const PROVIDER_SHARE: Record<string, number> = { klarna: 0.31, paypal: 0.24, car
 export function planActions(inv: Investigation, leading: Hypothesis | undefined): ActionCandidate[] {
   if (inv.status === 'dismissed') return [];
   if (inv.status === 'insufficient_evidence' || !leading) {
-    return [{ type: 'continue_monitoring', title: `Keep monitoring ${inv.title.toLowerCase()}`, description: 'Re-check every sweep and include it in the digest. Nightwatch will not assert a cause without evidence.' }];
+    return [{ type: 'continue_monitoring', title: `Keep monitoring ${inv.title.toLowerCase()}`, description: 'Re-check every sweep and include it in the digest. JAGR will not assert a cause without evidence.' }];
   }
 
   const out: ActionCandidate[] = [
@@ -126,7 +126,7 @@ function evidenceLines(list: Evidence[]): string[] {
 }
 
 function nextStep(leading: Hypothesis | undefined, inv: Investigation): string {
-  if (!leading || inv.status === 'insufficient_evidence') return 'Check for causes Nightwatch cannot observe (marketing changes, seasonality, data pipeline) and decide whether to keep monitoring.';
+  if (!leading || inv.status === 'insufficient_evidence') return 'Check for causes JAGR cannot observe (marketing changes, seasonality, data pipeline) and decide whether to keep monitoring.';
   const version = leading.entities.find((e) => /^v\d/.test(e));
   const pr = inv.evidence.find((e) => e.kind === 'merged_pr' && e.entities.includes(leading.entities[0]));
   switch (leading.type) {

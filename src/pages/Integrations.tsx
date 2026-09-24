@@ -17,7 +17,7 @@ export function IntegrationsPage() {
 
   return (
     <>
-      <PageHeader title="Integrations" description="Nightwatch reaches every system through a typed adapter interface. In this build each adapter is backed by deterministic simulation data." />
+      <PageHeader title="Integrations" description="JAGR reaches every system through a typed adapter interface. In this build each adapter is backed by deterministic simulation data." />
 
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />

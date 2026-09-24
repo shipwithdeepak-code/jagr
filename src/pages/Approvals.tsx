@@ -22,7 +22,7 @@ export function ApprovalsPage() {
     <>
       <PageHeader
         title="Approvals"
-        description="Level-4 actions — production changes, payments, pricing, refunds and customer communication — are never executed by Nightwatch alone. They wait here with the evidence behind them."
+        description="Level-4 actions — production changes, payments, pricing, refunds and customer communication — are never executed by JAGR alone. They wait here with the evidence behind them."
       />
 
       <Card className="mb-6">
@@ -30,7 +30,7 @@ export function ApprovalsPage() {
           <div className="flex items-start gap-3 md:w-1/2">
             <Lock size={16} className="mt-0.5 shrink-0 text-ink-2" />
             <div className="text-[13px] text-ink-2">
-              <span className="font-medium text-ink">Why a human is required.</span> These actions affect customers or money and some cannot be undone. Nightwatch can be confident about a cause and still be wrong about the right remedy. Approval here updates the simulated environment only.
+              <span className="font-medium text-ink">Why a human is required.</span> These actions affect customers or money and some cannot be undone. JAGR can be confident about a cause and still be wrong about the right remedy. Approval here updates the simulated environment only.
             </div>
           </div>
           <ol className="grid flex-1 grid-cols-5 gap-1 text-center text-[11px]">
@@ -47,7 +47,7 @@ export function ApprovalsPage() {
       <SectionTitle hint={`${pending.length} waiting`}>Action requests</SectionTitle>
       {pending.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Nothing waiting for approval" action={!state.run ? <div className="flex gap-2"><RunButtons /></div> : undefined}>
-          {state.run ? 'Every consequential action from last night has been decided.' : 'When Nightwatch recommends a production, payment or customer-facing action, it lands here instead of being executed.'}
+          {state.run ? 'Every consequential action from last night has been decided.' : 'When JAGR recommends a production, payment or customer-facing action, it lands here instead of being executed.'}
         </EmptyState>
       ) : (
         <div className="space-y-4">

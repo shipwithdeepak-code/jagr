@@ -26,9 +26,9 @@ function BeforeTheNight() {
     <div className="animate-fade-up">
       <div className="mb-8">
         <Eyebrow>Wed Sep 23 · 6:00 PM</Eyebrow>
-        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em] sm:text-[34px]">Nightwatch is ready for tonight.</h1>
+        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em] sm:text-[34px]">JAGR is ready for tonight.</h1>
         <p className="mt-2 max-w-2xl text-[15px] text-ink-2">
-          When the team logs off, Nightwatch monitors product signals, investigates anything that moves, files the work, and has a brief waiting at {settings.schedule.briefAt}. Consequential actions wait for you.
+          When the team logs off, JAGR monitors product signals, investigates anything that moves, files the work, and has a brief waiting at {settings.schedule.briefAt}. Consequential actions wait for you.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <RunButtons />
@@ -125,7 +125,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
           {fmtDate(brief.generatedAt)} · Brief generated {fmtTime(brief.generatedAt)}
         </Eyebrow>
         <h1 className="mt-2 text-[32px] font-semibold tracking-[-0.025em] sm:text-[38px]">Good morning.</h1>
-        <p className="mt-1 text-[15px] text-ink-2">Nightwatch monitored your product overnight.</p>
+        <p className="mt-1 text-[15px] text-ink-2">JAGR monitored your product overnight.</p>
         <p className="mt-1 text-[12.5px] text-ink-3">
           {fmtTime(brief.window.start)} → {fmtTime(brief.window.end)} · {brief.counts.signals} signals · {run.events.filter((e) => e.stage === 'detect').length} sweeps · {run.investigations.length} investigations · {run.reasoningEngine}
         </p>
@@ -207,7 +207,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
 
           <div className="grid border-t border-line md:grid-cols-2">
             <div className="p-5 sm:p-6 md:border-r md:border-line">
-              <Eyebrow className="mb-3">What Nightwatch did</Eyebrow>
+              <Eyebrow className="mb-3">What JAGR did</Eyebrow>
               <ul className="space-y-2">
                 {brief.did.map((d) => (
                   <li key={d} className="flex items-start gap-2.5 text-[13.5px]">
@@ -220,7 +220,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
               </ul>
             </div>
             <div className="border-t border-line p-5 sm:p-6 md:border-t-0">
-              <Eyebrow className="mb-3">What Nightwatch did not do</Eyebrow>
+              <Eyebrow className="mb-3">What JAGR did not do</Eyebrow>
               {brief.didNot.length === 0 ? (
                 <p className="text-[13px] text-ink-3">No consequential actions were recommended.</p>
               ) : (
@@ -232,7 +232,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
               )}
               {brief.didNot.length > 0 && (
                 <p className="mt-4 rounded-lg bg-subtle px-3 py-2 text-[12.5px] text-ink-2">
-                  <span className="font-medium text-ink">Reason:</span> these actions require human approval. Nightwatch never changes production, payments or customer communication on its own.
+                  <span className="font-medium text-ink">Reason:</span> these actions require human approval. JAGR never changes production, payments or customer communication on its own.
                 </p>
               )}
             </div>
@@ -331,7 +331,7 @@ function ProductMetrics({ run }: { run?: OvernightRun }) {
   ];
   return (
     <section className="mt-10">
-      <SectionTitle hint={`Demo workspace history · last ${runs} nights${run ? ', including tonight' : ''}.`}>Nightwatch activity</SectionTitle>
+      <SectionTitle hint={`Demo workspace history · last ${runs} nights${run ? ', including tonight' : ''}.`}>JAGR activity</SectionTitle>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line shadow-card sm:grid-cols-5">
         {items.map((it) => (
           <div key={it.label} className="bg-surface px-4 py-3.5">

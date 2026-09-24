@@ -31,28 +31,28 @@ export function TasksPage() {
     <>
       <PageHeader
         title="Tasks"
-        description="Work Nightwatch turned findings into, alongside the team’s own backlog. Issues live in a simulated issue tracker built behind the same interface a Linear or Jira connector would implement."
+        description="Work JAGR turned findings into, alongside the team’s own backlog. Issues live in a simulated issue tracker built behind the same interface a Linear or Jira connector would implement."
         actions={
           <>
             <SimulationBadge label="Simulated issue tracker" />
-            <Tabs value={who} onChange={setWho} items={[{ value: 'all', label: 'All' }, { value: 'nightwatch', label: 'Nightwatch' }, { value: 'human', label: 'Human' }]} />
+            <Tabs value={who} onChange={setWho} items={[{ value: 'all', label: 'All' }, { value: 'nightwatch', label: 'JAGR' }, { value: 'human', label: 'Human' }]} />
           </>
         }
       />
 
       {state.drafts.length > 0 && (
-        <Section title="Drafted — ready to file" hint="Below the auto-file threshold, Nightwatch prepares the task and you decide.">
+        <Section title="Drafted — ready to file" hint="Below the auto-file threshold, JAGR prepares the task and you decide.">
           <div className="space-y-3">
             {state.drafts.map((d) => <TaskDraftCard key={d.fingerprint} draft={d} compact />)}
           </div>
         </Section>
       )}
 
-      <Section title="Created by Nightwatch" count={created.length} hint="Filed autonomously under the Level 3 policy.">
-        <TaskTable tasks={created} onOpen={open} invTitle={invTitle} empty="Nothing new from Nightwatch. Run the overnight watch to see it file work." />
+      <Section title="Created by JAGR" count={created.length} hint="Filed autonomously under the Level 3 policy.">
+        <TaskTable tasks={created} onOpen={open} invTitle={invTitle} empty="Nothing new from JAGR. Run the overnight watch to see it file work." />
       </Section>
 
-      <Section title="Needs approval" count={approvals.length} hint="Consequential actions waiting on a human. Nightwatch will not proceed on its own.">
+      <Section title="Needs approval" count={approvals.length} hint="Consequential actions waiting on a human. JAGR will not proceed on its own.">
         {approvals.length === 0 ? (
           <EmptyRow>No actions waiting for approval.</EmptyRow>
         ) : (

@@ -8,7 +8,7 @@ import type { ConfidenceBand, Evidence, EvidenceWeight, Hypothesis, HypothesisTy
  * 2. Each candidate is scored in log-odds: prior + Σ evidence weights. Weights are explicit and
  *    explained, so every point of confidence can be traced to an observation.
  * 3. Scores are normalised with a softmax that includes an "unexplained" option with fixed mass,
- *    so Nightwatch always reserves probability for causes it cannot observe. When nothing
+ *    so JAGR always reserves probability for causes it cannot observe. When nothing
  *    beats "unexplained", the answer is "Insufficient evidence".
  */
 
@@ -277,7 +277,7 @@ export interface ConfidenceAssessment {
 
 /**
  * Confidence is only as good as its grounding: a hypothesis needs support from at least two
- * independent sources before Nightwatch will state it as a finding.
+ * independent sources before JAGR will state it as a finding.
  */
 export function evaluateConfidence(leading: Hypothesis | undefined, evidence: Evidence[]): ConfidenceAssessment {
   if (!leading) return { band: 'insufficient', confidence: 0, supportingSources: 0, supportingCount: 0, reason: 'No hypothesis could be formed from the evidence.' };

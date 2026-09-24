@@ -725,7 +725,7 @@ function gap(scope: InvestigationScope, b: EvidenceBundle, source: SourceKind, t
       kind: 'source_unavailable',
       source,
       title,
-      detail: `${title}. Nightwatch will not guess what this source would have shown; confidence is reduced accordingly.`,
+      detail: `${title}. JAGR will not guess what this source would have shown; confidence is reduced accordingly.`,
       value: 'Unavailable',
       strength: 0,
       entities: [source],
