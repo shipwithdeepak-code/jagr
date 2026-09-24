@@ -1,4 +1,4 @@
-import { BarChart3, ExternalLink, Mail, Play, Smartphone, Ticket, type LucideIcon } from 'lucide-react';
+import { BarChart3, ExternalLink, Mail, Play, Smartphone, Ticket, type LucideIcon, GitBranch } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AttentionLevel, ConnectionState, EmailNotification, InvestigationState, ProviderId, SourceLink } from '@/product/types';
 import { PROVIDERS } from '@/product/integrations/adapters';
@@ -9,7 +9,7 @@ import { useContext, useEffect, useState } from 'react';
 import { ProductContext } from '@/state/productContext';
 import { useEnvironment, type EnvironmentScope } from '@/state/environment';
 
-export const PROVIDER_ICON: Record<ProviderId, LucideIcon> = { jira: Ticket, ga4: BarChart3, app_store: Smartphone, google_play: Play, email: Mail };
+export const PROVIDER_ICON: Record<ProviderId, LucideIcon> = { jira: Ticket, ga4: BarChart3, app_store: Smartphone, google_play: Play, github: GitBranch, email: Mail };
 
 /** The source's display name in the current workspace (imported data renames channels). */
 export function useProviderLabel(provider: ProviderId) {

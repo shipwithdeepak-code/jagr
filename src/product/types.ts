@@ -6,13 +6,19 @@
  * Kept separate from the demo-night model in src/domain so the original replay keeps working.
  */
 
+import type { ChangeKind, ChangeTiming } from './roles/types';
+
 export type ISO = string;
 
 // ─────────────────────────────────────────────────────────────
 // Sources
 // ─────────────────────────────────────────────────────────────
 
-export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'email';
+/**
+ * Source ids known to this build. Opaque to the engine: it asks by role and never branches on these.
+ * The Sample workspace uses jira / ga4 / app_store / google_play; `github` is a change source.
+ */
+export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github' | 'email';
 
 /**
  * connected      — a real connector with valid credentials (none exist in this build)
@@ -31,6 +37,11 @@ export interface SourceConnection {
   updatedAt: ISO;
   /** Display name override — imported data renames the channel (e.g. "Customer feedback", not "App Store"). */
   label?: { name: string; short: string };
+  /**
+   * The source's data is complete only up to this time (its last successful sync). Absent = current.
+   * Anything after it was not seen, so an empty answer after this time is not evidence of absence.
+   */
+  freshAsOf?: ISO;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -159,6 +170,11 @@ export interface EvidenceItem {
   link?: SourceLink;
   /** For negative findings ("no releases", "no issues"): the tool query that returned nothing. */
   query?: { tool: ToolName; input: string };
+  /** Change evidence: what kind of change, and how trustworthy its timestamp is. */
+  changeKind?: ChangeKind;
+  timing?: ChangeTiming;
+  /** Gap evidence: why the source's data is missing or incomplete. */
+  gap?: 'unavailable' | 'error' | 'not_configured' | 'stale' | 'no_data';
 }
 
 /**
@@ -204,6 +220,8 @@ export interface TraceStep {
   detail?: string;
   tool?: ToolName;
   source?: ProviderId;
+  /** A role query that read several sources in one call (e.g. getChanges): the sources it reached. */
+  sources?: ProviderId[];
   input?: string;
   result?: string;
   status?: 'ok' | 'unavailable' | 'error' | 'skipped';
@@ -320,7 +338,13 @@ export interface WatchInvestigation {
   uncertainty: string;
   recommendedNextStep: string;
   correlatedProviders: ProviderId[];
-  releaseAssociation?: { version: string; releasedAt: ISO; minutesBeforeOnset: number };
+  /**
+   * The change that preceded the degradation — a temporal association, never a cause. Only a change
+   * whose timing is `actual` or `reported` can be associated: a planned date says nothing about when
+   * something reached users. `version` is the release version, or the change's title for deploys,
+   * flag changes and other unversioned changes.
+   */
+  releaseAssociation?: { version: string; releasedAt: ISO; minutesBeforeOnset: number; kind?: ChangeKind; timing?: ChangeTiming };
   sourceLinks: SourceLink[];
   jagrPath: string;
   jagrLink: string;

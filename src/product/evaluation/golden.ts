@@ -133,7 +133,9 @@ export const GOLDEN_CASES: GoldenCase[] = [
       return [
         c('Single investigation', invs.length === 1, `${invs.length} investigation(s)`),
         c('Correlates App Store, Google Play and Jira', !!inv && ['app_store', 'google_play', 'jira'].every((p) => inv.correlatedProviders.includes(p as ProviderId)), inv?.correlatedProviders.join(', ') ?? ''),
-        c('Jira release in the evidence', !!inv?.releaseAssociation, inv?.releaseAssociation?.version ?? 'none'),
+        // Jira's release date is bookkeeping, not when 4.8.1 reached users: it is evidence, but never a timing association.
+        c('Jira release in the evidence, as a planned date', !!inv?.evidence.some((e) => e.provider === 'jira' && e.timing === 'planned'), inv?.evidence.find((e) => e.timing === 'planned')?.statement ?? 'none'),
+        c('No timing claimed from a planned date', !!inv && !inv.releaseAssociation && !/minutes? after release/i.test(inv.likelyExplanation + inv.inferred.join(' ')), inv?.releaseAssociation ? `associated with ${inv.releaseAssociation.version}` : 'no association'),
       ];
     },
   },

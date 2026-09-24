@@ -1,4 +1,5 @@
 import type { Area, ISO, ProviderId, SourceConnection, SourceLink, SourceRef } from '../types';
+import type { ChangeKind, ChangeTiming } from '../roles/types';
 
 /**
  * Normalised records. Every provider maps its own API into these shapes, so the watch engine
@@ -47,7 +48,14 @@ export interface IssueRecord {
 
 export interface ReleaseRecord {
   id: string;
-  provider: 'jira' | 'app_store' | 'google_play';
+  provider: 'jira' | 'app_store' | 'google_play' | 'github';
+  /** Kind of change (default 'release'). Deploys, flag changes and incidents use the same record. */
+  kind?: ChangeKind;
+  /** How trustworthy `releasedAt` is (default 'actual'). A tracker's release date is 'planned'. */
+  timing?: ChangeTiming;
+  /** Title for unversioned changes (deploys, flags); releases use `version`. */
+  title?: string;
+  status?: 'success' | 'failed' | 'rolled_back' | 'in_progress';
   version: string;
   platform: 'ios' | 'android' | 'web' | 'all';
   releasedAt: ISO;

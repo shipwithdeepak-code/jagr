@@ -1,6 +1,7 @@
 import type { Area, ToolName, Watch } from '../types';
 import type { SourceRegistry } from '../roles/registry';
-import type { ChangeRecord, FeedbackItem, MetricSeries, Role, SegmentSeries, SourceId, WorkItem } from '../roles/types';
+import type { ChangeRecord, FeedbackItem, MetricSeries, Role, SegmentSeries, SourceHealth, SourceId, WorkItem } from '../roles/types';
+import { healthOf } from '../roles/types';
 import { ProviderUnavailableError } from '../integrations/types';
 import { labelOf, type ProviderLabels } from '../integrations/adapters';
 import { negativeFeedback, problemItems, readMetric, withWatchThreshold, type MetricReading } from '../engine/detect';
@@ -30,7 +31,8 @@ export interface TimeRange {
 }
 
 export type ToolOutcome<T> =
-  | { ok: true; data: T }
+  /** `stale`: the source answered, but its data is only complete up to `freshAsOf` — silence after it proves nothing. */
+  | { ok: true; data: T; stale?: { freshAsOf: string } }
   | { ok: false; state: 'unavailable' | 'error' | 'not_in_watch' | 'no_data'; detail: string };
 
 export interface MetricResult {
@@ -44,6 +46,15 @@ export interface SegmentResult {
   reading: MetricReading;
 }
 
+/**
+ * A change scan: every change source asked in one role query, with what each could answer.
+ * "No change" is only true for sources whose coverage is `ok`.
+ */
+export interface ChangeScan {
+  records: ChangeRecord[];
+  coverage: SourceHealth[];
+}
+
 export interface VolumeResult {
   count: number;
   /** Negative items per hour, oldest first. */
@@ -53,7 +64,8 @@ export interface VolumeResult {
 export interface Toolbox {
   getMetric(i: { source: SourceId; metric: string; until: string }): Promise<ToolOutcome<MetricResult>>;
   getMetricBreakdown(i: { source: SourceId; metric: string; dimension: string; until: string }): Promise<ToolOutcome<SegmentResult[]>>;
-  getChanges(i: TimeRange & { source: SourceId }): Promise<ToolOutcome<ChangeRecord[]>>;
+  /** Reads every change source in the watch (or just `sources`) — one role query, per-source coverage. */
+  getChanges(i: TimeRange & { sources?: SourceId[] }): Promise<ToolOutcome<ChangeScan>>;
   getWorkItems(i: TimeRange & { source: SourceId; area: Area }): Promise<ToolOutcome<WorkItem[]>>;
   getFeedback(i: TimeRange & { source: SourceId; area: Area }): Promise<ToolOutcome<FeedbackItem[]>>;
   getFeedbackVolume(i: TimeRange & { source: SourceId; area: Area }): Promise<ToolOutcome<VolumeResult>>;
@@ -67,12 +79,14 @@ class NoDataError extends Error {
 
 export function createToolbox(reg: SourceRegistry, watch: Watch, worldStart: string, labels?: ProviderLabels): Toolbox {
   const P = labelOf(labels);
-  async function call<T>(source: SourceId, role: Role, fn: (s: NonNullable<ReturnType<SourceRegistry['get']>>) => Promise<T>): Promise<ToolOutcome<T>> {
+  async function call<T>(source: SourceId, role: Role, until: string, fn: (s: NonNullable<ReturnType<SourceRegistry['get']>>) => Promise<T>): Promise<ToolOutcome<T>> {
     const s = reg.get(source);
     if (!watch.sources.includes(source) || !s) return { ok: false, state: 'not_in_watch', detail: `${P(source).name} is not part of this watch` };
     if (!s[role]) return { ok: false, state: 'not_in_watch', detail: `${P(source).name} does not provide ${role.replace('_', ' ')}` };
     try {
-      return { ok: true, data: await fn(s) };
+      const data = await fn(s);
+      const health = healthOf(source, s.connection, until);
+      return health.state === 'stale' ? { ok: true, data, stale: { freshAsOf: health.freshAsOf! } } : { ok: true, data };
     } catch (err) {
       if (err instanceof ProviderUnavailableError) return { ok: false, state: err.state, detail: err.message };
       // The source works; this particular metric simply is not in the data (common with imported data).
@@ -85,14 +99,14 @@ export function createToolbox(reg: SourceRegistry, watch: Watch, worldStart: str
 
   return {
     getMetric: (i) =>
-      call(i.source, 'metrics', async (s) => {
+      call(i.source, 'metrics', i.until, async (s) => {
         const raw = await s.metrics!.getSeries({ metric: i.metric, window: { start: worldStart, end: i.until } });
         if (!raw) throw new NoDataError(i.metric);
         const series = withWatchThreshold(raw, watch.thresholds);
         return { series, reading: readMetric(series) };
       }),
     getMetricBreakdown: (i) =>
-      call(i.source, 'metrics', async (s) => {
+      call(i.source, 'metrics', i.until, async (s) => {
         if (!s.metrics!.listDimensions(i.metric).includes(i.dimension)) throw new NoDataError(`${i.metric} by ${i.dimension}`);
         const segments: SegmentSeries[] = await s.metrics!.getBreakdown({ metric: i.metric, dimension: i.dimension, window: { start: worldStart, end: i.until } });
         return segments.map((x) => {
@@ -100,11 +114,34 @@ export function createToolbox(reg: SourceRegistry, watch: Watch, worldStart: str
           return { segment: x.segment, series, reading: readMetric(series) };
         });
       }),
-    getChanges: (i) => call(i.source, 'changes', (s) => s.changes!.getChanges({ window: window(i) })),
-    getWorkItems: (i) => call(i.source, 'work_items', async (s) => problemItems(await s.work_items!.getWorkItems({ window: window(i) }), i.area)),
-    getFeedback: (i) => call(i.source, 'feedback', async (s) => negativeFeedback(await s.feedback!.getFeedback({ window: window(i) }), i.area)),
+    getChanges: async (i) => {
+      const inWatch = reg.withRole('changes', watch.sources.filter((p): p is SourceId => p !== 'email')).map((s) => s.id);
+      const targets = i.sources ? inWatch.filter((id) => i.sources!.includes(id)) : inWatch;
+      if (!targets.length) return { ok: false, state: 'not_in_watch', detail: 'No change source is part of this watch' };
+      const records: ChangeRecord[] = [];
+      const coverage: SourceHealth[] = [];
+      for (const id of targets) {
+        const s = reg.get(id)!;
+        const health = healthOf(id, s.connection, i.until);
+        // A source known to be down or unconfigured is recorded, never called.
+        if (health.state === 'unavailable' || health.state === 'error' || health.state === 'not_configured') {
+          coverage.push(health);
+          continue;
+        }
+        try {
+          records.push(...(await s.changes!.getChanges({ window: window(i) })));
+          coverage.push(health);
+        } catch (err) {
+          if (!(err instanceof ProviderUnavailableError)) throw err;
+          coverage.push({ ...health, state: err.state, detail: err.message });
+        }
+      }
+      return { ok: true, data: { records, coverage } };
+    },
+    getWorkItems: (i) => call(i.source, 'work_items', i.until, async (s) => problemItems(await s.work_items!.getWorkItems({ window: window(i) }), i.area)),
+    getFeedback: (i) => call(i.source, 'feedback', i.until, async (s) => negativeFeedback(await s.feedback!.getFeedback({ window: window(i) }), i.area)),
     getFeedbackVolume: (i) =>
-      call(i.source, 'feedback', async (s) => {
+      call(i.source, 'feedback', i.until, async (s) => {
         const items = negativeFeedback(await s.feedback!.getFeedback({ window: window(i) }), i.area);
         const buckets = new Map<string, number>();
         for (const f of items) {

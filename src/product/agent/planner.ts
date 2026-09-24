@@ -42,7 +42,7 @@ export type ValidationCode =
 
 export type Validation = { ok: true; option: PlannerOption } | { ok: false; code: ValidationCode; reason: string };
 
-const unavailable = (o: PlannerOption) => o.sourceFailed || o.sourceState === 'unavailable' || o.sourceState === 'error';
+const unavailable = (o: PlannerOption) => o.sourceFailed || o.sourceState === 'unavailable' || o.sourceState === 'error' || o.sourceState === 'not_configured';
 
 /**
  * Checks a plan against policy. Pure and deterministic: same plan + same state → same verdict.

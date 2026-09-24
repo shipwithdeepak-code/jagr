@@ -17,8 +17,8 @@ import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '.
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
 import type { ChangeRecord, FeedbackItem, SourceId, WorkItem } from '../roles/types';
 import type { SourceRegistry } from '../roles/registry';
-import { metricEvidence, type Gathered } from '../engine/investigate';
-import type { MetricResult, ToolOutcome, Toolbox } from './tools';
+import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate';
+import type { ChangeScan, MetricResult, ToolOutcome, Toolbox } from './tools';
 import { FAILURE_LABEL, HYPOTHESIS_ID, validatePlan, type InvestigationPlanner, type PlannerInput, type PlannerOption } from './planner';
 import type { PlannerOutcome, PlannerProposal } from './plannerSchema';
 
@@ -36,6 +36,8 @@ import type { PlannerOutcome, PlannerProposal } from './plannerSchema';
 type Tag =
   | 'primary'
   | 'release'
+  | 'planned_change'
+  | 'incident'
   | 'no_release'
   | 'issues'
   | 'no_issues'
@@ -58,12 +60,14 @@ interface Candidate {
   source: SourceId;
   /** getMetric candidates: the metric key (qualifies the option id). */
   metric?: string;
+  /** A role query across several sources (getChanges): every source it asks. `source` is the first. */
+  sources?: SourceId[];
   /** How the candidate is named in "Not checked: …" (e.g. "releases", "crash rate"). */
   noun: string;
   input: string;
   tests: HypothesisKind[];
   why: string;
-  exec: () => Promise<{ ok: boolean; state?: string; result: string; refs: SourceRef[] }>;
+  exec: () => Promise<{ ok: boolean; state?: string; result: string; refs: SourceRef[]; reached?: SourceId[] }>;
 }
 
 export interface InvestigationOutput {
@@ -130,12 +134,14 @@ export async function checkRolloutBeforeAction(args: {
   for (const source of args.sources.withRole('changes').filter((s) => args.sources.tracksRollout(s))) {
     const input = `${P(source).short} releases ${fmtTime(args.since)}–${fmtTime(args.until)}`;
     step({ kind: 'tool_call', title: `${P(source).short} → ${input}`, tool: 'getChanges', source, input, why: `Before recommending an action on ${args.version}, check whether it is still rolling out on ${P(source).short}.` });
-    const o = await args.toolbox.getChanges({ since: args.since, until: args.until, source });
-    if (!o.ok) {
-      step({ kind: 'result', title: `${P(source).name} ${o.state === 'not_in_watch' ? 'is not part of this watch' : `is ${o.state}`} — rollout state unknown`, tool: 'getChanges', source, status: o.state === 'error' ? 'error' : 'unavailable' });
+    const o = await args.toolbox.getChanges({ since: args.since, until: args.until, sources: [source] });
+    const cov = o.ok ? o.data.coverage[0] : undefined;
+    if (!o.ok || !cov || cov.state === 'unavailable' || cov.state === 'error' || cov.state === 'not_configured') {
+      const state = !o.ok ? o.state : (cov?.state ?? 'unavailable');
+      step({ kind: 'result', title: `${P(source).name} ${state === 'not_in_watch' ? 'is not part of this watch' : `is ${state.replace('_', ' ')}`} — rollout state unknown`, tool: 'getChanges', source, status: state === 'error' ? 'error' : 'unavailable' });
       continue;
     }
-    const r = o.data.find((x) => x.version === args.version);
+    const r = o.data.records.find((x) => x.version === args.version);
     if (r) releases.push(r);
     step({ kind: 'result', title: r ? `${args.version}: ${r.rollout ?? 'full release'} since ${fmtTime(r.at)}` : `No ${args.version} release in this source`, tool: 'getChanges', source, status: 'ok', refs: r ? [r.ref] : [] });
   }
@@ -203,6 +209,8 @@ export async function runInvestigation(args: {
   simulatedLinks: (p: ProviderId) => boolean;
   connectionState: (p: ProviderId) => string;
   connectionDetail?: (p: ProviderId) => string;
+  /** Data completeness per source (last successful sync), when a source reports it. */
+  freshAsOf?: (p: ProviderId) => string | undefined;
   /** The model planner. Absent → the deterministic planner, labelled as a fallback in the trace. */
   planner?: InvestigationPlanner;
   investigationId?: string;
@@ -252,16 +260,31 @@ export async function runInvestigation(args: {
       }
       return detail;
     }
-    const detail = `${P(source).name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
+    const notConfigured = args.connectionState(source) === 'not_configured';
+    const detail = notConfigured ? `${P(source).name} is not configured — its data was not checked.` : `${P(source).name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
     if (!g.gaps.some((x) => x.provider === source)) {
       g.gaps.push({ provider: source, detail });
-      add({ id: `${source}:gap`, provider: source, direction: 'gap', statement: detail, refs: [] }, 'unavailable');
+      add({ id: `${source}:gap`, provider: source, direction: 'gap', statement: detail, refs: [], gap: notConfigured ? 'not_configured' : o.state === 'error' ? 'error' : 'unavailable' }, 'unavailable');
     }
     return detail;
   };
 
+  /**
+   * The source answered, but its data stops at its last sync. Recorded once as a gap: whatever it
+   * returned is real, but "nothing found" after that time is not evidence that nothing happened.
+   */
+  const staleGap = (source: SourceId, freshAsOf: string) => {
+    const detail = `${P(source).name} data is only complete up to ${fmtTime(freshAsOf)} (its last sync) — anything after that was not seen.`;
+    if (!g.gaps.some((x) => x.provider === source)) {
+      g.gaps.push({ provider: source, detail, stale: true, freshAsOf });
+      add({ id: `${source}:stale`, provider: source, direction: 'gap', statement: detail, refs: [], gap: 'stale' }, 'unavailable');
+    }
+  };
+  const staleNote = (source: SourceId, o: { stale?: { freshAsOf: string } }) => (o.stale ? ` — ${P(source).short} data stops at ${fmtTime(o.stale.freshAsOf)}` : '');
+
   const metricStep = (o: ToolOutcome<MetricResult>, source: SourceId, onData: (m: MetricResult) => Tag[]) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
+    if (o.stale) staleGap(source, o.stale.freshAsOf);
     const t = onData(o.data);
     if (o.data.series.key === areaMetric) g.areaMetric = o.data;
     const e = metricEvidence(o.data.series, o.data.reading, args.simulatedLinks(source), args.labels);
@@ -269,35 +292,82 @@ export async function runInvestigation(args: {
     return { ok: true, result: e.statement.replace(/^[^:]+: /, ''), refs: e.refs };
   };
 
-  const releaseStep = (o: ToolOutcome<ChangeRecord[]>, source: SourceId) => {
-    if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
-    if (!o.data.length) {
-      add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${P(source).short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: 'getChanges', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
-      return { ok: true, result: `No releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}`, refs: [] };
+  const platformName = (p?: string) => (p === 'ios' ? 'iOS' : p === 'android' ? 'Android' : 'web');
+  /** A factual statement of one change. Planned dates are labelled as such; nothing implies a cause. */
+  const changeStatement = (r: ChangeRecord, short: string) => {
+    const when = fmtTime(r.at);
+    const status = r.status === 'failed' ? ' (failed)' : r.status === 'rolled_back' ? ' (rolled back)' : r.status === 'in_progress' ? ' (in progress)' : '';
+    switch (r.kind) {
+      case 'release':
+        return r.timing === 'planned'
+          ? `${short}: release ${r.version ?? r.title} dated ${when} — a planned date, not when it reached users.`
+          : `${short}: release ${r.version ?? r.title}${r.platform && r.platform !== 'all' ? ` (${platformName(r.platform)})` : ''} at ${when}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}${r.timing === 'reported' ? ' (reported time)' : ''}.`;
+      case 'incident':
+        return `${short}: incident “${r.title}” recorded at ${when}.`;
+      default:
+        return `${short}: ${changePhrase(r.kind, changeLabel(r))} at ${when}${status}${r.timing === 'planned' ? ' — a planned date, not when it took effect' : r.timing === 'reported' ? ' (reported time)' : ''}.`;
     }
-    for (const r of o.data) {
-      g.changes.push(r);
-      const ref: SourceRef = r.ref;
-      add(
-        {
-          id: `${source}:release:${r.id}`,
-          provider: source,
-          direction: 'change',
-          statement: `${P(source).short}: release ${r.version}${r.platform && r.platform !== 'all' ? ` (${r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : 'web'})` : ''} at ${fmtTime(r.at)}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}.`,
-          onsetAt: r.at,
-          refs: [ref],
-          link: link(ref, `Open ${P(source).short}`),
-        },
-        'release',
-      );
+  };
+
+  /**
+   * One change scan across every change source in the watch. Per source: what it returned is
+   * evidence; a source that answered completely with nothing is a "no releases" finding; a source that
+   * is down, unconfigured or stale is a gap — its silence is never read as "nothing changed".
+   */
+  const releaseStep = (o: ToolOutcome<ChangeScan>) => {
+    if (!o.ok) return { ok: false, state: o.state, result: o.detail, refs: [] as SourceRef[] };
+    const reached: SourceId[] = [];
+    const parts: string[] = [];
+    for (const cov of o.data.coverage) {
+      const source = cov.source;
+      if (cov.state === 'unavailable' || cov.state === 'error' || cov.state === 'not_configured') {
+        gap(source, { ok: false, state: cov.state === 'error' ? 'error' : 'unavailable', detail: cov.detail ?? cov.state });
+        parts.push(`${P(source).short} ${cov.state === 'not_configured' ? 'not configured' : cov.state === 'error' ? 'returned an error' : 'unavailable'}`);
+        continue;
+      }
+      reached.push(source);
+      if (cov.state === 'stale') staleGap(source, cov.freshAsOf!);
+      const mine = o.data.records.filter((r) => r.source === source);
+      if (!mine.length) {
+        if (cov.state === 'stale') {
+          parts.push(`${P(source).short}: nothing up to ${fmtTime(cov.freshAsOf!)} (data stops there)`);
+          continue;
+        }
+        add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${P(source).short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: 'getChanges', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
+        parts.push(`${P(source).short}: none`);
+        continue;
+      }
+      for (const r of mine) {
+        g.changes.push(r);
+        add(
+          {
+            id: `${source}:release:${r.id}`,
+            provider: source,
+            direction: 'change',
+            statement: changeStatement(r, P(source).short),
+            onsetAt: r.at,
+            refs: [r.ref],
+            link: link(r.ref, `Open ${P(source).short}`),
+            changeKind: r.kind,
+            timing: r.timing,
+          },
+          r.kind === 'incident' ? 'incident' : r.timing === 'planned' ? 'planned_change' : 'release',
+        );
+      }
+      const last = mine[mine.length - 1];
+      const mins = Math.round(minutesBetween(last.at, onsetAt));
+      parts.push(`${P(source).short}: ${changePhrase(last.kind, changeLabel(last))} ${last.timing === 'planned' ? 'dated' : 'at'} ${fmtTime(last.at)} (${mins >= 0 ? `${mins} min before` : `${-mins} min after`} the change began${last.timing === 'planned' ? '; planned date' : ''})`);
     }
-    const r = o.data[o.data.length - 1];
-    return { ok: true, result: `Release ${r.version} at ${fmtTime(r.at)} — ${Math.round(minutesBetween(r.at, onsetAt))} min before the change began`, refs: o.data.map((x) => x.ref) };
+    const found = o.data.records.length;
+    const result = found || parts.some((x) => !x.endsWith(': none')) ? parts.join(' · ') : `No releases or changes between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}`;
+    return { ok: true, result, refs: o.data.records.map((x) => x.ref), reached };
   };
 
   const issuesStep = (o: ToolOutcome<WorkItem[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
+    if (o.stale) staleGap(source, o.stale.freshAsOf);
     const issues = o.data;
+    if (!issues.length && o.stale) return { ok: true, result: `No ${areaLabel} issues up to ${fmtTime(o.stale.freshAsOf)}${staleNote(source, o)} — absence after that is unknown`, refs: [] };
     if (!issues.length) {
       add({ id: `${source}:no_issues:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no new ${areaLabel} issues since ${fmtTime(since)}.`, refs: [], query: { tool: 'getWorkItems', input: `${areaLabel} issues since ${fmtTime(since)}` } }, 'no_issues');
       return { ok: true, result: `No new ${areaLabel} issues`, refs: [] };
@@ -332,6 +402,8 @@ export async function runInvestigation(args: {
 
   const reviewsStep = (o: ToolOutcome<FeedbackItem[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
+    if (o.stale) staleGap(source, o.stale.freshAsOf);
+    if (!o.data.length && o.stale) return { ok: true, result: `No negative feedback about ${areaLabel} up to ${fmtTime(o.stale.freshAsOf)}${staleNote(source, o)} — absence after that is unknown`, refs: [] };
     if (!o.data.length) {
       add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: 'getFeedback', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
       return { ok: true, result: `No negative reviews about ${areaLabel}`, refs: [] };
@@ -376,8 +448,10 @@ export async function runInvestigation(args: {
     if (!source) return;
     addCandidate({ key, tool: 'getMetric', source, metric, noun, input: metric, tests, why, exec: async () => metricStep(await tb.getMetric({ source, metric, until: at }), source, onData) });
   };
-  for (const source of src.withRole('changes')) {
-    addCandidate({ key: `changes:${source}`, tool: 'getChanges', source, noun: 'releases', input: `${P(source).short} releases ${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}`, tests: ['release_related'], why: `Was anything released or changed in ${P(source).short} shortly before the change began?`, exec: async () => releaseStep(await tb.getChanges({ ...changeWindow, source }), source) });
+  // One role query across every change source: "what changed shortly before this began?"
+  const changeSources = src.withRole('changes').filter((x) => watch.sources.includes(x));
+  if (changeSources.length) {
+    candidates.push({ key: 'changes', tool: 'getChanges', source: changeSources[0], sources: changeSources, noun: 'change history', input: `${changeSources.map((x) => P(x).short).join(', ')} · ${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}`, tests: ['release_related'], why: 'Was anything released, deployed or changed shortly before the change began?', exec: async () => releaseStep(await tb.getChanges(changeWindow)) });
   }
   if (area !== 'general') {
     for (const source of src.withRole('work_items')) {
@@ -414,10 +488,29 @@ export async function runInvestigation(args: {
     addCandidate({ key: `feedback:${source}`, tool: 'getFeedback', source, noun: 'reviews', input: `1–2★ reviews mentioning ${areaLabel} since ${fmtTime(since)}`, tests: ['shared_product_issue', 'customer_only'], why: `Are ${P(source).short} customers complaining about ${areaLabel}?`, exec: async () => reviewsStep(await tb.getFeedback({ since, until: at, area, source }), source) });
   }
 
+  // Candidates that read one source vs. a role query across several.
+  const down = (x: SourceId) => failedSources.has(x) || ['unavailable', 'error', 'not_configured'].includes(args.connectionState(x));
+  const reachable = (c: Candidate) => (c.sources ? c.sources.some((x) => !down(x)) : !down(c.source));
+  const labelFor = (c: Candidate) => (c.sources ? 'Changes' : P(c.source).short);
+  const covers = (c: Candidate, x: string) => (c.sources ? c.sources.includes(x as SourceId) : c.source === x);
+
   // ── Hypothesis evaluation (recomputed from all evidence so far) ──
   const done = new Set<string>();
+  /** Sources that failed during this pass (skipped for the rest of it). */
+  const failedSources = new Set<SourceId>();
   const ran = (k: HypothesisKind) => candidates.some((c) => done.has(c.key) && c.tests.includes(k));
-  const releaseVersion = () => g.changes.filter((r) => Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000).sort((a, b) => b.at.localeCompare(a.at))[0]?.version;
+  // The change whose observed time (actual or reported) precedes onset. Planned dates never qualify.
+  const before = (r: ChangeRecord) => Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000;
+  const timedBefore = () => g.changes.filter((r) => timedChange(r) && before(r)).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const releaseVersion = () => {
+    const c = timedBefore();
+    return c ? changeLabel(c) : undefined;
+  };
+  /** A change dated before onset but known only by its planned date (and no observed record of the same change). */
+  const plannedBefore = () => {
+    const observed = new Set(g.changes.filter(timedChange).map(changeLabel));
+    return g.changes.filter((r) => r.kind !== 'incident' && r.timing === 'planned' && before(r) && !observed.has(changeLabel(r))).sort((a, b) => b.at.localeCompare(a.at))[0];
+  };
   // Independent of the analytics source that reported the primary signal.
   const analyticsSource = primary.provider;
 
@@ -439,19 +532,38 @@ export async function runInvestigation(args: {
       let statement = '';
       switch (kind) {
         case 'release_related': {
+          const timed = timedBefore();
           const v = releaseVersion();
-          statement = v ? `The change is related to release ${v}` : 'A recent release is involved';
-          forIds = ids('release');
-          const tagged = v ? [...g.workItems.filter((i) => i.versions.includes(v) || i.labels.includes(v)), ...g.feedback.filter((r) => r.version === v)] : [];
+          const planned = v ? undefined : plannedBefore();
+          const label = v ?? (planned ? changeLabel(planned) : undefined);
+          const phrase = timed ? changePhrase(timed.kind, v!) : planned ? changePhrase(planned.kind, label!) : '';
+          statement = timed ? `The change is related to ${phrase}` : planned ? `${phrase.replace(/^./, (c) => c.toUpperCase())} (known only by its planned date) is involved` : 'A recent release is involved';
+          forIds = [...ids('release'), ...ids('planned_change')];
+          const tagged = label ? [...g.workItems.filter((i) => i.versions.includes(label) || i.labels.includes(label)), ...g.feedback.filter((r) => r.version === label)] : [];
           if (tagged.length) forIds.push(...g.evidence.filter((e) => e.refs.some((r) => tagged.some((x) => x.id === r.id))).map((e) => e.id));
           againstIds = ids('no_release');
-          const releaseSourceDown = g.gaps.some((x) => !x.noData && candidates.some((c) => c.source === x.provider && c.tests.includes('release_related')));
-          // Timing is correlation. A release in the window is weak evidence; reports tagged with that
-          // version make it moderate. It never becomes strong: that would be causation by timing.
+          const releaseSourceDown = g.gaps.some((x) => !x.noData && candidates.some((c) => covers(c, x.provider) && c.tests.includes('release_related')));
+          // Timing is correlation. A change that reached users in the window is weak evidence; reports
+          // tagged with that version make it moderate. It never becomes strong: that would be causation
+          // by timing. A planned date is not timing at all: on its own it adds nothing, and tagged reports
+          // can lift it only to weak.
+          // A planned date leaves the timing question open: while another change source in the watch can
+          // still say when the change actually reached users, the explanation is not yet tested.
+          const timingSourceLeft = candidates.some((c) => c.tool === 'getChanges' && !done.has(c.key) && reachable(c));
           if (v) strength = tagged.length ? 'moderate' : 'weak';
+          else if (planned && timingSourceLeft) statusOverride = 'untested';
+          else if (planned) strength = tagged.length ? 'weak' : 'none';
+          // "No change" needs every reachable change source to have answered: one quiet source is not
+          // coverage. Until then the explanation stays open (never ruled out) and says what is unchecked.
+          else if (againstIds.length && timingSourceLeft) {
+            statusOverride = 'untested';
+            const unchecked = candidates.filter((c) => c.tool === 'getChanges' && !done.has(c.key)).flatMap((c) => (c.sources ?? [c.source]).map((x) => P(x).short));
+            unknowns.push(`Change history not yet checked in ${[...new Set(unchecked)].join(', ')} — no change found so far is not the same as no change.`);
+          }
           else if (againstIds.length && !releaseSourceDown) statusOverride = 'ruled_out';
-          else if (releaseSourceDown) unknowns.push('Release history could not be fully checked — a source was unavailable.');
-          unknowns.push(v ? `Whether release ${v} is responsible — timing is not causation.` : 'No release was found in the window.');
+          else if (releaseSourceDown) unknowns.push('Release history could not be fully checked — a source was unavailable or incomplete.');
+          if (planned) unknowns.push(`When ${phrase} reached users — only its planned date is known, which is not evidence of timing.`);
+          unknowns.push(v ? `Whether ${phrase} is responsible — timing is not causation.` : planned ? `Whether ${phrase} is involved at all.` : 'No release was found in the window.');
           break;
         }
         case 'shared_product_issue': {
@@ -460,7 +572,7 @@ export async function runInvestigation(args: {
           againstIds = [...ids('crash_stable'), ...ids('no_issues'), ...ids('no_reviews')];
           const n = degradedProviders.size;
           strength = n >= 3 ? 'strong' : n === 2 ? 'moderate' : n === 1 ? 'weak' : 'none';
-          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${P(c.source).short} ${c.noun}`);
+          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${labelFor(c)} ${c.noun}`);
           if (unchecked.length) unknowns.push(`Not checked: ${[...new Set(unchecked)].join(', ')}.`);
           break;
         }
@@ -480,12 +592,19 @@ export async function runInvestigation(args: {
           else if (tested) strength = 'weak';
           unknowns.push('No server-side data is connected to confirm what analytics reports.');
           break;
-        case 'external_or_unobserved':
-          statement = externalIssue ? `A third-party problem reported in ${P(externalIssue.source).short} (${externalIssue.id})` : 'A cause outside the connected sources (payment provider, backend, marketing change)';
-          forIds = ids('external_issue');
+        case 'external_or_unobserved': {
+          const incident = g.changes.find((c) => c.kind === 'incident');
+          statement = externalIssue
+            ? `A third-party problem reported in ${P(externalIssue.source).short} (${externalIssue.id})`
+            : incident
+              ? `A problem outside the analytics — the incident “${incident.title}” recorded in ${P(incident.source).short}`
+              : 'A cause outside the connected sources (payment provider, backend, marketing change)';
+          forIds = [...ids('external_issue'), ...ids('incident')];
+          if (incident) unknowns.push(`Whether the incident “${incident.title}” (${fmtTime(incident.at)}) relates to this change — not established.`);
           strength = forIds.length ? 'moderate' : 'weak';
           unknowns.push(area === 'checkout' ? 'Payment-provider and backend status are not connected to Jagr.' : 'Backend and marketing data are not connected to Jagr.');
           break;
+        }
         case 'customer_only':
           statement = `Customers hit a ${areaLabel} problem that analytics does not show yet`;
           forIds = ids('area_metric_stable');
@@ -519,15 +638,15 @@ export async function runInvestigation(args: {
   step({
     kind: 'plan',
     title: 'Investigation plan',
-    detail: `Keep ${kinds.length} explanations open and test each: ${kinds.map((k) => HYP_LABEL[k].toLowerCase()).join(', ')}. Sources in this watch: ${watch.sources.map((p) => `${P(p).short} (${args.connectionState(p)})`).join(', ')}.`,
+    detail: `Keep ${kinds.length} explanations open and test each: ${kinds.map((k) => HYP_LABEL[k].toLowerCase()).join(', ')}. Sources in this watch: ${watch.sources.map((p) => { const f = args.freshAsOf?.(p); return `${P(p).short} (${args.connectionState(p)}${f && f < at ? `, data stops at ${fmtTime(f)}` : ''})`; }).join(', ')}.`,
   });
   // Sources known to be down are recorded as gaps now; the validator will not let anything call them.
   for (const p of watch.sources) {
     if (p === 'email' || p === primary.provider) continue;
     const st = args.connectionState(p);
-    if (st !== 'unavailable' && st !== 'error') continue;
-    const detail = gap(p, { ok: false, state: st, detail: args.connectionDetail?.(p) ?? `connection ${st}` });
-    step({ kind: 'gap', title: `${P(p).short} unavailable — its tools will not be called`, detail, source: p, status: st as TraceStep['status'] });
+    if (st !== 'unavailable' && st !== 'error' && st !== 'not_configured') continue;
+    const detail = gap(p, { ok: false, state: st === 'error' ? 'error' : 'unavailable', detail: args.connectionDetail?.(p) ?? `connection ${st}` });
+    step({ kind: 'gap', title: `${P(p).short} ${st === 'not_configured' ? 'not configured' : 'unavailable'} — its tools will not be called`, detail, source: p, status: st === 'error' ? 'error' : 'unavailable' });
   }
 
   // 1. Re-read the primary signal from its source rather than trusting the detector's cached value.
@@ -564,7 +683,6 @@ export async function runInvestigation(args: {
   }
 
   // ── Planning helpers ───────────────────────────────────────
-  const failedSources = new Set<SourceId>();
   const attempts: Partial<Record<HypothesisKind, number>> = {};
   const qualified = (c: Candidate) => (candidates.filter((x) => x.tool === c.tool).length > 1 ? `${c.tool}(${c.metric ?? c.source})` : c.tool);
   const hypIds = (ks: HypothesisKind[]) => ks.filter((k) => kinds.includes(k)).map((k) => HYPOTHESIS_ID[k]);
@@ -575,7 +693,7 @@ export async function runInvestigation(args: {
   // other open explanation has had at least one test.
   const noChange: Partial<Record<HypothesisKind, number>> = {};
   const tunnel = (k: HypothesisKind, hs: AgentHypothesis[], useful: (h: AgentHypothesis) => boolean) =>
-    (noChange[k] ?? 0) >= 2 && hs.some((h) => h.kind !== k && useful(h) && !(attempts[h.kind] ?? 0) && candidates.some((c) => !done.has(c.key) && c.tests.includes(h.kind) && !failedSources.has(c.source) && !['unavailable', 'error'].includes(args.connectionState(c.source))));
+    (noChange[k] ?? 0) >= 2 && hs.some((h) => h.kind !== k && useful(h) && !(attempts[h.kind] ?? 0) && candidates.some((c) => !done.has(c.key) && c.tests.includes(h.kind) && reachable(c)));
 
   /** Deterministic ranking: untested explanations first, then the least-probed useful ones. */
   const ranking = (untested: AgentHypothesis[], useful: AgentHypothesis[], remaining: Candidate[]) => {
@@ -596,14 +714,14 @@ export async function runInvestigation(args: {
       (c): PlannerOption => ({
         id: qualified(c),
         tool: c.tool,
-        source: c.source,
-        sourceLabel: P(c.source).name,
+        source: c.sources ? 'changes' : c.source,
+        sourceLabel: c.sources ? c.sources.map((x) => P(x).name).join(', ') : P(c.source).name,
         metric: c.metric,
-        sourceState: args.connectionState(c.source),
+        sourceState: c.sources ? (c.sources.filter((x) => !down(x)).map((x) => args.connectionState(x))[0] ?? 'unavailable') : args.connectionState(c.source),
         tests: hypIds(c.tests),
         question: c.why,
         alreadyQueried: done.has(c.key),
-        sourceFailed: failedSources.has(c.source),
+        sourceFailed: c.sources ? !reachable(c) : failedSources.has(c.source),
         informative: !done.has(c.key) && c.tests.some((k) => { const h = hs.find((x) => x.kind === k); return !!h && useful(h) && !tunnel(k, hs, useful); }),
         probeLimited: !done.has(c.key) && c.tests.some((k) => { const h = hs.find((x) => x.kind === k); return !!h && useful(h) && tunnel(k, hs, useful); }),
       }),
@@ -694,7 +812,7 @@ export async function runInvestigation(args: {
   while (!stopReason) {
     // Diminishing returns means repeated probing of the same questions — not "an explanation nobody has
     // tested yet". Whatever order a planner prefers, every open explanation gets at least one direct test.
-    const unprobed = hyps.filter((h) => (h.status === 'untested' || (h.status !== 'ruled_out' && !(attempts[h.kind] ?? 0) && RANK[h.strength] < RANK[CEILING[h.kind]])) && candidates.some((c) => !done.has(c.key) && c.tests.includes(h.kind) && !failedSources.has(c.source) && !['unavailable', 'error'].includes(args.connectionState(c.source))));
+    const unprobed = hyps.filter((h) => (h.status === 'untested' || (h.status !== 'ruled_out' && !(attempts[h.kind] ?? 0) && RANK[h.strength] < RANK[CEILING[h.kind]])) && candidates.some((c) => !done.has(c.key) && c.tests.includes(h.kind) && reachable(c)));
     if (unchangedRun >= STALE_LIMIT && !unprobed.length) {
       stopReason = `Diminishing returns: the last ${STALE_LIMIT} calls did not change any explanation. Stopping rather than spending more calls on the same question.`;
       break;
@@ -736,7 +854,7 @@ export async function runInvestigation(args: {
       continue;
     }
     if (!untested.length && impactSettled) {
-      const skipped = remaining.map((c) => `${P(c.source).short} (${c.tool})`);
+      const skipped = remaining.map((c) => `${labelFor(c)} (${c.tool})`);
       stopReason = `Enough evidence: the ${areaLabel} problem is ${impact!.status === 'ruled_out' ? 'not confirmed by any other source' : 'confirmed by three or more independent sources'} and every competing explanation has been tested.${skipped.length ? ` Skipped ${skipped.join(', ')} — they could not change the attention decision.` : ''}`;
       break;
     }
@@ -757,8 +875,8 @@ export async function runInvestigation(args: {
     toolCalls++;
     const out = await next.exec();
     // Only an unreachable source is skipped for the rest of the pass — a metric with no data is not an outage.
-    if (!out.ok && out.state !== 'no_data') failedSources.add(next.source);
-    step({ kind: 'tool_call', title: `${P(next.source).short} → ${next.input}`, tool: next.tool, source: next.source, input: next.input, why: next.why });
+    if (!out.ok && out.state !== 'no_data' && !next.sources) failedSources.add(next.source);
+    step({ kind: 'tool_call', title: `${labelFor(next)} → ${next.input}`, tool: next.tool, ...(next.sources ? { sources: out.reached ?? [] } : { source: next.source }), input: next.input, why: next.why });
     chosen.decision.resultSummary = out.result;
     const before = hyps;
     hyps = evaluate();
@@ -770,7 +888,7 @@ export async function runInvestigation(args: {
       kind: 'result',
       title: out.result,
       tool: next.tool,
-      source: next.source,
+      ...(next.sources ? { sources: out.reached ?? [] } : { source: next.source }),
       status: out.ok ? 'ok' : (out.state as TraceStep['status']),
       refs: out.refs,
       changed: changed.length ? changed : ['No change to any explanation'],

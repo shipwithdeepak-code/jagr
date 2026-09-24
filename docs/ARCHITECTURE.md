@@ -447,9 +447,20 @@ Accounts and sessions · shared/multi-device workspaces · every OAuth/App insta
 |---|---|---|
 | 1 Role-based source refactor | **Done** | Role interfaces + `SourceRegistry` (`src/product/roles/`); role tools replace vendor tools; `SignalKey` is `metric:<key>` / `work_items` / `feedback` / `changes`; action kinds vendor-neutral; native adapters bridged to roles with provenance (`integrations/bridge.ts`); stored workspaces migrate v2 → v3 (`migrations/roles.ts`, tested on a real v2 workspace); every golden/adversarial/planner verdict and investigation conclusion matches the pre-refactor baseline (`evaluation/verdicts.baseline.json`). Brought forward from step 4 so the core compiles alone: `HttpClient` port, `tsconfig.product.json`, architecture test, and the three boundary moves. |
 
+| 2 Change + freshness evidence | **Done** | `ChangeRecord.kind` (deploy, release, flag/experiment/config change, annotation, incident) and `timing` (actual / planned / reported). Only actual or reported timing can form a temporal association; a planned date is shown as evidence and kept as an unknown ("only its planned date is known"), and while a source with real timing is left, the timing question stays open. Incidents are evidence, never a preceding change. `getChanges` is one role query across every change source in the watch, with per-source coverage: a source that is down, unconfigured or stale is a gap, and "no releases" is recorded only for sources that answered completely. `SourceConnection.freshAsOf` marks stale data; the simulated connector hides anything after it. |
+
+**Deliberate verdict changes in step 2** (baseline regenerated; attention, status, emails and every product metric unchanged; every golden/adversarial/planner case keeps its pass/fail):
+
+- The Sample workspace's Jira release date is `planned` (a tracker's release date is bookkeeping, day-precision in real Jira). Release associations are now measured from the first *actual* rollout (App Store phased release, 18:40): "20 min before the drop", not 30.
+- EVAL-003 (Jira release only) and EVAL-008 (stores down, only the Jira date left) no longer claim a timing association; release-related drops to weak. EVAL-003's check now asserts the planned date is shown as evidence and no timing is claimed from it.
+- One change scan instead of one call per store: 2–4 fewer tool calls per investigation.
+- PLN-05's scripted planner can no longer chase "another store release lookup" (there is one change query); it now chases corroboration for explanations already at their ceiling — the same NO_INFORMATION_VALUE policy, still exercised end to end.
+
 Decisions taken during implementation (smallest reversible choice, per the brief):
 
 - **Source ids stay opaque strings.** The built-in channels keep their ids (`jira`, `ga4`, `app_store`, `google_play`) so stored workspaces, deep links and evaluations are unaffected; the engine never branches on them (enforced by `architecture.test.ts`). New connectors register new ids.
 - **Pure helpers moved into the core.** `lib/time` and `lib/rng` now live in `src/product/lib/` (re-exported from `src/lib/` for the UI and Demo night) so the core imports nothing outside itself except `zod`.
 - **Allowed runtime globals** for the core are declared in `types/core-runtime.d.ts`: timers, `URL`, `AbortSignal.timeout`. Everything else — including `fetch` — comes through ports.
 - **Rollout pre-checks** read every change source that reports rollout state (`ChangeSource.tracksRollout`); they are independent reads, so the verdict lock compares them as a set.
+- **Change evidence is one role query** (`getChanges` fans out to every change source in the watch). Work items and feedback stay per source for now: each call is one source's answer, which keeps their evaluation traces unchanged. Metrics are per metric.
+- **GitHub is registered as a known source id** (`github`, role: changes) so deploy evidence can be tested now; it is not part of the Sample workspace and has no connector until step 7.

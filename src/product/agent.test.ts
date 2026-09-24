@@ -22,7 +22,7 @@ describe('acceptance: checkout conversion −18%', () => {
 
     // Signal, sources, tool calls
     expect(inv.signals[0].key).toBe('metric:checkout_conversion');
-    const calls = new Set(inv.trace.filter((s) => s.kind === 'tool_call').map((s) => `${s.tool}(${s.source})`));
+    const calls = new Set(inv.trace.filter((s) => s.kind === 'tool_call').flatMap((s) => (s.sources ?? [s.source]).map((x) => `${s.tool}(${x})`)));
     expect(tools).toContain('getMetric');
     expect(tools).toContain('getWorkItems');
     expect(calls).toContain('getChanges(jira)');

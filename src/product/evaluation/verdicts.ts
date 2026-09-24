@@ -39,7 +39,7 @@ function investigation(i: WatchInvestigation) {
     evidence: i.evidence.map((e) => `${e.provider}:${e.direction}`).sort(),
     // Investigation calls in order; pre-action rollout checks are independent reads, compared as a set.
     consulted: [
-      ...i.trace.filter((s) => s.kind === 'tool_call' && !s.why?.startsWith('Before recommending')).map((s) => `${s.pass}:${s.source}`),
+      ...i.trace.filter((s) => s.kind === 'tool_call' && !s.why?.startsWith('Before recommending')).map((s) => `${s.pass}:${s.sources ? s.sources.join('+') : s.source}`),
       ...i.trace.filter((s) => s.kind === 'tool_call' && s.why?.startsWith('Before recommending')).map((s) => `rollout-check ${s.pass}:${s.source}`).sort(),
     ],
     toolCalls: i.toolCalls,

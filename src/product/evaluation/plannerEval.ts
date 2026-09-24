@@ -167,7 +167,7 @@ export const PLANNER_CASES: PlannerCase[] = [
   {
     id: 'PLN-05',
     title: 'Model chooses low-value evidence while a real gap is open',
-    attack: 'Release-related is already at its ceiling; the planner still chases another store release lookup.',
+    attack: 'Release-related is already at its ceiling; the planner still chases corroboration for explanations that are settled.',
     client: () => PLANNER_DOUBLES.releaseObsessed,
     world: accept,
     watches: acceptWatches,

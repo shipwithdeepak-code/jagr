@@ -173,7 +173,9 @@ export function proposeActions(args: {
   }
 
   if (attention === 'CRITICAL') {
-    if (releaseLive && version) {
+    // Only a release or deploy can be rolled back; flag and configuration changes are recommended in the write-up.
+    const rollbackable = !inv.releaseAssociation?.kind || inv.releaseAssociation.kind === 'release' || inv.releaseAssociation.kind === 'deploy';
+    if (releaseLive && version && rollbackable) {
       out.push(
         make(inv, 'rollback_release', at, {
           title: `Roll back ${version}`,

@@ -71,11 +71,12 @@ export function roleSourceFromAdapter(adapter: IntegrationAdapter & { provider: 
 
   const toChange = (r: ReleaseRecord, window: TimeWindow): ChangeRecord => ({
     id: r.id,
-    kind: 'release',
-    timing: 'actual',
-    title: `Release ${r.version}`,
+    kind: r.kind ?? 'release',
+    timing: r.timing ?? 'actual',
+    title: r.title ?? `Release ${r.version}`,
     at: r.releasedAt,
-    version: r.version,
+    version: r.version || undefined,
+    status: r.status,
     platform: r.platform,
     rollout: r.rollout,
     notes: r.notes,

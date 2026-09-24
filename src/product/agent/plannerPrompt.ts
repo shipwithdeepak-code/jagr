@@ -32,8 +32,8 @@ export interface PlannerOption {
   /** What the planner must put in `nextTool`: the tool name, qualified when the tool has several uses. */
   id: string;
   tool: ToolName;
-  /** Opaque source id the call reads from. */
-  source: Exclude<ProviderId, 'email'>;
+  /** Opaque source id the call reads from — or the role name, for a call that reads every source of a role. */
+  source: Exclude<ProviderId, 'email'> | 'changes';
   /** The source's display name in this workspace (for messages). */
   sourceLabel?: string;
   /** getMetric / getMetricBreakdown: the workspace metric key the call reads. */

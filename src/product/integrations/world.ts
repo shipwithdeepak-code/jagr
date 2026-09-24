@@ -116,7 +116,8 @@ const BACKGROUND_ISSUES: IssueRecord[] = [
 ];
 
 const BACKGROUND_RELEASES: ReleaseRecord[] = [
-  { id: 'jira-rel-4.8.0', provider: 'jira', version: '4.8.0', platform: 'all', releasedAt: addMinutes(WORLD_START, -3 * 24 * 60), notes: 'Search typo tolerance, settings accessibility fixes' },
+  // A tracker's release date is bookkeeping ("marked released"), not when the build reached users.
+  { id: 'jira-rel-4.8.0', provider: 'jira', timing: 'planned', version: '4.8.0', platform: 'all', releasedAt: addMinutes(WORLD_START, -3 * 24 * 60), notes: 'Search typo tolerance, settings accessibility fixes' },
 ];
 
 const BACKGROUND_REVIEWS: ReviewRecord[] = [
@@ -130,7 +131,7 @@ const BACKGROUND_REVIEWS: ReviewRecord[] = [
 // ─────────────────────────────────────────────────────────────
 
 export const RELEASES_481: ReleaseRecord[] = [
-  { id: 'jira-rel-4.8.1', provider: 'jira', version: '4.8.1', platform: 'all', releasedAt: t('18:30'), notes: 'Checkout payment sheet refactor; promo code handling' },
+  { id: 'jira-rel-4.8.1', provider: 'jira', timing: 'planned', version: '4.8.1', platform: 'all', releasedAt: t('18:30'), notes: 'Checkout payment sheet refactor; promo code handling' },
   { id: 'as-rel-4.8.1', provider: 'app_store', version: '4.8.1', platform: 'ios', releasedAt: t('18:40'), notes: 'Phased release started', rollout: 'Phased release' },
   { id: 'gp-rel-4.8.1', provider: 'google_play', version: '4.8.1', platform: 'android', releasedAt: t('18:45'), notes: 'Staged rollout', rollout: '20% staged rollout' },
 ];

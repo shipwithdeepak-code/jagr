@@ -35,9 +35,9 @@ function wanted(i: PlannerInput, o: PlannerOption) {
  * The Sample workspace's sources are 'jira' (issues and releases), 'ga4' (analytics) and the two
  * app stores; the doubles are written against that fixture.
  */
-type Want = 'stability' | 'work_items' | 'feedback:app_store' | 'feedback:google_play' | 'traffic' | 'metric' | 'changes:jira' | 'changes:stores';
+type Want = 'stability' | 'work_items' | 'feedback:app_store' | 'feedback:google_play' | 'traffic' | 'metric' | 'changes';
 function want(o: PlannerOption): Want {
-  if (o.tool === 'getChanges') return o.source === 'jira' ? 'changes:jira' : 'changes:stores';
+  if (o.tool === 'getChanges') return 'changes';
   if (o.tool === 'getWorkItems') return 'work_items';
   if (o.tool === 'getFeedback') return o.source === 'app_store' ? 'feedback:app_store' : 'feedback:google_play';
   if (o.metric?.startsWith('crash_free_sessions')) return 'stability';
@@ -51,7 +51,7 @@ const find = (i: PlannerInput, w: Want, fresh = true) => i.options.find((o) => w
  * are really affected (crashes, complaints, bugs) before looking at release timing.
  */
 export function impactFirst(i: PlannerInput): string {
-  const order: Want[] = ['stability', 'work_items', 'feedback:app_store', 'feedback:google_play', 'traffic', 'metric', 'changes:jira', 'changes:stores'];
+  const order: Want[] = ['stability', 'work_items', 'feedback:app_store', 'feedback:google_play', 'traffic', 'metric', 'changes'];
   const opts = reachable(i)
     .filter((o) => wanted(i, o))
     .sort((a, b) => order.indexOf(want(a)) - order.indexOf(want(b)));
@@ -61,19 +61,25 @@ export function impactFirst(i: PlannerInput): string {
 
 export const PLANNER_DOUBLES = {
   impactFirst: scripted('impact first', impactFirst),
-  alwaysUnavailableJira: scripted('insists on Jira', (i) => plan(find(i, 'changes:jira', false) ?? { id: 'getChanges(jira)', tests: ['HYP-01'], question: 'Was anything released?' })),
+  alwaysUnavailableJira: scripted('insists on Jira', (i) => plan(find(i, 'work_items', false) ?? { id: 'getWorkItems', tests: ['HYP-02'], question: 'Are people reporting bugs in Jira?' })),
   hallucinated: scripted('hallucinates a tool', () => JSON.stringify({ nextTool: 'getDatadogErrors', reason: 'Server errors would show whether checkout requests are failing.', evidenceGap: 'Server-side errors', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Error rate on the checkout endpoint.' })),
   repeatsJiraIssues: scripted('repeats Jira issues', () => JSON.stringify({ nextTool: 'getWorkItems', reason: 'Engineering reports would test whether this is a real product issue.', evidenceGap: 'Recent checkout defects', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Checkout bugs or incidents.' })),
   /**
-   * Release-first, then keeps chasing release corroboration after release-related has hit its
-   * ceiling — while real gaps (impact, demand) are still open.
+   * Release-first; once release-related has reached its evidence ceiling it keeps asking for more
+   * corroboration of explanations that are already settled — while real gaps are still open.
    */
-  releaseObsessed: scripted('chases release timing', (i) => {
+  releaseObsessed: scripted('chases settled explanations', (i) => {
     const rel = i.hypotheses.find((h) => h.id === 'HYP-01');
-    const opt = (w: Want) => find(i, w);
-    if (rel?.status === 'untested' && opt('changes:jira')) return plan(opt('changes:jira')!);
-    if (rel && rel.strength !== rel.ceiling && opt('work_items')) return plan(opt('work_items')!);
-    if (rel && rel.strength === rel.ceiling && opt('changes:stores')) return plan(opt('changes:stores')!);
+    if (rel?.status === 'untested' && find(i, 'changes')) return plan(find(i, 'changes')!);
+    if (rel && rel.strength === rel.ceiling) {
+      // Anything unqueried whose every hypothesis is already at its ceiling or ruled out.
+      const settled = (id: string) => {
+        const h = i.hypotheses.find((x) => x.id === id);
+        return !h || h.status === 'ruled_out' || h.strength === h.ceiling;
+      };
+      const chase = reachable(i).find((o) => o.tests.length > 0 && o.tests.every(settled));
+      if (chase) return plan(chase);
+    }
     return impactFirst(i);
   }),
   proposesRollback: scripted('proposes an action', () => JSON.stringify({ nextTool: 'rollback_release', reason: 'Rolling back 4.8.1 would limit exposure while the team looks into the drop.', evidenceGap: 'None — act now', hypothesesAffected: ['HYP-01'], expectedEvidence: 'Checkout conversion recovers.' })),

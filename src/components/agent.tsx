@@ -188,6 +188,7 @@ function TraceRow({ step, result, source }: { step: TraceStep; result?: TraceSte
         meta={
           <>
             {step.source && <ProviderName provider={step.source} short />}
+            {step.sources?.map((p) => <ProviderName key={p} provider={p} short />)}
             <SourceStateTag state={failed ? (result?.status === 'error' ? 'error' : 'unavailable') : source} />
           </>
         }
@@ -540,7 +541,7 @@ function Field({ label, children, tone }: { label: string; children: React.React
 
 export function AgentWorkingLine({ inv }: { inv: WatchInvestigation }) {
   const passes = new Set(inv.trace.filter((s) => s.kind === 'tool_call').map((s) => s.pass)).size;
-  const sources = new Set(inv.trace.filter((s) => s.kind === 'tool_call').map((s) => s.source)).size;
+  const sources = new Set(inv.trace.filter((s) => s.kind === 'tool_call').flatMap((s) => s.sources ?? [s.source])).size;
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2">
       <Bot size={13} className="text-accent" />

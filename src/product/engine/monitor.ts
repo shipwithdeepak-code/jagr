@@ -27,7 +27,7 @@ import { planJobs } from '../scheduler';
 import { ATTENTION_RANK, assessAttention } from './attention';
 import { composeBrief } from './brief';
 import { areasPresent, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect';
-import { reason } from './investigate';
+import { changePhrase, reason } from './investigate';
 import { createToolbox } from '../agent/tools';
 import { checkRolloutBeforeAction, runInvestigation, sourceDirectory } from '../agent/investigator';
 import type { InvestigationPlanner } from '../agent/planner';
@@ -182,7 +182,7 @@ function summarise(inv: WatchInvestigation, P: (p: ProviderId) => ProviderLabel)
   const parts = [`${p.label} ${p.magnitude} since ${fmtTime(p.onsetAt)}`];
   if (others.length) parts.push(`corroborated by ${others.join(', ')}`);
   else parts.push(`only ${P(p.provider).short} shows it`);
-  if (inv.releaseAssociation) parts.push(`began ${inv.releaseAssociation.minutesBeforeOnset} min after release ${inv.releaseAssociation.version}`);
+  if (inv.releaseAssociation) parts.push(`began ${inv.releaseAssociation.minutesBeforeOnset} min after ${changePhrase(inv.releaseAssociation.kind, inv.releaseAssociation.version)}`);
   return `${parts.join('; ')}. Investigation confidence ${confidenceBand(inv.confidence)} that the ${AREA_LABEL[inv.area].toLowerCase()} problem is real; cause not established.`;
 }
 
@@ -363,6 +363,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         simulatedLinks: (p) => (p === 'email' ? true : reg.isSimulated(p)),
         connectionState: (p) => (p === 'email' ? email.connection().state : (reg.connection(p)?.state ?? 'not_configured')),
         connectionDetail: (p) => (p === 'email' ? email.connection().detail : (reg.connection(p)?.detail ?? 'Not part of this workspace')),
+        freshAsOf: (p) => (p === 'email' ? undefined : reg.connection(p)?.freshAsOf),
         planner: o.planner,
         investigationId: inv.id,
         labels,
@@ -571,7 +572,7 @@ function closingSteps(inv: WatchInvestigation, pass: TraceStep[], newActions: Pr
     title: sources.length > 1 ? `Evidence lines up across ${sources.join(', ')}` : `Only ${sources[0] ?? 'one source'} shows the change`,
     detail: inv.likelyExplanation,
   });
-  push({ kind: 'uncertainty', title: inv.releaseAssociation ? `Release ${inv.releaseAssociation.version} is not proven causal` : 'Cause not established', detail: inv.uncertainty });
+  push({ kind: 'uncertainty', title: inv.releaseAssociation ? `${changePhrase(inv.releaseAssociation.kind, inv.releaseAssociation.version).replace(/^./, (c) => c.toUpperCase())} is not proven causal` : 'Cause not established', detail: inv.uncertainty });
   if (attentionChanged) {
     push({ kind: 'attention', title: `Attention: ${inv.attention}`, detail: `${inv.attentionReason} Investigation confidence: ${confidenceBand(inv.confidence)} — that a real ${AREA_LABEL[inv.area].toLowerCase()} problem exists, not that its cause is known.` });
   }
@@ -597,7 +598,7 @@ function applyCompetingExplanations(inv: WatchInvestigation, hyps: AgentHypothes
     const lead = inv.signals[0];
     inv.title = `${lead.label} declined — sources conflict`;
     const rel = inv.releaseAssociation;
-    const timing = rel ? ` It began ${rel.minutesBeforeOnset} min after release ${rel.version} — a temporal correlation that does not establish causation, and a release can also change tracking.` : '';
+    const timing = rel ? ` It began ${rel.minutesBeforeOnset} min after ${changePhrase(rel.kind, rel.version)} — a temporal correlation that does not establish causation, and a change can also affect tracking.` : '';
     inv.likelyExplanation = `${lead.label} fell in Analytics, but purchase revenue is normal and no other source shows a problem. The sources conflict: a tracking or measurement change is as plausible as a real drop, and the evidence does not establish either.${timing}`;
     inv.recommendedNextStep = `Check whether the ${lead.label.toLowerCase()} event or its tracking changed before treating this as a real drop.`;
     inv.inferred = [...inv.inferred, 'An independent money measure (purchase revenue) did not move, which conflicts with a real conversion drop.'];

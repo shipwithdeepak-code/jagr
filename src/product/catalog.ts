@@ -101,6 +101,7 @@ export const BUILTIN_SOURCE_ROLES: Record<SourceId, Role[]> = {
   ga4: ['metrics'],
   app_store: ['metrics', 'changes', 'feedback'],
   google_play: ['metrics', 'changes', 'feedback'],
+  github: ['changes'],
 };
 
 export const BUILTIN_METRIC_SOURCE: Record<string, SourceId> = {

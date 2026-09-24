@@ -211,6 +211,27 @@ export interface RegisteredSource {
   context?: ContextSource;
 }
 
+/** A source's state for a query that needs data up to `asOf`. */
+export type SourceHealthState = 'ok' | 'stale' | 'unavailable' | 'error' | 'not_configured';
+
+export interface SourceHealth {
+  source: SourceId;
+  mode: SourceMode;
+  state: SourceHealthState;
+  /** Data is complete up to this time (last successful sync), when known. */
+  freshAsOf?: ISO;
+  detail?: string;
+}
+
+/** Health of a source for a read that needs data up to `asOf`. Stale = its data stops before then. */
+export function healthOf(id: SourceId, conn: SourceConnection | undefined, asOf: ISO): SourceHealth {
+  if (!conn) return { source: id, mode: 'simulated', state: 'not_configured', detail: 'Not part of this workspace' };
+  const mode: SourceMode = conn.state === 'connected' ? 'connected' : conn.state === 'imported' ? 'imported' : 'simulated';
+  if (conn.state === 'not_configured' || conn.state === 'unavailable' || conn.state === 'error') return { source: id, mode, state: conn.state, detail: conn.detail };
+  if (conn.freshAsOf && Date.parse(conn.freshAsOf) < Date.parse(asOf)) return { source: id, mode, state: 'stale', freshAsOf: conn.freshAsOf, detail: `data complete only up to ${conn.freshAsOf}` };
+  return { source: id, mode, state: 'ok', freshAsOf: conn.freshAsOf };
+}
+
 /** Work items and feedback count as "negative" in the same way everywhere. */
 export function isNegativeFeedback(f: FeedbackItem): boolean {
   // A rated item is negative at 1–2★. An unrated support contact is a report of a problem.

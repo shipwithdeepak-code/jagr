@@ -102,6 +102,8 @@ export function mapJiraVersion(v: JiraVersion): ReleaseRecord | undefined {
   return {
     id: `jira-ver-${v.id}`,
     provider: 'jira',
+    // A Jira version's release date is bookkeeping with day precision — never when users got the build.
+    timing: 'planned',
     version: v.name,
     platform: 'all',
     releasedAt: new Date(`${v.releaseDate}T00:00:00Z`).toISOString(),

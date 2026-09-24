@@ -2,7 +2,7 @@ import { fmtTime, minutesBetween } from '../lib/time';
 import type { Area, DetectedSignal, EvidenceItem, Hypothesis, ProviderId, SourceLink } from '../types';
 import { AREA_LABEL, signalMeta } from '../catalog';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { ChangeRecord, FeedbackItem, MetricSeries, WorkItem } from '../roles/types';
+import type { ChangeKind, ChangeRecord, ChangeTiming, FeedbackItem, MetricSeries, WorkItem } from '../roles/types';
 import { fmtMagnitude, type MetricReading } from './detect';
 
 /**
@@ -13,13 +13,67 @@ import { fmtMagnitude, type MetricReading } from './detect';
 
 export interface Gathered {
   evidence: EvidenceItem[];
-  gaps: { provider: ProviderId; detail: string; noData?: boolean }[];
+  /** Sources whose data is missing (down, not configured, no such metric) or incomplete (stale). */
+  gaps: { provider: ProviderId; detail: string; noData?: boolean; stale?: boolean; freshAsOf?: string }[];
   notInWatch: ProviderId[];
   changes: ChangeRecord[];
   workItems: WorkItem[];
   feedback: FeedbackItem[];
   areaMetric?: { series: MetricSeries; reading: MetricReading };
   trafficStable?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Changes: which one (if any) preceded the degradation
+// ─────────────────────────────────────────────────────────────
+
+/** How a change is named in prose: "release 4.8.1", "deploy checkout-api@9f1c", "flag change “new-checkout”". */
+export function changePhrase(kind: ChangeKind | undefined, label: string): string {
+  switch (kind) {
+    case 'deploy':
+      return `deploy ${label}`;
+    case 'flag_change':
+      return `flag change “${label}”`;
+    case 'experiment_change':
+      return `experiment change “${label}”`;
+    case 'config_change':
+      return `configuration change “${label}”`;
+    case 'annotation':
+      return `annotated change “${label}”`;
+    case 'incident':
+      return `incident “${label}”`;
+    default:
+      return `release ${label}`;
+  }
+}
+
+export const changeLabel = (c: ChangeRecord) => c.version ?? c.title;
+
+/** Changes whose timestamp says when something reached users. Planned dates and incidents are not. */
+export const timedChange = (c: ChangeRecord) => c.kind !== 'incident' && c.timing !== 'planned';
+
+/**
+ * The change associated with a degradation, by timing only — never a cause.
+ *
+ * Only a change with an `actual` or `reported` time can be associated. A change known only by a
+ * planned date is never associated (the date is not when it reached users), and when a change has
+ * both, the observed time wins — even when it puts the change after the degradation began.
+ * The association is measured from the change's first observed record before onset.
+ */
+export function associateChange(changes: ChangeRecord[], onsetAt: string, maxMinutesBefore = 180): { version: string; releasedAt: string; minutesBeforeOnset: number; kind: ChangeKind; timing: ChangeTiming } | undefined {
+  const candidates = changes.filter((r) => timedChange(r) && Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000 && minutesBetween(r.at, onsetAt) <= maxMinutesBefore);
+  const nearest = [...candidates].sort((a, b) => b.at.localeCompare(a.at))[0];
+  if (!nearest) return undefined;
+  const first = candidates.filter((r) => changeLabel(r) === changeLabel(nearest)).sort((a, b) => a.at.localeCompare(b.at))[0];
+  return { version: changeLabel(first), releasedAt: first.at, minutesBeforeOnset: Math.max(0, Math.round(minutesBetween(first.at, onsetAt))), kind: first.kind, timing: first.timing };
+}
+
+/** A change dated shortly before onset but known only by a planned date — reported as an unknown, never associated. */
+export function plannedOnly(changes: ChangeRecord[], onsetAt: string, maxMinutesBefore = 180): ChangeRecord | undefined {
+  const observed = new Set(changes.filter(timedChange).map(changeLabel));
+  return changes
+    .filter((r) => r.kind !== 'incident' && r.timing === 'planned' && !observed.has(changeLabel(r)) && Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000 && minutesBetween(r.at, onsetAt) <= maxMinutesBefore)
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
 }
 
 function fmtValue(series: MetricSeries, v: number) {
@@ -70,12 +124,10 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   const corroborating = correlatedProviders.filter((p) => p !== primary.provider).length;
   const areaLabel = AREA_LABEL[area].toLowerCase();
 
-  // A change (release) is associated only by timing: shipped within 3h before the degradation began.
-  const candidates = g.changes.filter((r) => r.version && Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000 && minutesBetween(r.at, onsetAt) <= 180);
-  // Most recent version shipped before onset; measure from that version's first release.
-  const nearest = candidates.sort((a, b) => b.at.localeCompare(a.at))[0];
-  const first = nearest ? candidates.filter((r) => r.version === nearest.version).sort((a, b) => a.at.localeCompare(b.at))[0] : undefined;
-  const releaseAssociation = first ? { version: first.version!, releasedAt: first.at, minutesBeforeOnset: Math.max(0, Math.round(minutesBetween(first.at, onsetAt))) } : undefined;
+  // A change is associated only by timing — reached users within 3h before the degradation began.
+  const releaseAssociation = associateChange(g.changes, onsetAt);
+  const planned = releaseAssociation ? undefined : plannedOnly(g.changes, onsetAt);
+  const assocPhrase = releaseAssociation ? changePhrase(releaseAssociation.kind, releaseAssociation.version) : '';
 
   const primaryMeta = signalMeta(primary.key);
   const customerPrimary = primaryMeta.kind === 'feedback' || primaryMeta.kind === 'work_items';
@@ -103,7 +155,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     .sort();
   const spread = firstByProvider.length > 1 ? Math.round(minutesBetween(firstByProvider[0], firstByProvider[firstByProvider.length - 1])) : 0;
   if (corroborating >= 1) inferred.push(`${correlatedProviders.length} sources first degraded within ${spread} minutes of each other, so they likely reflect the same underlying ${areaLabel} problem.`);
-  if (releaseAssociation) inferred.push(`The degradation began ${releaseAssociation.minutesBeforeOnset} minutes after release ${releaseAssociation.version} — a temporal association.`);
+  if (releaseAssociation) inferred.push(`The degradation began ${releaseAssociation.minutesBeforeOnset} minutes after ${assocPhrase}${releaseAssociation.timing === 'reported' ? ' (a reported time)' : ''} — a temporal association.`);
   if (g.trafficStable && !customerPrimary) inferred.push('Traffic is normal, so the change is in how people convert, not in how many arrive.');
   if (customerPrimary && areaMetricStable) inferred.push(`Customers are reporting ${areaLabel} problems, but analytics does not yet show a measurable impact.`);
   if (corroborating === 0 && !customerPrimary) inferred.push('Only one source shows this change; it may be a real shift or a measurement issue.');
@@ -113,10 +165,12 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   const unknowns: string[] = [];
   unknowns.push(
     releaseAssociation
-      ? `Whether release ${releaseAssociation.version} is responsible — timing alone does not establish causation.`
-      : releaseChecked
-        ? 'What is behind the change — no release or other change was found in the window.'
-        : 'Whether a release or change is involved — release history was not checked in this investigation.',
+      ? `Whether ${assocPhrase} is responsible — timing alone does not establish causation.`
+      : planned
+        ? `When ${changePhrase(planned.kind, changeLabel(planned))} reached users — only its planned date (${fmtTime(planned.at)}) is known, which is not evidence of timing.`
+        : releaseChecked
+          ? 'What is behind the change — no release or other change was found in the window.'
+          : 'Whether a release or change is involved — release history was not checked in this investigation.',
   );
   for (const gap of g.gaps) unknowns.push(gap.detail);
   for (const p of g.notInWatch) unknowns.push(`${P(p).name} is not part of this watch, so it was not checked.`);
@@ -124,7 +178,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   else unknowns.push('Server-side error data is not connected to Jagr.');
 
   const hypotheses: Hypothesis[] = [];
-  if (releaseAssociation) hypotheses.push({ statement: `${AREA_LABEL[area]} degradation temporally associated with release ${releaseAssociation.version}`, basis: 'temporal_correlation', role: 'leading' });
+  if (releaseAssociation) hypotheses.push({ statement: `${AREA_LABEL[area]} degradation temporally associated with ${assocPhrase}`, basis: 'temporal_correlation', role: 'leading' });
   else if (corroborating >= 1) hypotheses.push({ statement: `A shared ${areaLabel} problem visible across ${correlatedProviders.map((p) => P(p).short).join(', ')}`, basis: 'cross_source', role: 'leading' });
   else if (customerPrimary) hypotheses.push({ statement: `A customer-reported ${areaLabel} problem not yet visible in analytics`, basis: 'customer_reports', role: 'leading' });
   else hypotheses.push({ statement: `${primary.label} decline without corroborating signals`, basis: 'single_source', role: 'leading' });
@@ -132,7 +186,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
 
   let likelyExplanation: string;
   if (releaseAssociation) {
-    likelyExplanation = `${primary.label} ${customerPrimary ? 'rose' : 'declined'} shortly after release ${releaseAssociation.version}${corroborating ? ` and ${correlatedProviders.filter((p) => p !== primary.provider).map((p) => P(p).short).join(', ')} also ${corroborating > 1 ? 'show' : 'shows'} ${areaLabel} problems` : ''}. The available evidence supports a temporal correlation, but does not establish causation.`;
+    likelyExplanation = `${primary.label} ${customerPrimary ? 'rose' : 'declined'} shortly after ${assocPhrase}${corroborating ? ` and ${correlatedProviders.filter((p) => p !== primary.provider).map((p) => P(p).short).join(', ')} also ${corroborating > 1 ? 'show' : 'shows'} ${areaLabel} problems` : ''}. The available evidence supports a temporal correlation, but does not establish causation.`;
   } else if (corroborating >= 1) {
     likelyExplanation = `${correlatedProviders.length} sources show ${areaLabel} degrading at the same time, which suggests a shared underlying problem.${releaseChecked ? ' No release or change in the window lines up with it.' : ' Release history was not checked.'}`;
   } else if (customerPrimary) {
@@ -144,7 +198,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   const staged = g.changes.find((r) => r.rollout && /staged/i.test(r.rollout) && r.version === releaseAssociation?.version);
   const uncertainty = [
     'The data does not establish causation.',
-    ...g.gaps.map((x) => `${P(x.provider).name} could not be checked.`),
+    ...g.gaps.map((x) => (x.stale ? `${P(x.provider).name} data is incomplete after ${fmtTime(x.freshAsOf!)}.` : `${P(x.provider).name} could not be checked.`)),
     corroborating === 0 ? 'No second source confirms the change.' : '',
     area === 'checkout' ? 'Payment-provider data is not connected, so a third-party payment problem cannot be ruled out.' : '',
     staged ? `${staged.platform === 'android' ? 'Android' : 'iOS'} ${staged.version} is on a ${staged.rollout!.toLowerCase()}, so impact there may still grow.` : '',

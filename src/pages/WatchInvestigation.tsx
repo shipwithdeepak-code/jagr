@@ -128,7 +128,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
   const reading = readingOf(inv);
   const at = (s: string) => inv.statusHistory.find((h) => h.state === s)?.at;
   const calls = inv.trace.filter((s) => s.kind === 'tool_call');
-  const checked = [...new Set(calls.map((s) => s.source).filter((p): p is NonNullable<typeof p> => !!p))];
+  const checked = [...new Set(calls.flatMap((s) => s.sources ?? [s.source]).filter((p): p is NonNullable<typeof p> => !!p))];
   const gaps = inv.evidence.filter((e) => e.direction === 'gap');
   const band = confidenceBand(inv.confidence);
 

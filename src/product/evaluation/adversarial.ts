@@ -61,7 +61,7 @@ const inArea = (r: MonitoringResult, area: string) => r.investigations.filter((i
 const hyp = (r: MonitoringResult, area: string, kind: string) => inArea(r, area)[0]?.agentHypotheses.find((h) => h.kind === kind);
 const toolsUsed = (r: MonitoringResult) => new Set(r.investigations.flatMap((i) => i.trace.filter((s) => s.kind === 'tool_call').map((s) => s.tool)));
 /** Tool calls as `tool(source)` — e.g. getChanges(app_store). */
-const callsUsed = (r: MonitoringResult) => new Set(r.investigations.flatMap((i) => i.trace.filter((s) => s.kind === 'tool_call').map((s) => `${s.tool}(${s.source})`)));
+const callsUsed = (r: MonitoringResult) => new Set(r.investigations.flatMap((i) => i.trace.filter((s) => s.kind === 'tool_call').flatMap((s) => (s.sources ?? [s.source]).map((x) => `${s.tool}(${x})`))));
 
 const conv = (change: number, from = '19:00', to?: string) => ({ 'ga4.checkout_conversion': [{ from, to, change }] });
 

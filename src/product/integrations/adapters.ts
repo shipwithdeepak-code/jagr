@@ -27,6 +27,7 @@ export const PROVIDERS: Record<ProviderId, { name: string; short: string; capabi
   ga4: { name: 'Google Analytics 4', short: 'Analytics', capabilities: ['metrics'], externalBase: 'https://analytics.google.com/analytics/web', realApi: 'GA4 Data API (runReport)' },
   app_store: { name: 'App Store Connect', short: 'App Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://appstoreconnect.apple.com', realApi: 'App Store Connect API' },
   google_play: { name: 'Google Play Console', short: 'Play Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://play.google.com/console', realApi: 'Play Developer Reporting API' },
+  github: { name: 'GitHub', short: 'GitHub', capabilities: ['releases', 'changes'], externalBase: 'https://github.com', realApi: 'GitHub REST API (deployments, releases)' },
   email: { name: 'Email', short: 'Email', capabilities: ['send_email'], externalBase: 'mailto:', realApi: 'SMTP / transactional email provider' },
 };
 
@@ -89,6 +90,12 @@ class SimulatedAdapter implements IntegrationAdapter {
     }
   }
 
+  /** A stale source only has data up to its last sync: nothing after `freshAsOf` is visible. */
+  private visible(window: TimeWindow): TimeWindow {
+    const f = this.conn.freshAsOf;
+    return f && f < window.end ? { start: window.start, end: f } : window;
+  }
+
   listMetrics() {
     if (!this.capabilities.includes('metrics')) return [];
     // A world may declare metrics it has no data for (imports: every metric the user could upload).
@@ -96,8 +103,9 @@ class SimulatedAdapter implements IntegrationAdapter {
     return defs.filter((m) => m.provider === this.provider).map((m) => ({ id: m.id, provider: m.provider, name: m.name, unit: m.unit, area: m.area, badDirection: m.badDirection, mode: m.mode, threshold: m.threshold, platform: m.platform }));
   }
 
-  async getMetrics(ids: string[], window: TimeWindow): Promise<MetricSeries[]> {
+  async getMetrics(ids: string[], requested: TimeWindow): Promise<MetricSeries[]> {
     this.guard();
+    const window = this.visible(requested);
     if (!this.capabilities.includes('metrics')) return [];
     return this.world.metrics
       .filter((m) => m.provider === this.provider && ids.includes(m.id))
@@ -108,19 +116,22 @@ class SimulatedAdapter implements IntegrationAdapter {
       }));
   }
 
-  async getIssues(window: TimeWindow): Promise<IssueRecord[]> {
+  async getIssues(requested: TimeWindow): Promise<IssueRecord[]> {
     this.guard();
+    const window = this.visible(requested);
     if (this.provider !== 'jira') return [];
     return this.world.issues.filter((i) => inWindow(i.createdAt, window));
   }
 
-  async getReleases(window: TimeWindow): Promise<ReleaseRecord[]> {
+  async getReleases(requested: TimeWindow): Promise<ReleaseRecord[]> {
     this.guard();
+    const window = this.visible(requested);
     return this.world.releases.filter((r) => r.provider === this.provider && inWindow(r.releasedAt, window));
   }
 
-  async getReviews(window: TimeWindow): Promise<ReviewRecord[]> {
+  async getReviews(requested: TimeWindow): Promise<ReviewRecord[]> {
     this.guard();
+    const window = this.visible(requested);
     return this.world.reviews.filter((r) => r.provider === this.provider && inWindow(r.createdAt, window));
   }
 
@@ -164,12 +175,14 @@ export interface AdapterRegistry {
 /** The workspace's sources as a role registry. Order = PROVIDERS order, which the engine consults in. */
 export function createRegistry(world: World, connections: SourceConnection[]): { registry: SourceRegistry; email: SimulatedEmailChannel } {
   const reg = createAdapters(world, connections);
-  const ids = (Object.keys(PROVIDERS) as ProviderId[]).filter((p): p is SourceId => p !== 'email');
+  // Only sources the workspace has a connection for (in any state) are part of it.
+  const ids = (Object.keys(PROVIDERS) as ProviderId[]).filter((p): p is SourceId => p !== 'email' && connections.some((c) => c.provider === p));
   return { registry: new SourceRegistry(ids.map((id) => roleSourceFromAdapter(reg.sources[id] as IntegrationAdapter & { provider: SourceId }))), email: reg.email };
 }
 
 export function defaultConnections(at = '2026-09-23T17:55:00.000Z'): SourceConnection[] {
-  return (Object.keys(PROVIDERS) as ProviderId[]).map((provider) => ({
+  // The Sample workspace's channels. GitHub is not part of the sample night.
+  return (Object.keys(PROVIDERS) as ProviderId[]).filter((p) => p !== 'github').map((provider) => ({
     provider,
     state: 'simulated',
     detail: provider === 'email' ? 'Simulated outbox — emails are rendered in Jagr, never delivered' : 'Deterministic fixture data (no credentials configured)',
@@ -178,13 +191,15 @@ export function defaultConnections(at = '2026-09-23T17:55:00.000Z'): SourceConne
 }
 
 export function createAdapters(world: World, connections: SourceConnection[]): AdapterRegistry {
-  const conn = (p: ProviderId) => connections.find((c) => c.provider === p) ?? defaultConnections()[0];
+  // A source without a connection is simply not configured — never borrow another source's state.
+  const conn = (p: ProviderId): SourceConnection => connections.find((c) => c.provider === p) ?? { provider: p, state: 'not_configured', detail: 'Not connected to this workspace.', updatedAt: world.start };
   return {
     sources: {
       jira: new SimulatedAdapter('jira', world, conn('jira')),
       ga4: new SimulatedAdapter('ga4', world, conn('ga4')),
       app_store: new SimulatedAdapter('app_store', world, conn('app_store')),
       google_play: new SimulatedAdapter('google_play', world, conn('google_play')),
+      github: new SimulatedAdapter('github', world, conn('github')),
     },
     email: new SimulatedEmailChannel(conn('email')),
   };
