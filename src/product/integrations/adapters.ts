@@ -144,7 +144,7 @@ class SimulatedAdapter implements IntegrationAdapter {
     return [
       ...issues.map((i): SourceEvent => ({ at: i.createdAt, provider: this.provider, kind: 'issue', title: `${i.id} ${i.title}`, ref: { provider: this.provider, kind: 'issue', id: i.id } })),
       ...releases.map((r): SourceEvent => ({ at: r.releasedAt, provider: this.provider, kind: 'release', title: `Release ${r.version}`, ref: { provider: this.provider, kind: 'release', id: r.id } })),
-      ...reviews.map((r): SourceEvent => ({ at: r.createdAt, provider: this.provider, kind: 'review', title: `${r.rating}★ ${r.title}`, ref: { provider: this.provider, kind: 'review', id: r.id } })),
+      ...reviews.map((r): SourceEvent => ({ at: r.createdAt, provider: this.provider, kind: 'review', title: `${r.rating ? `${r.rating}★ ` : ''}${r.title}`, ref: { provider: this.provider, kind: 'review', id: r.id } })),
     ].sort((a, b) => a.at.localeCompare(b.at));
   }
 

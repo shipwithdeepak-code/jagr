@@ -20,11 +20,13 @@ This is a V1, **not production-ready**. There are no accounts: a workspace lives
    | Metrics | `timestamp, metric, value` | `baseline` |
    | Issues | `id, title, created_at` | `status, labels, priority, type, version, component` |
    | Releases | `id, name, date` | `status, version, rollout, platform` |
-   | Customer feedback | `id, text, rating (1–5), created_at` | `title, version` |
+   | Changes | `id, kind, title, at` | `timing (actual / planned / reported), version, status, platform, rollout` |
+   | Customer feedback | `id, text, created_at` | `rating (1–5; required for reviews and surveys), channel (review / support / survey / request), tags, title, version` |
 
    - Metrics V1 can investigate: `checkout_conversion`, `signup_conversion`, `purchase_revenue`, `sessions`, `search_usage`.
    - Timestamps must be ISO 8601; ambiguous dates like `09/24/2026` are rejected, not guessed.
    - Every rejected row is shown with its line number and reason. Nothing is silently dropped.
+   - Changes are deploys, releases, flag / experiment / config changes, annotations and incidents. A `planned` timestamp is shown as evidence but never used as timing; an annotation defaults to `reported`.
 3. **Create a watch**, e.g. *Checkout health*.
 4. Choose the planner: **Deterministic**, or the **AI planner** if the deployment has one configured.
 5. **Run monitoring**, then open the investigation:

@@ -18,6 +18,7 @@ import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters
 import type { ChangeRecord, FeedbackItem, SourceId, WorkItem } from '../roles/types';
 import type { SourceRegistry } from '../roles/registry';
 import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate';
+import { feedbackNoun } from '../engine/detect';
 import type { ChangeScan, MetricResult, ToolOutcome, Toolbox } from './tools';
 import { FAILURE_LABEL, HYPOTHESIS_ID, validatePlan, type InvestigationPlanner, type PlannerInput, type PlannerOption } from './planner';
 import type { PlannerOutcome, PlannerProposal } from './plannerSchema';
@@ -415,7 +416,7 @@ export async function runInvestigation(args: {
         id: `${source}:reviews:${area}`,
         provider: source,
         direction: 'degraded',
-        statement: `${P(source).short}: ${o.data.length} ${o.data.length === 1 ? 'review rated 1–2★ mentions' : 'reviews rated 1–2★ mention'} ${areaLabel} since ${fmtTime(o.data[0].createdAt)}.`,
+        statement: `${P(source).short}: ${o.data.length} ${feedbackNoun(o.data).plural} ${o.data.length === 1 ? 'mentions' : 'mention'} ${areaLabel} since ${fmtTime(o.data[0].createdAt)}.`,
         onsetAt: o.data[0].createdAt,
         refs,
         link: link(refs[0], `Open ${P(source).short}`),

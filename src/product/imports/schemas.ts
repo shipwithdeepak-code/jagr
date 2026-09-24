@@ -1,21 +1,35 @@
 import type { Area } from '../types';
 import type { IssueRecord, ReleaseRecord, ReviewRecord } from '../integrations/types';
+import type { ChangeKind, ChangeTiming } from '../roles/types';
 import { classifyText } from '../catalog';
 import { parseFile, type RawRow } from './parse';
 
 /**
- * Bring-your-own-data: four kinds of product evidence, validated row by row and normalised into the
+ * Bring-your-own-data: five kinds of product evidence, validated row by row and normalised into the
  * records the engine already understands. Nothing is silently discarded — every rejected row keeps
  * its line number and the reason, so the user can see and fix it.
  */
 
-export type ImportKind = 'metrics' | 'issues' | 'releases' | 'feedback';
+export type ImportKind = 'metrics' | 'issues' | 'releases' | 'changes' | 'feedback';
 
 export const IMPORT_KINDS: { kind: ImportKind; label: string; required: string[]; optional: string[]; example: string }[] = [
   { kind: 'metrics', label: 'Metrics', required: ['timestamp', 'metric', 'value'], optional: ['baseline'], example: 'timestamp,metric,value,baseline\n2026-09-24T19:00:00Z,checkout_conversion,2.79,3.40' },
   { kind: 'issues', label: 'Issues', required: ['id', 'title', 'created_at'], optional: ['status', 'labels', 'priority', 'type', 'version', 'component'], example: 'id,title,status,created_at,labels\nPAY-512,Checkout payment failures,open,2026-09-24T19:20:00Z,checkout' },
   { kind: 'releases', label: 'Releases', required: ['id', 'name', 'date'], optional: ['status', 'version', 'rollout', 'platform'], example: 'id,name,date,status\nREL-481,Release 4.8.1,2026-09-24T18:30:00Z,deployed' },
-  { kind: 'feedback', label: 'Customer feedback', required: ['id', 'text', 'rating', 'created_at'], optional: ['title', 'version'], example: 'id,text,rating,created_at\nREV-102,Payment failed twice,2,2026-09-24T20:10:00Z' },
+  {
+    kind: 'changes',
+    label: 'Changes',
+    required: ['id', 'kind', 'title', 'at'],
+    optional: ['timing', 'version', 'status', 'platform', 'rollout'],
+    example: 'id,kind,title,at,timing,status\nDEP-9f1c,deploy,checkout-api@9f1c,2026-09-24T18:40:00Z,actual,success',
+  },
+  {
+    kind: 'feedback',
+    label: 'Customer feedback',
+    required: ['id', 'text', 'created_at'],
+    optional: ['rating (required for reviews and surveys)', 'channel', 'tags', 'title', 'version'],
+    example: 'id,text,rating,created_at,channel,tags\nREV-102,Payment failed twice,2,2026-09-24T20:10:00Z,review,checkout',
+  },
 ];
 
 /**
@@ -64,6 +78,8 @@ export interface ImportedDataset {
   metrics: MetricRow[];
   issues: IssueRecord[];
   releases: ReleaseRecord[];
+  /** Deploys, flag / experiment / config changes, annotations, incidents. Absent in imports saved before changes existed. */
+  changes?: ReleaseRecord[];
   feedback: ReviewRecord[];
   rejected: RejectedRow[];
   /** Accepted but worth knowing (e.g. a release that is not deployed yet). */
@@ -96,6 +112,28 @@ const num = (v: string | undefined) => {
 
 const pick = (row: Record<string, string>, ...names: string[]) => names.map((n) => row[n]).find((v) => v !== undefined && v !== '');
 const splitList = (v: string | undefined) => (v ? v.split(/[;|,]/).map((x) => x.trim().toLowerCase()).filter(Boolean) : []);
+
+const CHANGE_KIND: Record<string, ChangeKind> = {
+  deploy: 'deploy',
+  deployment: 'deploy',
+  release: 'release',
+  flag: 'flag_change',
+  flag_change: 'flag_change',
+  feature_flag: 'flag_change',
+  experiment: 'experiment_change',
+  experiment_change: 'experiment_change',
+  config: 'config_change',
+  config_change: 'config_change',
+  configuration: 'config_change',
+  annotation: 'annotation',
+  note: 'annotation',
+  incident: 'incident',
+  outage: 'incident',
+};
+const CHANGE_STATUS: Record<string, NonNullable<ReleaseRecord['status']>> = { success: 'success', succeeded: 'success', done: 'success', deployed: 'success', failed: 'failed', failure: 'failed', error: 'failed', rolled_back: 'rolled_back', reverted: 'rolled_back', rollback: 'rolled_back', in_progress: 'in_progress', running: 'in_progress', pending: 'in_progress' };
+const TIMING: Record<string, ChangeTiming> = { actual: 'actual', planned: 'planned', scheduled: 'planned', reported: 'reported' };
+const CHANNEL: Record<string, NonNullable<ReviewRecord['channel']>> = { review: 'review', app_review: 'review', store_review: 'review', support: 'support', ticket: 'support', conversation: 'support', chat: 'support', email: 'support', survey: 'survey', nps: 'survey', csat: 'survey', request: 'request', feature_request: 'request', idea: 'request' };
+const PLATFORMS = ['ios', 'android', 'web', 'all'];
 
 const PRIORITY: Record<string, IssueRecord['priority']> = { highest: 'Highest', critical: 'Highest', blocker: 'Highest', high: 'High', medium: 'Medium', normal: 'Medium', low: 'Low', lowest: 'Low' };
 const DEPLOYED = ['deployed', 'released', 'live', 'rolled_out', 'rolling_out', 'complete', 'completed', 'shipped', ''];
@@ -155,7 +193,38 @@ function releaseRow(r: RawRow): RowResult<ReleaseRecord> {
   if (!DEPLOYED.includes(status)) return { ok: false, reason: `Status “${status}” is not a deployed release (planned or cancelled releases are not changes that can explain a shift).` };
   const platformRaw = (pick(v, 'platform') ?? '').toLowerCase();
   const platform: ReleaseRecord['platform'] = platformRaw === 'ios' || platformRaw === 'android' || platformRaw === 'web' ? platformRaw : 'all';
-  return { ok: true, record: { id, provider: 'jira', version, platform, releasedAt, notes: name || `Release ${version}`, rollout: pick(v, 'rollout') } };
+  const timingRaw = (pick(v, 'timing') ?? '').toLowerCase();
+  if (timingRaw && !TIMING[timingRaw]) return { ok: false, reason: `Timing “${timingRaw}” is not one of actual, planned, reported.` };
+  // A deployed release's date is when it went out, unless the file says the date is only planned or reported.
+  return { ok: true, record: { id, provider: 'jira', timing: TIMING[timingRaw] ?? 'actual', version, platform, releasedAt, notes: name || `Release ${version}`, rollout: pick(v, 'rollout') } };
+}
+
+function changeRow(r: RawRow): RowResult<ReleaseRecord> {
+  const v = r.values;
+  const id = pick(v, 'id', 'key');
+  if (!id) return { ok: false, reason: 'Missing change id.' };
+  const kindRaw = (pick(v, 'kind', 'type', 'change_type') ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (!kindRaw) return { ok: false, reason: 'Missing kind (deploy, release, flag_change, experiment_change, config_change, annotation or incident).' };
+  const kind = CHANGE_KIND[kindRaw];
+  if (!kind) return { ok: false, reason: `Unknown change kind “${kindRaw}”. Use deploy, release, flag_change, experiment_change, config_change, annotation or incident.` };
+  const version = pick(v, 'version');
+  const title = pick(v, 'title', 'name', 'description', 'summary') ?? (version ? `Release ${version}` : undefined);
+  if (!title) return { ok: false, reason: 'Missing title.' };
+  const at = parseTimestamp(pick(v, 'at', 'timestamp', 'date', 'deployed_at', 'changed_at', 'created_at'));
+  if (!at) return { ok: false, reason: 'Invalid or missing timestamp in “at” (ISO 8601, e.g. 2026-09-24T18:40:00Z).' };
+  const timingRaw = (pick(v, 'timing') ?? '').toLowerCase();
+  if (timingRaw && !TIMING[timingRaw]) return { ok: false, reason: `Timing “${timingRaw}” is not one of actual, planned, reported.` };
+  // An annotation is someone writing down that a change happened; everything else is when it happened.
+  const timing: ChangeTiming = TIMING[timingRaw] ?? (kind === 'annotation' ? 'reported' : 'actual');
+  const statusRaw = (pick(v, 'status', 'state') ?? '').toLowerCase().replace(/\s+/g, '_');
+  if (statusRaw && !CHANGE_STATUS[statusRaw]) return { ok: false, reason: `Status “${statusRaw}” is not one of success, failed, rolled_back, in_progress.` };
+  const platformRaw = (pick(v, 'platform') ?? '').toLowerCase();
+  if (platformRaw && !PLATFORMS.includes(platformRaw)) return { ok: false, reason: `Platform “${platformRaw}” is not one of ios, android, web, all.` };
+  return {
+    ok: true,
+    record: { id, provider: 'jira', kind, timing, title, version: version ?? '', platform: (platformRaw || 'all') as ReleaseRecord['platform'], releasedAt: at, notes: pick(v, 'notes', 'description') ?? title, rollout: pick(v, 'rollout'), status: statusRaw ? CHANGE_STATUS[statusRaw] : undefined },
+    note: timing === 'planned' ? `${id}: the timestamp is a planned date — Jagr shows it as evidence but never as timing.` : undefined,
+  };
 }
 
 function feedbackRow(r: RawRow): RowResult<ReviewRecord> {
@@ -164,19 +233,26 @@ function feedbackRow(r: RawRow): RowResult<ReviewRecord> {
   if (!id) return { ok: false, reason: 'Missing feedback id.' };
   const body = pick(v, 'text', 'body', 'comment', 'review', 'feedback');
   if (!body) return { ok: false, reason: 'Missing text.' };
+  const channelRaw = (pick(v, 'channel', 'source_type') ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (channelRaw && !CHANNEL[channelRaw]) return { ok: false, reason: `Unknown channel “${channelRaw}”. Use review, support, survey or request.` };
+  const channel = CHANNEL[channelRaw] ?? 'review';
   const rating = num(pick(v, 'rating', 'score', 'stars'));
-  if (rating === undefined || Number.isNaN(rating) || !Number.isInteger(rating) || rating < 1 || rating > 5) return { ok: false, reason: 'Rating must be a whole number from 1 to 5.' };
+  // Reviews and surveys carry a rating; a support conversation or feature request often does not.
+  const ratingOptional = channel === 'support' || channel === 'request';
+  if (rating === undefined && !ratingOptional) return { ok: false, reason: 'Rating must be a whole number from 1 to 5 (required for reviews and surveys).' };
+  if (rating !== undefined && (Number.isNaN(rating) || !Number.isInteger(rating) || rating < 1 || rating > 5)) return { ok: false, reason: 'Rating must be a whole number from 1 to 5.' };
   const createdAt = parseTimestamp(pick(v, 'created_at', 'created', 'date', 'timestamp'));
   if (!createdAt) return { ok: false, reason: 'Invalid or missing created_at timestamp (ISO 8601).' };
   const title = pick(v, 'title') ?? (body.length > 60 ? `${body.slice(0, 57)}…` : body);
-  return { ok: true, record: { id, provider: 'app_store', rating: rating as ReviewRecord['rating'], title, body, version: pick(v, 'version') ?? '', createdAt } };
+  const tags = splitList(pick(v, 'tags', 'tag', 'labels'));
+  return { ok: true, record: { id, provider: 'app_store', rating: rating as ReviewRecord['rating'], channel, tags, title, body, version: pick(v, 'version') ?? '', createdAt } };
 }
 
-const ID_OF = { metrics: (m: MetricRow) => `${m.metricId}@${m.timestamp}`, issues: (x: IssueRecord) => x.id, releases: (x: ReleaseRecord) => x.id, feedback: (x: ReviewRecord) => x.id };
+const ID_OF = { metrics: (m: MetricRow) => `${m.metricId}@${m.timestamp}`, issues: (x: IssueRecord) => x.id, releases: (x: ReleaseRecord) => x.id, changes: (x: ReleaseRecord) => x.id, feedback: (x: ReviewRecord) => x.id };
 
 /** Parse and validate one uploaded file. Pure: same bytes in → same dataset out. */
 export function importFile(kind: ImportKind, filename: string, text: string, importedAt: string, id = `imp-${kind}-${importedAt}`): ImportedDataset {
-  const base: ImportedDataset = { id, kind, filename, importedAt, format: /\.json$/i.test(filename) ? 'json' : 'csv', columns: [], totalRows: 0, metrics: [], issues: [], releases: [], feedback: [], rejected: [], notes: [] };
+  const base: ImportedDataset = { id, kind, filename, importedAt, format: /\.json$/i.test(filename) ? 'json' : 'csv', columns: [], totalRows: 0, metrics: [], issues: [], releases: [], changes: [], feedback: [], rejected: [], notes: [] };
   if (text.length > MAX_BYTES) return { ...base, error: `The file is larger than ${MAX_BYTES / 1_000_000} MB.` };
   const parsed = parseFile(filename, text);
   if (parsed.error) return { ...base, format: parsed.format, error: parsed.error };
@@ -186,7 +262,7 @@ export function importFile(kind: ImportKind, filename: string, text: string, imp
 
   const seen = new Set<string>();
   for (const row of parsed.rows) {
-    const res = kind === 'metrics' ? metricRow(row) : kind === 'issues' ? issueRow(row) : kind === 'releases' ? releaseRow(row) : feedbackRow(row);
+    const res = kind === 'metrics' ? metricRow(row) : kind === 'issues' ? issueRow(row) : kind === 'releases' ? releaseRow(row) : kind === 'changes' ? changeRow(row) : feedbackRow(row);
     if (!res.ok) {
       out.rejected.push({ line: row.line, reason: res.reason, values: row.values });
       continue;
@@ -201,11 +277,12 @@ export function importFile(kind: ImportKind, filename: string, text: string, imp
     if (kind === 'metrics') out.metrics.push(res.record as MetricRow);
     else if (kind === 'issues') out.issues.push(res.record as IssueRecord);
     else if (kind === 'releases') out.releases.push(res.record as ReleaseRecord);
+    else if (kind === 'changes') out.changes!.push(res.record as ReleaseRecord);
     else out.feedback.push(res.record as ReviewRecord);
   }
-  const missing = spec.required.filter((c) => !parsed.columns.some((col) => col === c || (c === 'created_at' && ['created', 'date', 'timestamp'].includes(col)) || (c === 'timestamp' && ['time', 'date', 'datetime'].includes(col)) || (c === 'metric' && ['name', 'metric_name'].includes(col)) || (c === 'name' && ['title', 'version'].includes(col)) || (c === 'date' && ['released_at', 'release_date', 'deployed_at'].includes(col)) || (c === 'text' && ['body', 'comment', 'review', 'feedback'].includes(col)) || (c === 'rating' && ['score', 'stars'].includes(col)) || (c === 'id' && ['key', 'issue', 'issue_key'].includes(col))));
+  const missing = spec.required.filter((c) => !parsed.columns.some((col) => col === c || (c === 'created_at' && ['created', 'date', 'timestamp'].includes(col)) || (c === 'timestamp' && ['time', 'date', 'datetime'].includes(col)) || (c === 'metric' && ['name', 'metric_name'].includes(col)) || (c === 'name' && ['title', 'version'].includes(col)) || (c === 'date' && ['released_at', 'release_date', 'deployed_at'].includes(col)) || (c === 'text' && ['body', 'comment', 'review', 'feedback'].includes(col)) || (c === 'at' && ['timestamp', 'date', 'deployed_at', 'changed_at', 'created_at'].includes(col)) || (c === 'kind' && ['type', 'change_type'].includes(col)) || (c === 'title' && ['name', 'description', 'summary'].includes(col)) || (c === 'id' && ['key', 'issue', 'issue_key'].includes(col))));
   if (missing.length) out.notes.unshift(`Missing expected column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
   return out;
 }
 
-export const acceptedCount = (d: ImportedDataset) => d.metrics.length + d.issues.length + d.releases.length + d.feedback.length;
+export const acceptedCount = (d: ImportedDataset) => d.metrics.length + d.issues.length + d.releases.length + (d.changes?.length ?? 0) + d.feedback.length;

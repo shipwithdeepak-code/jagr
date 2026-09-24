@@ -134,6 +134,17 @@ export function readReviews(items: FeedbackItem[], area: Area): CountReading {
   return countReading(negativeFeedback(items, area), NEGATIVE_REVIEW_BASELINE_PER_6H[area]);
 }
 
+/**
+ * How a batch of negative feedback is named: "reviews rated 1–2★" when it is all reviews, "support
+ * conversations" when it is all support, and "negative feedback items" when it is mixed.
+ */
+export function feedbackNoun(items: FeedbackItem[], n = items.length): { plural: string; singular: string; short: string } {
+  const channels = new Set(items.map((f) => f.channel));
+  if (channels.size === 1 && channels.has('support')) return { plural: `${n === 1 ? 'support conversation' : 'support conversations'}`, singular: 'support conversation', short: n === 1 ? 'support conversation' : 'support conversations' };
+  if (!items.length || (channels.size === 1 && channels.has('review'))) return { plural: n === 1 ? 'review rated 1–2★' : 'reviews rated 1–2★', singular: 'review rated 1–2★', short: n === 1 ? 'negative review' : 'negative reviews' };
+  return { plural: n === 1 ? 'negative feedback item' : 'negative feedback items', singular: 'negative feedback item', short: n === 1 ? 'negative feedback item' : 'negative feedback items' };
+}
+
 /** Areas that have any work item or negative feedback in the list — for watches that cover every area. */
 export function areasPresent(items: WorkItem[], feedback: FeedbackItem[]): Area[] {
   const set = new Set<Area>();

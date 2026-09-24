@@ -1,0 +1,6 @@
+id,kind,title,at,timing,status,version,platform
+DEP-9f1c,deploy,checkout-api@9f1c,2026-09-24T18:40:00Z,actual,success,,web
+FLAG-212,flag_change,new-payment-sheet enabled for 50%,2026-09-24T18:50:00Z,actual,,,all
+EXP-77,experiment_change,Pricing page test stopped,2026-09-23T12:00:00Z,actual,,,web
+NOTE-5,annotation,Autumn promo email sent,2026-09-24T17:00:00Z,,,,
+INC-31,incident,Card processor latency (status page),2026-09-24T19:10:00Z,actual,,,

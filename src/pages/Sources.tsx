@@ -173,7 +173,8 @@ function title(kind: RecordKind, rec: unknown) {
   if (kind === 'metric') return (rec as MetricSeries).name;
   if (kind === 'issue') return `${(rec as IssueRecord).id} — ${(rec as IssueRecord).title}`;
   if (kind === 'release') return `Release ${(rec as ReleaseRecord).version}`;
-  return `${(rec as ReviewRecord).rating}★ “${(rec as ReviewRecord).title}”`;
+  const rv = rec as ReviewRecord;
+  return `${rv.rating ? `${rv.rating}★ ` : ''}“${rv.title}”`;
 }
 
 function fields(kind: RecordKind, rec: unknown) {
@@ -201,7 +202,9 @@ function fields(kind: RecordKind, rec: unknown) {
   }
   const r = rec as ReviewRecord;
   return [
-    { k: 'Rating', v: `${r.rating} / 5` },
+    { k: 'Rating', v: r.rating ? `${r.rating} / 5` : 'Not rated' },
+    ...(r.channel ? [{ k: 'Channel', v: r.channel }] : []),
+    ...(r.tags?.length ? [{ k: 'Tags', v: r.tags.join(', ') }] : []),
     { k: 'Review', v: r.body },
     { k: 'App version', v: r.version },
     { k: 'Posted', v: fmtDateTime(r.createdAt) },

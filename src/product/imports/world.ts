@@ -19,7 +19,7 @@ import type { ImportedDataset, MetricRow } from './schemas';
 
 export const IMPORT_LABELS: Partial<Record<ProviderId, { name: string; short: string }>> = {
   ga4: { name: 'Imported metrics', short: 'Metrics' },
-  jira: { name: 'Imported issues & releases', short: 'Issues & releases' },
+  jira: { name: 'Imported issues, releases & changes', short: 'Issues & releases' },
   app_store: { name: 'Imported customer feedback', short: 'Feedback' },
 };
 
@@ -28,7 +28,7 @@ export interface ImportedWorld {
   connections: SourceConnection[];
   /** Things the user should know (estimated baselines, duplicates across files, nothing to investigate). */
   notes: string[];
-  counts: { metrics: number; issues: number; releases: number; feedback: number; duplicates: number };
+  counts: { metrics: number; issues: number; releases: number; changes: number; feedback: number; duplicates: number };
 }
 
 const median = (xs: number[]) => {
@@ -79,7 +79,8 @@ export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: strin
   const notes: string[] = [];
   const metricsM = merge(ok.map((d) => d.metrics), (m) => `${m.metricId}@${m.timestamp}`);
   const issuesM = merge<IssueRecord>(ok.map((d) => d.issues), (x) => x.id);
-  const releasesM = merge<ReleaseRecord>(ok.map((d) => d.releases), (x) => x.id);
+  // Releases and other changes share one change channel (ids must be unique across both).
+  const releasesM = merge<ReleaseRecord>(ok.flatMap((d) => [d.releases, d.changes ?? []]), (x) => x.id);
   const feedbackM = merge<ReviewRecord>(ok.map((d) => d.feedback), (x) => x.id);
   const duplicates = metricsM.duplicates + issuesM.duplicates + releasesM.duplicates + feedbackM.duplicates;
   if (duplicates) notes.push(`${duplicates} record${duplicates === 1 ? ' appears' : 's appear'} in more than one import; the latest import was kept and each is counted once.`);
@@ -89,7 +90,8 @@ export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: strin
   const metrics = [...byMetric.entries()].map(([id, rows]) => buildSeries(id, rows, notes)).filter((s): s is MetricSeries => !!s);
   for (const s of metrics) if (s.points.length < 4) notes.push(`${s.name} has only ${s.points.length} point${s.points.length === 1 ? '' : 's'}; Jagr needs at least 4 to judge whether a change persists.`);
 
-  const counts = { metrics: metricsM.items.length, issues: issuesM.items.length, releases: releasesM.items.length, feedback: feedbackM.items.length, duplicates };
+  const changeCount = releasesM.items.filter((r) => r.kind && r.kind !== 'release').length;
+  const counts = { metrics: metricsM.items.length, issues: issuesM.items.length, releases: releasesM.items.length - changeCount, changes: changeCount, feedback: feedbackM.items.length, duplicates };
   const files = (kind: ImportedDataset['kind']) => ok.filter((d) => d.kind === kind).map((d) => d.filename);
   const conn = (provider: ProviderId, present: boolean, detail: string): SourceConnection =>
     present
@@ -97,13 +99,13 @@ export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: strin
       : { provider, state: 'not_configured', detail: 'Nothing imported for this source.', updatedAt, label: IMPORT_LABELS[provider] };
   const connections: SourceConnection[] = [
     conn('ga4', metrics.length > 0, `${files('metrics').join(', ')} · ${counts.metrics} points · ${metrics.map((s) => s.name).join(', ')}`),
-    conn('jira', counts.issues + counts.releases > 0, `${[...files('issues'), ...files('releases')].join(', ')} · ${counts.issues} issues · ${counts.releases} releases`),
+    conn('jira', counts.issues + counts.releases + counts.changes > 0, `${[...files('issues'), ...files('releases'), ...files('changes')].join(', ')} · ${counts.issues} issues · ${counts.releases} releases${counts.changes ? ` · ${counts.changes} other changes` : ''}`),
     conn('app_store', counts.feedback > 0, `${files('feedback').join(', ')} · ${counts.feedback} feedback items`),
     { provider: 'google_play', state: 'not_configured', detail: 'Not used with imported data.', updatedAt },
     { provider: 'email', state: 'simulated', detail: 'Emails are rendered in Jagr, never delivered.', updatedAt },
   ];
 
-  const stamps = [...metricsM.items.map((m) => m.timestamp), ...issuesM.items.map((x) => x.createdAt), ...feedbackM.items.map((x) => x.createdAt)].sort();
+  const stamps = [...metricsM.items.map((m) => m.timestamp), ...issuesM.items.map((x) => x.createdAt), ...feedbackM.items.map((x) => x.createdAt), ...releasesM.items.filter((r) => r.kind && r.kind !== 'release').map((r) => r.releasedAt)].sort();
   if (!stamps.length) {
     return { connections, notes: [...notes, 'No metrics, issues or feedback imported yet — there is nothing to investigate.'], counts };
   }

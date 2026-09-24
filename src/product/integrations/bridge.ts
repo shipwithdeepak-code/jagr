@@ -102,11 +102,11 @@ export function roleSourceFromAdapter(adapter: IntegrationAdapter & { provider: 
 
   const toFeedback = (r: ReviewRecord, window: TimeWindow): FeedbackItem => ({
     id: r.id,
-    channel: 'review',
+    channel: r.channel ?? 'review',
     rating: r.rating,
     title: r.title,
     text: r.body,
-    tags: [],
+    tags: r.tags ?? [],
     version: r.version || undefined,
     createdAt: r.createdAt,
     source: id,

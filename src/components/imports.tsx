@@ -10,7 +10,7 @@ import { Badge, Button, Card, cx, Mono, SectionTitle } from './ui';
 import { PRIVACY_NOTICE } from './onboarding';
 import { SourceCoverage } from './primitives';
 
-const SAMPLE_FOR: Record<ImportKind, string> = { metrics: '/samples/metrics.csv', issues: '/samples/issues.csv', releases: '/samples/releases.csv', feedback: '/samples/reviews.csv' };
+const SAMPLE_FOR: Record<ImportKind, string> = { metrics: '/samples/metrics.csv', issues: '/samples/issues.csv', releases: '/samples/releases.csv', changes: '/samples/changes.csv', feedback: '/samples/reviews.csv' };
 
 /** Sources for a "my data" workspace: upload, validate, inspect — never a silent import. */
 export function ImportedSources() {
@@ -23,7 +23,7 @@ export function ImportedSources() {
   const imports = state.imports ?? [];
   const open = params.get('upload') === '1' || imports.length === 0;
   const spec = IMPORT_KINDS.find((k) => k.kind === kind)!;
-  const KINDS_FOR: Partial<Record<string, ImportKind[]>> = { ga4: ['metrics'], jira: ['issues', 'releases'], app_store: ['feedback'] };
+  const KINDS_FOR: Partial<Record<string, ImportKind[]>> = { ga4: ['metrics'], jira: ['issues', 'releases', 'changes'], app_store: ['feedback'] };
   const lastImport = (provider: string) =>
     imports
       .filter((d) => KINDS_FOR[provider]?.includes(d.kind))

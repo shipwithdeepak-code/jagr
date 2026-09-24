@@ -66,7 +66,11 @@ export interface ReleaseRecord {
 export interface ReviewRecord {
   id: string;
   provider: 'app_store' | 'google_play';
-  rating: 1 | 2 | 3 | 4 | 5;
+  /** Absent for unrated feedback (e.g. a support conversation). */
+  rating?: 1 | 2 | 3 | 4 | 5;
+  /** Where the feedback came from (default 'review'). */
+  channel?: 'review' | 'support' | 'survey' | 'request';
+  tags?: string[];
   title: string;
   body: string;
   version: string;

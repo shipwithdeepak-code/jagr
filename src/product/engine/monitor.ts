@@ -26,7 +26,7 @@ import type { World } from '../integrations/world';
 import { planJobs } from '../scheduler';
 import { ATTENTION_RANK, assessAttention } from './attention';
 import { composeBrief } from './brief';
-import { areasPresent, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect';
+import { areasPresent, feedbackNoun, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect';
 import { changePhrase, reason } from './investigate';
 import { createToolbox } from '../agent/tools';
 import { checkRolloutBeforeAction, runInvestigation, sourceDirectory } from '../agent/investigator';
@@ -145,10 +145,11 @@ async function observe(reg: SourceRegistry, watch: Watch, at: string, worldStart
             const r = readReviews(items, area);
             if (r.status === 'normal') continue;
             const byId = new Map(items.map((i) => [i.id, i.ref]));
+            const noun = feedbackNoun(items.filter((i) => r.ids.includes(i.id)), r.count);
             findings.push({
               status: r.status,
               blockers: 0,
-              signal: { key: 'feedback', provider: s.id, area, label: `${P(s.id).short} reviews about ${AREA_LABEL[area].toLowerCase()}`, magnitude: `${r.count} negative reviews`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => byId.get(id)!) },
+              signal: { key: 'feedback', provider: s.id, area, label: `${P(s.id).short} ${noun.short.replace(/^negative /, '').replace(/ rated 1–2★$/, '')} about ${AREA_LABEL[area].toLowerCase()}`, magnitude: `${r.count} ${noun.short}`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => byId.get(id)!) },
             });
           }
         });
