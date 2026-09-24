@@ -23,6 +23,7 @@ import { createRegistry, labelOf, labelsFrom, SimulatedEmailChannel, type Provid
 import { ProviderUnavailableError } from '../integrations/types';
 import type { SourceRegistry } from '../roles/registry';
 import type { SourceId } from '../roles/types';
+import { isSourceId } from '../roles/types';
 import type { World } from '../integrations/world';
 import { planJobs } from '../scheduler';
 import { ATTENTION_RANK, assessAttention } from './attention';
@@ -372,10 +373,10 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         at,
         pass: maxPass(inv) + 1,
         trigger,
-        simulatedLinks: (p) => (p === 'email' ? true : reg.isSimulated(p)),
-        connectionState: (p) => (p === 'email' ? email.connection().state : (reg.connection(p)?.state ?? 'not_configured')),
-        connectionDetail: (p) => (p === 'email' ? email.connection().detail : (reg.connection(p)?.detail ?? 'Not part of this workspace')),
-        freshAsOf: (p) => (p === 'email' ? undefined : reg.connection(p)?.freshAsOf),
+        simulatedLinks: (p) => (!isSourceId(p) ? true : reg.isSimulated(p)),
+        connectionState: (p) => (p === 'email' ? email.connection().state : !isSourceId(p) ? 'not_configured' : (reg.connection(p)?.state ?? 'not_configured')),
+        connectionDetail: (p) => (p === 'email' ? email.connection().detail : !isSourceId(p) ? 'A notification channel, not an evidence source' : (reg.connection(p)?.detail ?? 'Not part of this workspace')),
+        freshAsOf: (p) => (isSourceId(p) ? reg.connection(p)?.freshAsOf : undefined),
         planner: o.planner,
         investigationId: inv.id,
         labels,

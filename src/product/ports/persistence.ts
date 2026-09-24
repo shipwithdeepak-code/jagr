@@ -1,6 +1,6 @@
-import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, Watch, WatchInvestigation } from '../types';
+import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, ProviderId, Watch, WatchInvestigation } from '../types';
 import type { ImportedDataset } from '../imports/schemas';
-import type { Role, SourceId } from '../roles/types';
+import type { Role } from '../roles/types';
 import type { SecretRef } from './secrets';
 
 /**
@@ -56,7 +56,8 @@ export interface Session {
 export interface Connection {
   id: string;
   workspaceId: string;
-  source: SourceId;
+  /** The source id (or, for an outbound channel such as Slack, the channel id). */
+  source: ProviderId;
   /** What implements it: 'simulated', 'import', or a connector id ('amplitude', 'github', …). */
   provider: string;
   roles: Role[];

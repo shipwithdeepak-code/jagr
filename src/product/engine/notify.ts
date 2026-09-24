@@ -4,6 +4,7 @@ import { DEMO_RECIPIENT, EMAIL_FROM } from '../catalog';
 import { PROVIDERS } from '../integrations/adapters';
 import type { ProviderId } from '../types';
 import { ATTENTION_RANK, atLeast } from './attention';
+import { isSourceId } from '../roles/types';
 
 /**
  * Notification policy and email composition. The email is a decision surface:
@@ -42,7 +43,7 @@ function subjectFor(inv: WatchInvestigation): string {
 export function emailButtons(inv: WatchInvestigation): EmailButton[] {
   const buttons: EmailButton[] = [{ label: 'Open investigation', href: inv.jagrPath, kind: 'jagr', simulated: false }];
   // One button per source, in workspace source order.
-  const order = (Object.keys(PROVIDERS) as ProviderId[]).filter((p) => p !== 'email');
+  const order = (Object.keys(PROVIDERS) as ProviderId[]).filter(isSourceId);
   for (const p of order) {
     const link = inv.sourceLinks.find((l) => l.provider === p);
     // The link already carries the source's name in this workspace (e.g. "Open Feedback" for imported data).

@@ -14,6 +14,7 @@ import {
 import { BUCKET_MIN, type World } from './world';
 import { SourceRegistry } from '../roles/registry';
 import type { SourceId } from '../roles/types';
+import { isSourceId } from '../roles/types';
 import { roleSourceFromAdapter } from './bridge';
 
 /**
@@ -28,6 +29,9 @@ export const PROVIDERS: Record<ProviderId, { name: string; short: string; capabi
   app_store: { name: 'App Store Connect', short: 'App Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://appstoreconnect.apple.com', realApi: 'App Store Connect API' },
   google_play: { name: 'Google Play Console', short: 'Play Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://play.google.com/console', realApi: 'Play Developer Reporting API' },
   github: { name: 'GitHub', short: 'GitHub', capabilities: ['releases', 'changes'], externalBase: 'https://github.com', realApi: 'GitHub REST API (deployments, releases)' },
+  amplitude: { name: 'Amplitude', short: 'Amplitude', capabilities: ['metrics', 'changes'], externalBase: 'https://app.amplitude.com', realApi: 'Amplitude Dashboard REST API' },
+  intercom: { name: 'Intercom', short: 'Intercom', capabilities: ['reviews'], externalBase: 'https://app.intercom.com', realApi: 'Intercom REST API (conversations)' },
+  slack: { name: 'Slack', short: 'Slack', capabilities: ['send_email'], externalBase: 'https://slack.com', realApi: 'Slack Web API (chat.postMessage)' },
   email: { name: 'Email', short: 'Email', capabilities: ['send_email'], externalBase: 'mailto:', realApi: 'SMTP / transactional email provider' },
 };
 
@@ -71,7 +75,7 @@ class SimulatedAdapter implements IntegrationAdapter {
   readonly name: string;
   readonly capabilities: Capability[];
   constructor(
-    readonly provider: Exclude<ProviderId, 'email'>,
+    readonly provider: SourceId,
     private readonly world: World,
     private readonly conn: SourceConnection,
   ) {
@@ -169,7 +173,7 @@ export class SimulatedEmailChannel implements EmailChannel {
 }
 
 export interface AdapterRegistry {
-  sources: Record<Exclude<ProviderId, 'email'>, IntegrationAdapter>;
+  sources: Partial<Record<SourceId, IntegrationAdapter>>;
   email: SimulatedEmailChannel;
 }
 
@@ -177,13 +181,13 @@ export interface AdapterRegistry {
 export function createRegistry(world: World, connections: SourceConnection[]): { registry: SourceRegistry; email: SimulatedEmailChannel } {
   const reg = createAdapters(world, connections);
   // Only sources the workspace has a connection for (in any state) are part of it.
-  const ids = (Object.keys(PROVIDERS) as ProviderId[]).filter((p): p is SourceId => p !== 'email' && connections.some((c) => c.provider === p));
+  const ids = (Object.keys(PROVIDERS) as ProviderId[]).filter((p): p is SourceId => isSourceId(p) && connections.some((c) => c.provider === p));
   return { registry: new SourceRegistry(ids.map((id) => roleSourceFromAdapter(reg.sources[id] as IntegrationAdapter & { provider: SourceId }))), email: reg.email };
 }
 
 export function defaultConnections(at = '2026-09-23T17:55:00.000Z'): SourceConnection[] {
-  // The Sample workspace's channels. GitHub is not part of the sample night.
-  return (Object.keys(PROVIDERS) as ProviderId[]).filter((p) => p !== 'github').map((provider) => ({
+  // The Sample workspace's channels. Connector sources (GitHub, Amplitude, Intercom) and Slack are not part of the sample night.
+  return (['jira', 'ga4', 'app_store', 'google_play', 'email'] as ProviderId[]).map((provider) => ({
     provider,
     state: 'simulated',
     detail: provider === 'email' ? 'Simulated outbox — emails are rendered in Jagr, never delivered' : 'Deterministic fixture data (no credentials configured)',

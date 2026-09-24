@@ -15,10 +15,14 @@ export type ISO = string;
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Source ids known to this build. Opaque to the engine: it asks by role and never branches on these.
- * The Sample workspace uses jira / ga4 / app_store / google_play; `github` is a change source.
+ * Source and channel ids known to this build. Opaque to the engine: it asks by role and never branches
+ * on these. The Sample workspace uses jira / ga4 / app_store / google_play; `amplitude`, `github` and
+ * `intercom` are connector sources; `email` and `slack` are outbound notification channels, never sources.
  */
-export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github' | 'email';
+export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github' | 'amplitude' | 'intercom' | 'email' | 'slack';
+/** Delivery channels: ids in ProviderId that carry notifications out, never evidence in. */
+export const CHANNEL_IDS = ['email', 'slack'] as const;
+export type ChannelId = (typeof CHANNEL_IDS)[number];
 
 /**
  * connected      — a real connector with valid credentials (none exist in this build)

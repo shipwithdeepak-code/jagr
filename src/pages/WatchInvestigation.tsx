@@ -15,6 +15,7 @@ import { cx, EmptyState, Mono } from '@/components/ui';
 import type { TaskDraft } from '@/domain/types';
 import { headlineOf, readingOf } from '@/product/presentation';
 import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
+import { isSourceId } from '@/product/roles/types';
 
 const OWNER_TEAM: Record<string, string> = { checkout: 'payments-eng', signup: 'growth', search: 'product', stability: 'platform', general: 'product' };
 
@@ -38,7 +39,7 @@ function taskDraftFor(inv: WatchInvestigation): TaskDraft {
       sources: [
         ...new Set(
           inv.correlatedProviders.flatMap((p): TaskDraft['description']['sources'] => {
-            const roles = p === 'email' ? [] : BUILTIN_SOURCE_ROLES[p];
+            const roles = isSourceId(p) ? BUILTIN_SOURCE_ROLES[p] : [];
             return roles.includes('feedback') ? ['support'] : roles.includes('work_items') ? ['issue_tracker'] : roles.includes('metrics') ? ['analytics'] : [];
           }),
         ),

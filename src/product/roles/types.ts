@@ -1,4 +1,5 @@
-import type { Area, ISO, ProviderId, SourceConnection, SourceRef } from '../types';
+import type { Area, ChannelId, ISO, ProviderId, SourceConnection, SourceRef } from '../types';
+import { CHANNEL_IDS } from '../types';
 
 /**
  * Role-based sources — the only way the investigation engine reaches product evidence.
@@ -13,7 +14,9 @@ export type Role = 'metrics' | 'changes' | 'work_items' | 'feedback' | 'conversa
 export const ROLES: Role[] = ['metrics', 'changes', 'work_items', 'feedback', 'conversations', 'context'];
 
 /** Opaque identifier of one source in a workspace. The engine never branches on its value. */
-export type SourceId = Exclude<ProviderId, 'email'>;
+export type SourceId = Exclude<ProviderId, ChannelId>;
+/** Delivery channels are notification targets, not evidence sources. */
+export const isSourceId = (p: ProviderId): p is SourceId => !(CHANNEL_IDS as readonly string[]).includes(p);
 
 export type SourceMode = 'connected' | 'imported' | 'simulated';
 

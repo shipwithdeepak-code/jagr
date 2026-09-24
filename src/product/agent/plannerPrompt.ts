@@ -1,5 +1,6 @@
-import type { EvidenceStrength, HypothesisKind, ProviderId, ToolName } from '../types.js';
+import type { EvidenceStrength, HypothesisKind, ToolName } from '../types.js';
 import { PLANNER_TOOL_NAME } from './plannerSchema.js';
+import type { SourceId } from '../roles/types.js';
 
 /**
  * The investigation state a planner sees, and how it is rendered into a prompt. Provider-neutral:
@@ -33,7 +34,7 @@ export interface PlannerOption {
   id: string;
   tool: ToolName;
   /** Opaque source id the call reads from — or the role name, for a call that reads every source of a role. */
-  source: Exclude<ProviderId, 'email'> | 'changes';
+  source: SourceId | 'changes';
   /** The source's display name in this workspace (for messages). */
   sourceLabel?: string;
   /** getMetric / getMetricBreakdown: the workspace metric key the call reads. */

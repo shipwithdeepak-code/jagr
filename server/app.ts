@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Membership, Workspace } from '../src/product/ports/persistence';
-import type { WatchInvestigation } from '../src/product/types';
+import type { ProviderId, WatchInvestigation } from '../src/product/types';
 import { decide } from '../src/product/agent/decisions';
 import { ApprovalRequiredError } from '../src/product/agent/actions';
 import { commitServerImport, exportServerWorkspace, planImport } from '../src/product/export/workspace';
@@ -11,6 +11,8 @@ import type { ApiRequest, ApiResponse } from './http/types';
 import { json, redirect } from './http/types';
 import { authenticate, clearCookie, cookie, CSRF_COOKIE, csrfOk, OAUTH_COOKIE, openOAuthState, parseCookies, sealOAuthState, SESSION_COOKIE, startSession, hashToken, type Principal } from './auth';
 import { randomToken } from './identity/pkce';
+import { OWNER_WORKSPACE_ID } from './singleTenant';
+import { watchFromTemplate, WATCH_TEMPLATES } from '../src/product/catalog';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 /** Constant-time comparison (hashing first makes the lengths equal). */
@@ -30,6 +32,7 @@ const newId = (prefix: string) => `${prefix}_${randomToken(12)}`;
 
 const DecisionBody = z.object({ actionId: z.string().min(1), status: z.enum(['approved', 'rejected', 'done']), optionId: z.string().optional(), note: z.string().max(500).optional() }).strict();
 const ImportBody = z.object({ doc: z.unknown(), confirm: z.literal(true).optional() }).strict();
+const WatchBody = z.object({ templateId: z.enum(WATCH_TEMPLATES.map((t) => t.id) as [string, ...string[]]), sources: z.array(z.string()).min(1).optional() }).strict();
 const WorkspaceBody = z.object({ name: z.string().min(1).max(80), mode: z.enum(['connected', 'imported']).default('connected') }).strict();
 
 /** What a member sees of a workspace: never secret references or connection errors with provider detail beyond the message. */
@@ -75,6 +78,8 @@ export function createApp(rt: Runtime) {
       user = { id: newId('usr'), displayName: identity.displayName || `${identity.provider} user`, createdAt: rt.clock.now() };
       await rt.repos.users.create(user, { provider: identity.provider, subject: identity.subject });
     }
+    // The single-tenant owner is a member of the owner workspace (idempotent).
+    if (rt.config.mode === 'single-tenant') await rt.repos.members.add({ workspaceId: OWNER_WORKSPACE_ID, userId: user.id, role: 'owner', canApprove: true });
     const { token } = await startSession(rt.repos, user.id, rt.clock);
     return redirect(saved.returnTo, [cookie(SESSION_COOKIE, token, { secure }), cookie(CSRF_COOKIE, randomToken(24), { secure, httpOnly: false }), clearCookie(OAUTH_COOKIE, secure)]);
   }
@@ -90,6 +95,26 @@ export function createApp(rt: Runtime) {
     if (!section && req.method === 'GET') {
       const connections = (await rt.repos.connections.list(id)).map(({ secretRef: _s, ...c }) => (void _s, c));
       return json(200, { workspace: publicWorkspace(ws), membership: m, connections, watches: await rt.repos.watches.list(id) });
+    }
+    // Watches are created from the catalog's templates; sources must be connections in this workspace.
+    if (section === 'watches' && req.method === 'POST' && !sub) {
+      const body = WatchBody.safeParse(req.body);
+      if (!body.success) return json(400, { error: 'Expected { templateId, sources? }.' });
+      const tpl = WATCH_TEMPLATES.find((t) => t.id === body.data.templateId)!;
+      const connected = new Set((await rt.repos.connections.list(id)).map((c) => c.source as string));
+      const sources = body.data.sources ?? tpl.sources.filter((s) => connected.has(s));
+      const unknown = sources.filter((s) => !connected.has(s));
+      if (unknown.length || !sources.length) return json(400, { error: unknown.length ? `Not a source in this workspace: ${unknown.join(', ')}.` : 'None of this template’s sources is connected; pass sources explicitly.' });
+      const watch = watchFromTemplate(newId('watch'), tpl.id, { sources: sources as ProviderId[] }, rt.clock.now());
+      await rt.repos.watches.save(id, watch);
+      await audit(id, p, 'watch.created', watch.id, tpl.name);
+      return json(201, { watch });
+    }
+    if (section === 'watches' && req.method === 'DELETE' && sub) {
+      if (!(await rt.repos.watches.get(id, sub))) return json(404, { error: 'Watch not found.' });
+      await rt.repos.watches.remove(id, sub);
+      await audit(id, p, 'watch.removed', sub);
+      return json(200, { ok: true });
     }
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {

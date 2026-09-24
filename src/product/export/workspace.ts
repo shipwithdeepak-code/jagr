@@ -3,6 +3,7 @@ import type { ImportedDataset } from '../imports/schemas';
 import type { Actor, Connection, Decision, MetricDefinitionRecord, NotificationRecord, Repositories, Transactor, Workspace } from '../ports/persistence';
 import type { Clock } from '../ports/clock';
 import { BUILTIN_SOURCE_ROLES } from '../catalog';
+import { isSourceId } from '../roles/types';
 import { hashString } from '../lib/rng';
 import { EXPORT_FORMAT, EXPORT_VERSION, WorkspaceExportV1Schema, type ExportApproval, type ExportConnection, type ExportNotification, type WorkspaceExportV1 } from './v1';
 import { findSensitive, redactEmails, type Finding } from './scan';
@@ -110,7 +111,7 @@ const localConnection = (c: SourceConnection, updatedAt: string): Connection => 
   workspaceId: 'local',
   source: c.provider as Connection['source'],
   provider: c.state === 'imported' ? 'import' : c.state === 'simulated' ? 'simulated' : c.provider,
-  roles: c.provider === 'email' ? [] : BUILTIN_SOURCE_ROLES[c.provider],
+  roles: isSourceId(c.provider) ? BUILTIN_SOURCE_ROLES[c.provider] : [],
   authKind: c.state === 'imported' ? 'import' : 'simulated',
   state: c.state,
   detail: c.detail,

@@ -96,6 +96,7 @@ Without a backend Jagr is browser-local. With one, workspaces live in Postgres, 
 
 - Local development: `JAGR_DEV_DB=pglite JAGR_SESSION_SECRET=… JAGR_SECRET_KEY=… npm run dev` runs the API on an on-disk PGlite database.
 - Production: set `DATABASE_URL`, `JAGR_APP_URL`, `JAGR_SESSION_SECRET`, `JAGR_SECRET_KEY`, `CRON_SECRET` and a sign-in provider. Migrations run on start.
+- Single-tenant (dogfood): `JAGR_MODE=single-tenant` + `JAGR_OWNER_IDENTITIES` + provider credentials in the environment (`JAGR_AMPLITUDE_*`, `JAGR_GITHUB_*`, `JAGR_JIRA_*`, `JAGR_INTERCOM_*`, `JAGR_SLACK_*`). On start they are copied into encrypted storage for one owner workspace; only the listed identities can sign in. A source whose connector is not live yet shows as a gap, never as sample data.
 - Moving a browser workspace: Sources → *Workspace export* → sign in → *Copy this workspace to my account* (dry run, then confirm).
 
 ## The product loop (2 minutes)

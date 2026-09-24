@@ -38,15 +38,15 @@ describe('adapters', () => {
   it('never fabricates data for unavailable providers', async () => {
     const conns = defaultConnections().map((c) => (c.provider === 'jira' ? { ...c, state: 'unavailable' as const, detail: 'Timed out' } : c));
     const reg = createAdapters(defaultWorld(), conns);
-    await expect(reg.sources.jira.getIssues({ start, end })).rejects.toBeInstanceOf(ProviderUnavailableError);
-    expect(reg.sources.jira.connection().state).toBe('unavailable');
+    await expect(reg.sources.jira!.getIssues({ start, end })).rejects.toBeInstanceOf(ProviderUnavailableError);
+    expect(reg.sources.jira!.connection().state).toBe('unavailable');
   });
 
   it('only returns data that exists as of the query time', async () => {
     const reg = createAdapters(defaultWorld(), defaultConnections());
-    const [series] = await reg.sources.ga4.getMetrics(['ga4.checkout_conversion'], { start, end: '2026-09-23T19:00:00.000Z' });
+    const [series] = await reg.sources.ga4!.getMetrics(['ga4.checkout_conversion'], { start, end: '2026-09-23T19:00:00.000Z' });
     expect(series.points.map((p) => p.t.slice(11, 16))).toEqual(['18:00', '18:15', '18:30', '18:45']);
-    expect(await reg.sources.ga4.getIssues({ start, end })).toEqual([]);
+    expect(await reg.sources.ga4!.getIssues({ start, end })).toEqual([]);
   });
 
   it('resolves deep links to real records', () => {

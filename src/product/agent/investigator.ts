@@ -16,6 +16,7 @@ import type {
 import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '../catalog';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
 import type { ChangeRecord, FeedbackItem, SourceId, WorkItem } from '../roles/types';
+import { isSourceId } from '../roles/types';
 import type { SourceRegistry } from '../roles/registry';
 import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate';
 import { feedbackNoun } from '../engine/detect';
@@ -644,7 +645,7 @@ export async function runInvestigation(args: {
   });
   // Sources known to be down are recorded as gaps now; the validator will not let anything call them.
   for (const p of watch.sources) {
-    if (p === 'email' || p === primary.provider) continue;
+    if (!isSourceId(p) || p === primary.provider) continue;
     const st = args.connectionState(p);
     if (st !== 'unavailable' && st !== 'error' && st !== 'not_configured' && st !== 'needs_reconnect') continue;
     const detail = gap(p, { ok: false, state: st === 'error' ? 'error' : 'unavailable', detail: args.connectionDetail?.(p) ?? `connection ${st}` });

@@ -15,6 +15,7 @@ import { postgresSecretStore } from './postgres/secrets';
 import { envKeyProvider } from './crypto/keys';
 import { googleIdentity } from './identity/google';
 import { githubIdentity } from './identity/github';
+import { bootstrapSingleTenant, type BootstrapResult } from './singleTenant';
 
 /**
  * Composition root: the only place that knows which implementation stands behind each port.
@@ -41,6 +42,8 @@ export interface Runtime extends MonitoringDeps {
   identity: Record<string, IdentityProvider>;
   config: RuntimeConfig;
   sql: SqlClient;
+  /** single-tenant: what bootstrap did at start (connection ids only, never values). */
+  bootstrap?: BootstrapResult;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -73,14 +76,17 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) identity.google = googleIdentity({ clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, http });
     if (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET) identity.github = githubIdentity({ clientId: env.GITHUB_OAUTH_CLIENT_ID, clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET, http });
   }
+  const secrets = postgresSecretStore(deps.sql, envKeyProvider(env));
+  const bootstrap = config.mode === 'single-tenant' ? await bootstrapSingleTenant({ repos, secrets, clock }, env, { fingerprintKey: config.sessionSecret, workspaceName: env.JAGR_OWNER_WORKSPACE_NAME }) : undefined;
   return {
     sql: deps.sql,
+    bootstrap,
     repos,
     tx,
     clock,
     http,
     queue: postgresJobQueue(deps.sql, clock),
-    secrets: postgresSecretStore(deps.sql, envKeyProvider(env)),
+    secrets,
     identity,
     connectors: deps.connectors ?? {},
     planner: serverPlanner(env, http),

@@ -1,5 +1,6 @@
 import type { Area, BriefSchedule, ProviderId, SignalKey, Watch, WatchSignal, WatchTemplateId } from './types';
 import type { Role, SourceId } from './roles/types';
+import { isSourceId } from './roles/types';
 
 export const AREA_LABEL: Record<Area, string> = { checkout: 'Checkout', signup: 'Signup', search: 'Search', stability: 'App stability', general: 'General' };
 
@@ -102,6 +103,8 @@ export const BUILTIN_SOURCE_ROLES: Record<SourceId, Role[]> = {
   app_store: ['metrics', 'changes', 'feedback'],
   google_play: ['metrics', 'changes', 'feedback'],
   github: ['changes'],
+  amplitude: ['metrics', 'changes'],
+  intercom: ['feedback'],
 };
 
 export const BUILTIN_METRIC_SOURCE: Record<string, SourceId> = {
@@ -121,7 +124,7 @@ export function signalsForSources(signals: WatchSignal[], sources: readonly Prov
     const metric = metricKeyOf(sig.key);
     if (metric) return sources.includes(BUILTIN_METRIC_SOURCE[metric]);
     const role: Role = sig.key === 'work_items' ? 'work_items' : 'feedback';
-    return sources.some((p) => p !== 'email' && BUILTIN_SOURCE_ROLES[p].includes(role));
+    return sources.some((p) => isSourceId(p) && BUILTIN_SOURCE_ROLES[p].includes(role));
   });
 }
 
