@@ -90,6 +90,14 @@ No API key is needed: without one, Jagr uses the deterministic planner and says 
 - The deployment owner sets `LLM_PROVIDER`, `LLM_MODEL` and `LLM_API_KEY` as server-side environment variables in the Vercel project (never `VITE_`-prefixed). Users don't paste their own keys.
 - The endpoint spends the owner's model budget, so it accepts small requests only (64 KB) and applies a best-effort per-IP rate limit. Set spend limits with your provider as well.
 
+## Backend (optional)
+
+Without a backend Jagr is browser-local. With one, workspaces live in Postgres, monitoring runs on a schedule (Vercel Cron → `/api/cron/tick`) without a browser open, approvals are enforced on the server, and people sign in with Google or GitHub. See `.env.example` for the variables and `docs/ARCHITECTURE.md` for the design.
+
+- Local development: `JAGR_DEV_DB=pglite JAGR_SESSION_SECRET=… JAGR_SECRET_KEY=… npm run dev` runs the API on an on-disk PGlite database.
+- Production: set `DATABASE_URL`, `JAGR_APP_URL`, `JAGR_SESSION_SECRET`, `JAGR_SECRET_KEY`, `CRON_SECRET` and a sign-in provider. Migrations run on start.
+- Moving a browser workspace: Sources → *Workspace export* → sign in → *Copy this workspace to my account* (dry run, then confirm).
+
 ## The product loop (2 minutes)
 
 1. **Overview**: "2 things need your attention." What happened, what needs me, what Jagr is watching, when it checks next.

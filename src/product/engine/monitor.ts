@@ -12,6 +12,7 @@ import type {
   MonitoringResult,
   MorningBriefDoc,
   ProviderId,
+  ScheduledJob,
   SchedulerLogEntry,
   SourceConnection,
   Watch,
@@ -54,6 +55,16 @@ export interface MonitorOptions {
   connections: SourceConnection[];
   brief: BriefSchedule;
   window?: { start: string; end: string };
+  /**
+   * Run exactly these scheduled jobs instead of planning every job in the window — how a server
+   * runs one due watch (from its job queue) rather than replaying a whole night.
+   */
+  jobs?: ScheduledJob[];
+  /**
+   * Investigations from earlier runs, to continue rather than start fresh (deduplication, lifecycle,
+   * notified levels all carry on). They are copied, never mutated in place.
+   */
+  investigations?: WatchInvestigation[];
   appBaseUrl?: string;
   recipient?: string;
   /**
@@ -203,7 +214,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
   const P = labelOf(labels);
   const base = o.appBaseUrl ?? 'https://jagr.vercel.app';
   const recipient = o.recipient ?? DEMO_RECIPIENT;
-  const investigations: WatchInvestigation[] = [];
+  const investigations: WatchInvestigation[] = o.investigations ? (JSON.parse(JSON.stringify(o.investigations)) as WatchInvestigation[]) : [];
   const emails: EmailNotification[] = [];
   const briefs: MorningBriefDoc[] = [];
   const log: SchedulerLogEntry[] = [];
@@ -216,7 +227,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       /* progress is best-effort */
     }
   };
-  const jobs = planJobs(o.watches, window, o.brief);
+  const jobs = o.jobs ?? planJobs(o.watches, window, o.brief);
   for (const [index, job] of jobs.entries()) {
     if (job.type !== 'morning_brief') emit({ type: 'job', index, total: jobs.length, watchName: o.watches.find((w) => w.id === job.watchId)?.name ?? '', at: job.at });
     if (job.type === 'morning_brief') {

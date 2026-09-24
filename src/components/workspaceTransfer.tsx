@@ -1,5 +1,5 @@
 import { Download, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ImportPlan } from '@/product/export/workspace';
 import { useProduct } from '@/state/productContext';
 import { Button, Card } from './ui';
@@ -15,6 +15,7 @@ export function WorkspaceTransfer() {
   const toast = useToast();
   const file = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
+  const server = useServerAccount();
 
   const download = () => {
     try {
@@ -56,6 +57,7 @@ export function WorkspaceTransfer() {
           <input ref={file} type="file" accept="application/json,.json" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
         </div>
       </div>
+      {server.available && <MoveToAccount server={server} exportDoc={exportWorkspace} />}
       {r && (
         <div className="mt-4 rounded-lg border border-line bg-subtle px-4 py-3 text-[12.5px]" role="status">
           {r.ok ? (
@@ -107,5 +109,102 @@ export function WorkspaceTransfer() {
         </div>
       )}
     </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Backend (optional): when this deployment has the Jagr API, a signed-in user can copy the browser
+// workspace into their account — same export, same dry run, same confirmation.
+// ─────────────────────────────────────────────────────────────
+
+interface ServerAccount {
+  available: boolean;
+  signIn: string[];
+  user?: { displayName: string };
+}
+
+function useServerAccount(): ServerAccount {
+  const [s, setS] = useState<ServerAccount>({ available: false, signIn: [] });
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const h = await fetch('/api/health');
+        if (!h.ok) return;
+        const health = (await h.json()) as { ok?: boolean; signIn?: string[] };
+        if (!health.ok) return;
+        const me = await fetch('/api/me');
+        const user = me.ok ? ((await me.json()) as { user: { displayName: string } }).user : undefined;
+        if (live) setS({ available: true, signIn: health.signIn ?? [], user });
+      } catch {
+        /* no backend: browser-local only */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+  return s;
+}
+
+const csrf = () => document.cookie.split('; ').find((c) => c.startsWith('jagr_csrf='))?.slice('jagr_csrf='.length) ?? '';
+const post = (path: string, body: unknown) => fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-jagr-csrf': decodeURIComponent(csrf()) }, body: JSON.stringify(body) });
+
+function MoveToAccount({ server, exportDoc }: { server: ServerAccount; exportDoc: () => unknown }) {
+  const [state, setState] = useState<{ report?: ImportPlan['report']; doc?: unknown; done?: string; error?: string }>({});
+  const label: Record<string, string> = { google: 'Google', github: 'GitHub' };
+  if (!server.user) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-2">
+        <span>Keep this workspace in an account (monitoring then runs without this tab open):</span>
+        {server.signIn.map((p) => (
+          <a key={p} className="font-medium text-accent hover:underline" href={`/api/auth/${p}/start?returnTo=/sources`}>
+            Sign in with {label[p] ?? p}
+          </a>
+        ))}
+        {!server.signIn.length && <span className="text-ink-3">No sign-in provider is configured on this server.</span>}
+      </div>
+    );
+  }
+  const plan = async () => {
+    const doc = exportDoc();
+    const r = await post('/api/import/plan', { doc });
+    const body = (await r.json()) as { report?: ImportPlan['report']; error?: string };
+    setState({ report: body.report, doc, error: body.report ? undefined : body.error });
+  };
+  const commit = async () => {
+    const r = await post('/api/import/commit', { doc: state.doc, confirm: true });
+    const body = (await r.json()) as { workspace?: { name: string }; error?: string };
+    setState(r.ok ? { done: body.workspace?.name } : { ...state, error: body.error ?? 'The server refused the import.' });
+  };
+  return (
+    <div className="mt-4 rounded-lg border border-line px-4 py-3 text-[12.5px]">
+      <div className="text-ink-2">
+        Signed in as <span className="font-medium text-ink">{server.user.displayName}</span>.{' '}
+        {state.done ? (
+          <span className="text-ok">Copied to your account as “{state.done}”. This browser’s copy is kept until you delete it.</span>
+        ) : (
+          <Button size="sm" onClick={() => void plan()}>
+            Copy this workspace to my account…
+          </Button>
+        )}
+      </div>
+      {state.error && <div className="mt-2 text-crit">{state.error}</div>}
+      {state.report && !state.done && (
+        <div className="mt-2 text-ink-2">
+          {state.report.ok ? (
+            <>
+              Dry run: {state.report.counts.watches} watches, {state.report.counts.investigations} investigations, {state.report.counts.approvals} decisions.{' '}
+              {state.report.warnings.join(' ')}{' '}
+              <Button size="sm" variant="primary" onClick={() => void commit()}>
+                Confirm copy
+              </Button>
+            </>
+          ) : (
+            <span className="text-crit">{state.report.problems.map((p) => p.message).join(' ')}</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

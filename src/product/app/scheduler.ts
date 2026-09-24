@@ -30,6 +30,9 @@ export async function schedulerTick(deps: { repos: Repositories; queue: JobQueue
   const now = deps.clock.now();
   const report: TickReport = { at: now, workspaces: 0, enqueued: 0, duplicates: 0, superseded: 0 };
   for (const ws of await deps.repos.workspaces.list()) {
+    // Only connected workspaces run on the clock. Sample and imported data have their own time range
+    // and run on demand (runWorkspaceNow), like the browser build.
+    if (ws.mode !== 'connected') continue;
     report.workspaces++;
     const last = (await deps.repos.cursors.get(ws.id, CURSOR)) ?? new Date(Date.parse(now) - FIRST_LOOKBACK_MS).toISOString();
     if (last >= now) continue;
