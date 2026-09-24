@@ -8,6 +8,8 @@ import { defaultWorld } from '@/product/integrations/world';
 import { runMonitoring as runEngine } from '@/product/engine/monitor';
 import { importFile, type ImportedDataset, type ImportKind } from '@/product/imports/schemas';
 import { buildImportedWorld, watchesForImportedData } from '@/product/imports/world';
+import { reduceProgress, startProgress, type RunProgress } from '@/product/progress';
+import type { RunEvent } from '@/product/engine/monitor';
 import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode } from './productContext';
 
 /**
@@ -69,8 +71,25 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const mode: WorkspaceMode | undefined = state.workspace?.mode;
   const importedWorld = useMemo(() => (mode === 'imported' ? buildImportedWorld(state.imports ?? [], state.clock) : undefined), [mode, state.imports, state.clock]);
 
+  // Live progress: events fold into a ref and reach React at most once per frame.
+  const [progress, setProgress] = useState<RunProgress | undefined>();
+  const progressRef = useRef<RunProgress | undefined>(undefined);
+  const frame = useRef<number | undefined>(undefined);
+  const onEvent = useCallback((e: RunEvent) => {
+    if (!progressRef.current) return;
+    progressRef.current = reduceProgress(progressRef.current, e);
+    if (frame.current === undefined && typeof requestAnimationFrame !== 'undefined') {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = undefined;
+        setProgress(progressRef.current);
+      });
+    }
+  }, []);
+
   const execute = useCallback(async (s: ProductState) => {
     setRunning(true);
+    progressRef.current = startProgress();
+    setProgress(progressRef.current);
     try {
       const imported = s.workspace?.mode === 'imported';
       const iw = imported ? buildImportedWorld(s.imports ?? [], s.clock) : undefined;
@@ -84,15 +103,19 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       // Imported data has its own time range: compose the brief at the end of it.
       const brief = iw ? { ...s.brief, time: hhmmUtc(world.end), timezone: 'UTC' } : s.brief;
       const { planner, info } = await resolvePlanner(s.planner ?? 'deterministic');
-      const result = await runEngine({ planner, world, watches, connections, brief, appBaseUrl: typeof window !== 'undefined' ? window.location.origin : undefined });
+      const result = await runEngine({ planner, world, watches, connections, brief, onEvent, appBaseUrl: typeof window !== 'undefined' ? window.location.origin : undefined });
       const states = connections.filter((c) => c.provider !== 'email' && c.state !== 'not_configured').map((c) => c.state);
       const data = imported ? 'imported' : states.every((x) => x !== 'connected') ? 'simulated' : states.every((x) => x === 'connected') ? 'live' : 'mixed';
       setState((prev) => ({ ...prev, result: { ...result, planner: { ...info, data } }, stale: false, clock: imported ? world.end : CLOCK }));
       return result;
     } finally {
+      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
+      frame.current = undefined;
+      progressRef.current = undefined;
+      setProgress(undefined);
       setRunning(false);
     }
-  }, []);
+  }, [onEvent]);
   const runMonitoring = useCallback(() => execute(ref.current), [execute]);
 
   // Sample workspace, first visit: run the sample night so there is something real to look at.
@@ -163,6 +186,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       state,
       running,
       runMonitoring,
+      progress,
       createWatch,
       setWatchStatus,
       setConnection,
@@ -180,7 +204,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       storageError,
       clearWorkspace,
     }),
-    [state, running, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice, mode, createWorkspace, addImport, removeImport, importedWorld, storageError, clearWorkspace],
+    [state, running, progress, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice, mode, createWorkspace, addImport, removeImport, importedWorld, storageError, clearWorkspace],
   );
   return <ProductContext.Provider value={api}>{children}</ProductContext.Provider>;
 }

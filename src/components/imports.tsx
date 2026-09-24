@@ -8,6 +8,7 @@ import { ConnectionBadge, PROVIDER_ICON } from './product';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { Badge, Button, Card, cx, Mono, SectionTitle } from './ui';
 import { PRIVACY_NOTICE } from './onboarding';
+import { SourceCoverage } from './primitives';
 
 const SAMPLE_FOR: Record<ImportKind, string> = { metrics: '/samples/metrics.csv', issues: '/samples/issues.csv', releases: '/samples/releases.csv', feedback: '/samples/reviews.csv' };
 
@@ -22,6 +23,13 @@ export function ImportedSources() {
   const imports = state.imports ?? [];
   const open = params.get('upload') === '1' || imports.length === 0;
   const spec = IMPORT_KINDS.find((k) => k.kind === kind)!;
+  const KINDS_FOR: Partial<Record<string, ImportKind[]>> = { ga4: ['metrics'], jira: ['issues', 'releases'], app_store: ['feedback'] };
+  const lastImport = (provider: string) =>
+    imports
+      .filter((d) => KINDS_FOR[provider]?.includes(d.kind))
+      .map((d) => d.importedAt)
+      .sort()
+      .at(-1);
 
   const onFile = async (file: File) => {
     setReading(true);
@@ -35,6 +43,7 @@ export function ImportedSources() {
 
   return (
     <>
+      <SourceCoverage connections={state.connections} />
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px] text-ink-2">
         <Lock size={15} className="mt-0.5 shrink-0" />
         <span>{PRIVACY_NOTICE}</span>
@@ -61,8 +70,8 @@ export function ImportedSources() {
           ))}
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-          <div className="text-[12.5px] text-ink-2">
-            <div>
+          <div className="min-w-0 text-[12.5px] text-ink-2">
+            <div className="break-words">
               Required columns: <Mono>{spec.required.join(', ')}</Mono>
               {spec.optional.length > 0 && (
                 <>
@@ -124,7 +133,12 @@ export function ImportedSources() {
                       <span className="text-[13.5px] font-semibold">{c.label?.name ?? PROVIDERS[c.provider].name}</span>
                       <ConnectionBadge state={c.state} />
                     </div>
-                    <div className="mt-0.5 truncate text-[12px] text-ink-3">{c.detail}</div>
+                    <div className="mt-0.5 text-[12px] break-words text-ink-2">{c.detail}</div>
+                    {c.state === 'imported' && lastImport(c.provider) && (
+                      <div className="mt-1 text-[11.5px] text-ink-3">
+                        Last imported {fmtDate(lastImport(c.provider)!)} {fmtTime(lastImport(c.provider)!)} · validated on upload
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>

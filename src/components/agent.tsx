@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, CircleSlash, Lock, ShieldAlert, Wrench, X } from 'lucide-react';
 import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, PlannerDecision, PlannerRunInfo, SourceConnection, TraceStep, WatchInvestigation } from '@/product/types';
 import { HYPOTHESIS_ID } from '@/product/agent/planner';
+import { StatusBadge, strengthOf, TraceEvent } from './primitives';
 import type { EffectiveAction } from '@/product/agent/decisions';
 import { hypothesisLabel } from '@/product/agent/investigator';
 import { confidenceBand } from '@/product/engine/monitor';
@@ -27,35 +28,6 @@ export function SourceStateTag({ state }: { state?: SourceConnection['state'] })
 // ─────────────────────────────────────────────────────────────
 // Agent trace
 // ─────────────────────────────────────────────────────────────
-
-const STEP_LABEL: Record<TraceStep['kind'], string> = {
-  signal: 'Signal',
-  plan: 'Plan',
-  hypothesis: 'Hypotheses',
-  gap: 'Evidence gap',
-  planner: 'Planner',
-  tool_call: 'Tool call',
-  result: 'Result',
-  assessment: 'Assessment',
-  uncertainty: 'Uncertainty',
-  stop: 'Stop',
-  attention: 'Attention',
-  action: 'Action',
-  approval: 'Needs approval',
-  notify: 'Notify',
-  recheck: 'Re-check',
-  human: 'Human decision',
-};
-
-const STEP_TONE: Partial<Record<TraceStep['kind'], string>> = {
-  signal: 'text-crit',
-  gap: 'text-high',
-  tool_call: 'text-accent',
-  stop: 'text-ink',
-  attention: 'text-ink',
-  approval: 'text-high',
-  human: 'text-ok',
-};
 
 interface Pass {
   pass: number;
@@ -120,13 +92,6 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
             </button>
             {isOpen && (
               <div className="border-t border-line">
-                <div className="hidden grid-cols-[48px_104px_150px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 border-b border-line bg-subtle/50 px-4 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-3 lg:grid">
-                  <span>Time</span>
-                  <span>Agent step</span>
-                  <span>Tool · input</span>
-                  <span>Result</span>
-                  <span>Why · what changed</span>
-                </div>
                 {foldCalls(p.steps).map((row) => (
                   <TraceRow key={row.step.id} step={row.step} result={row.result} source={conn(row.step.source)} />
                 ))}
@@ -148,45 +113,44 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
 /** The planner decision: who proposed, what, why (a summary, not hidden reasoning), and what policy did with it. */
 function PlannerRow({ step, d }: { step: TraceStep; d: PlannerDecision }) {
   const model = d.type === 'LLM';
-  const rejected = d.validator === 'REJECTED';
-  const failed = !!d.failure && model;
+  const who = model ? (d.plannerLabel.startsWith('Scripted test planner') ? 'Scripted test planner' : 'Model') : d.type === 'DETERMINISTIC' ? 'Deterministic' : 'Deterministic fallback';
   return (
-    <div className={cx('grid gap-x-3 gap-y-1 border-b border-line px-4 py-2.5 text-[12.5px] last:border-b-0 lg:grid-cols-[48px_104px_150px_minmax(0,1fr)_minmax(0,0.9fr)]', (rejected || failed) && 'bg-high-soft/25')}>
-      <Mono className="text-ink-3">{fmtTime(step.at)}</Mono>
-      <span className="flex flex-col items-start gap-1">
-        <span className="font-medium text-ink-2">Planner</span>
-        <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold tracking-wide', model ? 'bg-accent-soft text-accent' : 'bg-subtle text-ink-2 ring-1 ring-inset ring-line')}>{model ? (d.plannerLabel.startsWith('Scripted test planner') ? 'SCRIPTED TEST PLANNER' : 'MODEL') : d.type === 'DETERMINISTIC' ? 'DETERMINISTIC' : 'DETERMINISTIC FALLBACK'}</span>
-      </span>
-      <span className="min-w-0">
-        {d.proposedTool ? <code className="block truncate font-mono text-[11.5px] text-ink">{d.proposedTool}</code> : <span className="text-ink-3">no plan</span>}
-        {d.hypothesesAffected && <span className="block text-[11px] text-ink-3">{d.hypothesesAffected.join(', ')}</span>}
-      </span>
-      <span className="min-w-0">
-        <span className="block">{step.title}</span>
-        {d.evidenceGap && <span className="mt-0.5 block text-ink-2"><span className="text-ink-3">Gap:</span> {d.evidenceGap}</span>}
-        {d.expectedEvidence && <span className="mt-0.5 block text-ink-2"><span className="text-ink-3">Expects:</span> {d.expectedEvidence}</span>}
-        {d.resultSummary && <span className="mt-0.5 block text-ink-3">Result: {d.resultSummary}</span>}
-        <span className="mt-0.5 block text-[11px] text-ink-3">
-          {d.plannerLabel}
-          {d.model ? ` · ${d.model}` : ''}
-          {typeof d.latencyMs === 'number' && !d.cached ? ` · ${d.latencyMs} ms` : ''}
-          {d.cached ? ' · reused plan for an identical investigation state' : ''}
-        </span>
-        {d.providerFallback && (
-          <span className="mt-0.5 block text-[11px] font-medium text-high">
-            {d.failure ? `Primary planner (${d.providerFallback.from}) and fallback provider (${d.plannerLabel}) both unavailable.` : `Primary planner unavailable (${d.providerFallback.from}). Fallback provider used.`}
+    <TraceEvent
+      time={step.at}
+      kind="planner"
+      tone={d.validator === 'REJECTED' || (model && d.failure) ? 'warn' : model ? 'accent' : 'neutral'}
+      title={
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{d.proposedTool ? <>Plan: <code className="font-mono text-[12px]">{d.proposedTool}</code></> : 'No usable plan'}</span>
+          <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase', d.validator === 'APPROVED' ? 'bg-ok-soft text-ok' : d.validator === 'REJECTED' ? 'bg-crit-soft text-crit' : 'bg-subtle text-ink-3')}>
+            Validator · {d.validator === 'NOT_RUN' ? 'not run' : d.validator.toLowerCase()}
           </span>
-        )}
-      </span>
-      <span className="min-w-0 text-ink-2">
-        {d.reason && <span className="block">{d.reason}</span>}
-        <span className={cx('mt-1 block text-[11.5px] font-medium', d.validator === 'APPROVED' ? 'text-ok' : d.validator === 'REJECTED' ? 'text-crit' : 'text-ink-3')}>
-          Validator: {d.validator === 'NOT_RUN' ? 'not run — no valid plan' : d.validator}
         </span>
-        {d.rejection && <span className="block text-[11.5px] text-ink-2">{d.rejection.reason}</span>}
-        {d.failure && <span className="block text-[11.5px] text-ink-3">{d.failure.detail}</span>}
-      </span>
-    </div>
+      }
+      meta={
+        <>
+          <span className="font-medium text-ink-2">{who}</span>
+          <span>{d.plannerLabel}{d.model ? ` · ${d.model}` : ''}</span>
+          {typeof d.latencyMs === 'number' && !d.cached && <span className="num">{d.latencyMs} ms</span>}
+          {d.cached && <span>reused plan (identical state)</span>}
+          {d.hypothesesAffected && <span className="font-mono">{d.hypothesesAffected.join(' ')}</span>}
+        </>
+      }
+    >
+      {d.evidenceGap && (
+        <p>
+          <span className="text-ink-3">Gap</span> {d.evidenceGap}
+        </p>
+      )}
+      {d.reason && <p>{d.reason}</p>}
+      {d.rejection && <p className="text-crit">{d.rejection.reason}</p>}
+      {d.failure && <p className="text-ink-3">{d.failure.detail}</p>}
+      {d.providerFallback && (
+        <p className="font-medium text-high">
+          {d.failure ? `Primary planner (${d.providerFallback.from}) and fallback provider (${d.plannerLabel}) both unavailable.` : `Primary planner unavailable (${d.providerFallback.from}). Fallback provider used.`}
+        </p>
+      )}
+    </TraceEvent>
   );
 }
 
@@ -203,61 +167,50 @@ function foldCalls(steps: TraceStep[]): { step: TraceStep; result?: TraceStep }[
   return rows;
 }
 
+const KIND_TONE: Partial<Record<TraceStep['kind'], 'neutral' | 'accent' | 'ok' | 'warn' | 'crit'>> = { signal: 'crit', gap: 'warn', approval: 'warn', human: 'ok', stop: 'neutral', attention: 'neutral' };
+
 function TraceRow({ step, result, source }: { step: TraceStep; result?: TraceStep; source?: SourceConnection['state'] }) {
   if (step.kind === 'planner' && step.planner) return <PlannerRow step={step} d={step.planner} />;
-  const isCall = step.kind === 'tool_call';
-  const failed = result && result.status && result.status !== 'ok';
-  const changed = result?.changed ?? step.changed;
-  const materially = changed?.some((c) => !c.startsWith('No change'));
-  return (
-    <div className={cx('grid gap-x-3 gap-y-1 border-b border-line px-4 py-2.5 text-[12.5px] last:border-b-0 lg:grid-cols-[48px_104px_150px_minmax(0,1fr)_minmax(0,0.9fr)]', step.kind === 'human' && 'bg-ok-soft/40', step.kind === 'approval' && 'bg-high-soft/30')}>
-      <Mono className="text-ink-3">{fmtTime(step.at)}</Mono>
-      <span className={cx('font-medium', STEP_TONE[step.kind] ?? 'text-ink-2')}>{STEP_LABEL[step.kind]}</span>
-      <span className="min-w-0">
-        {isCall ? (
+  const changed = (result?.changed ?? step.changed)?.filter((c) => !c.startsWith('No change'));
+  if (step.kind === 'tool_call') {
+    const failed = !!result?.status && result.status !== 'ok';
+    return (
+      <TraceEvent
+        time={step.at}
+        kind="tool_call"
+        tone={failed ? 'warn' : 'neutral'}
+        title={
+          <span className="inline-flex flex-wrap items-baseline gap-x-2">
+            <code className="font-mono text-[12px] text-ink">{step.tool}()</code>
+            <span className="text-[12px] text-ink-3">{step.input}</span>
+          </span>
+        }
+        meta={
           <>
-            <code className="block truncate font-mono text-[11.5px] text-ink">{step.tool}</code>
-            <span className="block truncate text-[11.5px] text-ink-3" title={step.input}>
-              {step.input}
-            </span>
+            {step.source && <ProviderName provider={step.source} short />}
+            <SourceStateTag state={failed ? (result?.status === 'error' ? 'error' : 'unavailable') : source} />
           </>
-        ) : step.source ? (
-          <ProviderName provider={step.source} short className="text-ink-3" />
-        ) : (
-          <span className="text-ink-3">—</span>
-        )}
-      </span>
-      <span className="min-w-0">
-        {isCall && result ? (
-          <>
-            <span className={cx(failed && 'text-high')}>{result.title}</span>
-            <span className="mt-1 flex flex-wrap items-center gap-1.5">
-              {step.source && <ProviderName provider={step.source} short className="text-[11px] text-ink-3" />}
-              <SourceStateTag state={failed ? (result.status === 'error' ? 'error' : 'unavailable') : source} />
-            </span>
-          </>
-        ) : (
-          <>
-            <span className={cx(step.kind === 'stop' || step.kind === 'attention' ? 'font-medium' : '')}>{step.title}</span>
-            {step.detail && <span className="mt-0.5 block text-ink-2">{step.detail}</span>}
-            {step.result && <span className="mt-0.5 block text-ink-3">{step.result}</span>}
-          </>
-        )}
-      </span>
-      <span className="min-w-0 text-ink-2">
-        {step.why && <span className="block">{step.why}</span>}
-        {changed && (
-          <span className="mt-1 block">
+        }
+      >
+        {result && <p className={cx('font-medium', failed ? 'text-high' : 'text-ink')}>{result.title}</p>}
+        {changed && changed.length > 0 && (
+          <p className="text-[11.5px] font-medium text-accent">
             {changed.map((c) => (
-              <span key={c} className={cx('block text-[11.5px]', materially && !c.startsWith('No change') ? 'font-medium text-accent' : 'text-ink-3')}>
-                {materially && !c.startsWith('No change') ? '→ ' : ''}
-                {c}
+              <span key={c} className="block">
+                → {c}
               </span>
             ))}
-          </span>
+          </p>
         )}
-      </span>
-    </div>
+      </TraceEvent>
+    );
+  }
+  return (
+    <TraceEvent time={step.at} kind={step.kind} tone={KIND_TONE[step.kind] ?? 'neutral'} title={<span className={cx((step.kind === 'stop' || step.kind === 'attention' || step.kind === 'human') && 'font-medium')}>{step.title}</span>}>
+      {step.detail && <p>{step.detail}</p>}
+      {step.result && <p className="text-ink-3">{step.result}</p>}
+      {step.why && step.kind !== 'result' && <p className="text-ink-3">{step.why}</p>}
+    </TraceEvent>
   );
 }
 
@@ -317,6 +270,54 @@ export function HypothesisCards({ hypotheses, evidence }: { hypotheses: AgentHyp
           </Card>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Compact, scannable hypotheses: one row each; open a row to inspect its evidence. */
+export function HypothesisList({ hypotheses, evidence }: { hypotheses: AgentHypothesis[]; evidence: EvidenceItem[] }) {
+  const byId = new Map(evidence.map((e) => [e.id, e]));
+  const order = ['strong', 'moderate', 'weak', 'unknown', 'ruled_out'];
+  const sorted = [...hypotheses].sort((a, b) => order.indexOf(strengthOf(a)) - order.indexOf(strengthOf(b)));
+  return (
+    <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+      {sorted.map((h) => (
+        <details key={h.kind} className={cx('group', strengthOf(h) === 'ruled_out' && 'opacity-70')}>
+          <summary className="interactive flex cursor-pointer list-none items-start gap-3 px-4 py-3 hover:bg-subtle/50 [&::-webkit-details-marker]:hidden">
+            <ChevronRight size={14} className="mt-0.5 shrink-0 text-ink-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[13.5px] font-semibold">{hypothesisLabel(h.kind)}</span>
+                <Mono className="text-[11px] text-ink-3">{HYPOTHESIS_ID[h.kind]}</Mono>
+                {h.status === 'contested' && <span className="text-[11px] font-medium text-med">contested</span>}
+              </div>
+              <p className="mt-0.5 text-[12.5px] text-ink-2">{h.statement}</p>
+            </div>
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              <StatusBadge kind="strength" value={strengthOf(h)} />
+              <span className="num text-[11px] text-ink-3">
+                {h.evidenceFor.length} for · {h.evidenceAgainst.length} against
+              </span>
+            </span>
+          </summary>
+          <div className="grid gap-4 border-t border-line bg-canvas/40 px-4 py-3 pl-11 md:grid-cols-3">
+            <EvidenceList label="For" tone="text-ok" ids={h.evidenceFor} byId={byId} empty="Nothing yet" />
+            <EvidenceList label="Against" tone="text-crit" ids={h.evidenceAgainst} byId={byId} empty="Nothing against" />
+            <div className="mt-2">
+              <Eyebrow className="mb-0.5 text-high">Unknown</Eyebrow>
+              {h.unknowns.length ? (
+                <ul className="space-y-0.5 text-[12px] text-ink-2">
+                  {h.unknowns.map((u) => (
+                    <li key={u}>{u}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-ink-3">Nothing stated</p>
+              )}
+            </div>
+          </div>
+        </details>
+      ))}
     </div>
   );
 }
@@ -385,7 +386,6 @@ export function AttentionDecision({ inv, interruptAt }: { inv: WatchInvestigatio
 // Actions & approvals
 // ─────────────────────────────────────────────────────────────
 
-const RISK_TONE: Record<ActionRisk, Tone> = { LOW: 'ok', MEDIUM: 'med', HIGH: 'high', CRITICAL: 'crit' };
 const AUTONOMY_TEXT: Record<ActionRisk, string> = {
   LOW: 'Jagr did this on its own — low risk and reversible.',
   MEDIUM: 'Jagr recommends this. One click to do it.',
@@ -394,7 +394,7 @@ const AUTONOMY_TEXT: Record<ActionRisk, string> = {
 };
 
 export function RiskBadge({ risk }: { risk: ActionRisk }) {
-  return <Badge tone={RISK_TONE[risk]}>{risk} risk</Badge>;
+  return <StatusBadge kind="risk" value={risk} />;
 }
 
 export function ActionRow({ action, onDo }: { action: EffectiveAction; onDo?: () => void }) {
@@ -449,7 +449,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
 
   return (
     <Card padded={false} className={cx('overflow-hidden', !decided && 'ring-1 ring-high/40')}>
-      <div id={`approve-${action.id}`} className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      <div id={`approve-${action.id}`} className="flex scroll-mt-20 flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <ShieldAlert size={15} className={action.risk === 'CRITICAL' ? 'text-crit' : 'text-high'} />
         <span className="text-[14px] font-semibold">{action.title}</span>
         <RiskBadge risk={action.risk} />

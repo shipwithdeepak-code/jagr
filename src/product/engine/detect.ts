@@ -35,6 +35,12 @@ function badOf(series: MetricSeries, value: number): number {
   return series.badDirection === 'down' ? -delta : delta;
 }
 
+/** Applies a watch's custom threshold for this metric, if it set a valid one. */
+export function withWatchThreshold(series: MetricSeries, thresholds: Partial<Record<string, number>> | undefined): MetricSeries {
+  const th = thresholds?.[series.id];
+  return th !== undefined && Number.isFinite(th) && th > 0 ? { ...series, threshold: th } : series;
+}
+
 export function readMetric(series: MetricSeries): MetricReading {
   const pts = series.points;
   if (pts.length < WINDOW) return { status: 'normal', bad: 0, ratio: 0, current: series.baseline.mean, currentSinceOnset: series.baseline.mean, badSinceOnset: 0, zScore: 0 };

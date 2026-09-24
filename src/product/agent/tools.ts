@@ -2,7 +2,7 @@ import type { Area, ProviderId, ToolName, Watch } from '../types';
 import { PROVIDERS, type AdapterRegistry } from '../integrations/adapters';
 import { ProviderUnavailableError, type IssueRecord, type MetricSeries, type ReleaseRecord, type ReviewRecord } from '../integrations/types';
 import { classifyText } from '../catalog';
-import { issueArea, isNegative, readMetric, type MetricReading } from '../engine/detect';
+import { issueArea, isNegative, readMetric, withWatchThreshold, type MetricReading } from '../engine/detect';
 
 /**
  * The agent's tools. Every source access the investigator makes goes through one of these
@@ -67,8 +67,9 @@ export function createToolbox(reg: AdapterRegistry, watch: Watch, worldStart: st
 
   const metric = (provider: Exclude<ProviderId, 'email'>, id: string, until: string) =>
     call(provider, async () => {
-      const [series] = await reg.sources[provider].getMetrics([id], { start: worldStart, end: until });
-      if (!series) throw new NoDataError(id);
+      const [raw] = await reg.sources[provider].getMetrics([id], { start: worldStart, end: until });
+      if (!raw) throw new NoDataError(id);
+      const series = withWatchThreshold(raw, watch.thresholds);
       return { series, reading: readMetric(series) };
     });
 

@@ -186,11 +186,86 @@ body {
 .animate-pulse-dot {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
+/*
+ * Motion system. Small and purposeful: entry (hierarchy), stagger (sequence / cause → effect),
+ * reveal (state change), emphasis (attention, once), progress. Transform + opacity only — no
+ * layout-shifting animation. Everything collapses under prefers-reduced-motion below.
+ */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 240ms;
+  --stagger: 90ms;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Children appear in sequence; set --i on each child (0, 1, 2…). */
+.stagger > * {
+  animation: rise var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+.animate-reveal {
+  animation: rise var(--dur-slow) var(--ease-out) both;
+}
+/* One-time emphasis for HIGH / CRITICAL attention — a single soft ring, never a loop. */
+@keyframes attention-once {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--emph, var(--high)) 40%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.attention-once {
+  animation: attention-once 900ms ease-out 300ms 1 both;
+}
+@keyframes progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+.progress-sweep {
+  animation: progress-sweep 1.4s var(--ease-out) infinite;
+}
+.interactive {
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'ss01';
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* No looping (an infinite 0.01ms animation flickers) and no stagger delays. */
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+  /* The run-progress sweep becomes a static hairline. */
+  .progress-sweep {
+    width: 100% !important;
+    transform: none !important;
+    animation: none !important;
+    opacity: 0.35;
   }
 }

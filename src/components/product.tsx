@@ -4,6 +4,7 @@ import type { AttentionLevel, ConnectionState, EmailNotification, InvestigationS
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { fmtDate, fmtTime } from '@/lib/time';
 import { Badge, cx, Eyebrow, type Tone } from './ui';
+import { StatusBadge } from './primitives';
 import { useContext, useEffect, useState } from 'react';
 import { ProductContext } from '@/state/productContext';
 import { useEnvironment, type EnvironmentScope } from '@/state/environment';
@@ -43,12 +44,8 @@ export const CONNECTION: Record<ConnectionState, { tone: Tone; label: string }> 
 };
 
 export function ConnectionBadge({ state }: { state: ConnectionState }) {
-  const c = CONNECTION[state];
-  return (
-    <Badge tone={c.tone} dot className={state === 'simulated' ? 'border border-dashed border-info/40' : ''}>
-      {c.label}
-    </Badge>
-  );
+  // One source-status vocabulary everywhere: USER IMPORT / CONNECTED / SIMULATED / NOT CONFIGURED / UNAVAILABLE / ERROR.
+  return <StatusBadge kind="source" value={state} />;
 }
 
 /** Which environment a record belongs to — shown wherever records from both could appear. */
@@ -108,6 +105,14 @@ export function SourceLinkButton({ link, compact }: { link: SourceLink; compact?
   );
 }
 
+/** The data status of an email's source link, as of the current workspace: IMPORT, SIM, or nothing for live. */
+function EmailButtonTag({ provider, simulated }: { provider?: ProviderId; simulated: boolean }) {
+  const ctx = useContext(ProductContext);
+  const state = provider ? ctx?.state.connections.find((c) => c.provider === provider)?.state : undefined;
+  if (state === 'imported') return <span className="rounded bg-accent-soft px-1 text-[10px] font-semibold text-accent">IMPORT</span>;
+  return simulated ? <span className="rounded bg-info-soft px-1 text-[10px] font-semibold text-info">SIM</span> : null;
+}
+
 /** Renders an email the way the PM would receive it. */
 export function EmailPreview({ email }: { email: EmailNotification }) {
   const s = email.sections;
@@ -158,7 +163,7 @@ export function EmailPreview({ email }: { email: EmailNotification }) {
               )}
             >
               {b.label}
-              {b.simulated && <span className="rounded bg-info-soft px-1 text-[10px] font-semibold text-info">SIM</span>}
+              <EmailButtonTag provider={b.provider} simulated={b.simulated} />
             </Link>
           ))}
         </div>

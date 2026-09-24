@@ -140,7 +140,7 @@ export const WIZARD_TEMPLATES: WatchTemplateId[] = ['checkout_health', 'app_stab
 export function watchFromTemplate(
   id: string,
   templateId: WatchTemplateId,
-  overrides: Partial<Pick<Watch, 'name' | 'sources' | 'schedule' | 'notificationPolicy' | 'timezone' | 'severityThreshold'>> = {},
+  overrides: Partial<Pick<Watch, 'name' | 'sources' | 'schedule' | 'notificationPolicy' | 'timezone' | 'severityThreshold' | 'thresholds'>> = {},
   now = '2026-09-23T17:00:00.000Z',
 ): Watch {
   const tpl = WATCH_TEMPLATES.find((x) => x.id === templateId)!;
@@ -156,6 +156,7 @@ export function watchFromTemplate(
     schedule: overrides.schedule ?? { frequency: '30m', dailyAt: '07:00' },
     timezone: overrides.timezone ?? 'UTC',
     severityThreshold: overrides.severityThreshold ?? 'LOW',
+    ...(overrides.thresholds && Object.keys(overrides.thresholds).length ? { thresholds: overrides.thresholds } : {}),
     notificationPolicy: overrides.notificationPolicy ?? { interruptAt: 'HIGH', briefMin: 'MEDIUM', morningBrief: true },
     status: 'active',
     createdAt: now,

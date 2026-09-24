@@ -4,6 +4,7 @@ import { createAdapters, defaultConnections, resolveRef } from './integrations/a
 import { ProviderUnavailableError } from './integrations/types';
 import { defaultWorld } from './integrations/world';
 import { runMonitoring } from './engine/monitor';
+import { withWatchThreshold } from './engine/detect';
 import { hasCausalOverclaim } from './engine/language';
 import { dailyOccurrences, nextRunAt, planJobs, toCron, zonedTimeToUtc } from './scheduler';
 
@@ -89,6 +90,18 @@ describe('default workspace night', () => {
     expect(r.investigations.find((i) => i.area === 'checkout')!.watchIds).toContain('w-stab');
     expect(r.emails).toHaveLength(1);
     expect(r.briefs[0].deduplicated.map((d) => d.watchName)).toContain('App stability');
+  });
+
+  it('applies a watch\'s custom metric thresholds (and ignores invalid ones)', async () => {
+    const run = (thresholds?: Record<string, number>) =>
+      runMonitoring({ world: defaultWorld(), watches: [watchFromTemplate('w-conv', 'conversion', { thresholds })], connections: defaultConnections(), brief: defaultBriefSchedule() });
+    expect((await run()).investigations.length).toBeGreaterThan(0);
+    // A threshold far above last night's drops means nothing crosses it.
+    expect((await run({ 'ga4.checkout_conversion': 90, 'ga4.signup_conversion': 90 })).investigations).toHaveLength(0);
+    const series = { ...defaultWorld().metrics[0], threshold: 5 };
+    expect(withWatchThreshold(series, { [series.id]: 0 }).threshold).toBe(5);
+    expect(withWatchThreshold(series, { [series.id]: Number.NaN }).threshold).toBe(5);
+    expect(withWatchThreshold(series, { [series.id]: 12 }).threshold).toBe(12);
   });
 
   it('only schedules active watches', async () => {

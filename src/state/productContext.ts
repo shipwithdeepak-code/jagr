@@ -1,3 +1,4 @@
+import type { RunProgress } from '@/product/progress';
 import { createContext, useContext } from 'react';
 import type { ActionDecision, BriefSchedule, ConnectionState, MonitoringResult, ProposedAction, ProviderId, SourceConnection, Watch } from '@/product/types';
 import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
@@ -35,6 +36,8 @@ export interface PlannerOptionInfo {
 export interface ProductApi {
   state: ProductState;
   running: boolean;
+  /** Live progress of the current run, from real engine events. Undefined when idle. */
+  progress?: RunProgress;
   /** Undefined when an imported workspace has nothing to investigate yet. */
   runMonitoring(): Promise<MonitoringResult | undefined>;
   createWatch(watch: Watch): void;

@@ -1,20 +1,19 @@
-import { ArrowLeft, Check, CircleAlert, HelpCircle, Lock, Search, Eye } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ChevronDown, CircleAlert, Lock } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { InvestigationState, WatchInvestigation } from '@/product/types';
-import { PROVIDERS } from '@/product/integrations/adapters';
-import { AREA_LABEL } from '@/product/catalog';
+import type { WatchInvestigation } from '@/product/types';
 import { useProduct } from '@/state/productContext';
 import { useWorkspace } from '@/state/workspace';
 import { fmtTime } from '@/lib/time';
-import { AttentionBadge, EmailPreview, InvestigationStateBadge, ProviderName, SourceLinkButton } from '@/components/product';
-import { ActionRow, AgentApprovalCard, AgentTraceTimeline, AgentWorkingLine, AttentionDecision, HypothesisCards, PlannerModeLine, SourceStateTag } from '@/components/agent';
+import { attentionRoute, EmailPreview, ProviderName, SourceLinkButton } from '@/components/product';
+import { ActionRow, AgentApprovalCard, AgentTraceTimeline, HypothesisList, PlannerModeLine } from '@/components/agent';
+import { AttentionBanner, EvidenceItem, InvestigationTimeline, LoadingState, MetricValue, SectionHeader, StatusBadge, strengthOf, type TimelineEntry } from '@/components/primitives';
+import { hypothesisLabel } from '@/product/agent/investigator';
 import { effectiveActions, traceWithDecisions } from '@/product/agent/decisions';
 import { confidenceBand } from '@/product/engine/monitor';
-import { Card, cx, EmptyState, Eyebrow, Mono, PageHeader, SectionTitle } from '@/components/ui';
+import { cx, EmptyState, Mono } from '@/components/ui';
 import type { TaskDraft } from '@/domain/types';
-
-const LIFECYCLE: InvestigationState[] = ['DETECTED', 'INVESTIGATING', 'CONFIRMED'];
+import { headlineOf, readingOf } from '@/product/presentation';
 
 const OWNER_TEAM: Record<string, string> = { checkout: 'payments-eng', signup: 'growth', search: 'product', stability: 'platform', general: 'product' };
 
@@ -45,6 +44,7 @@ export function WatchInvestigationPage() {
   const { state, running } = useProduct();
   const inv = state.result?.investigations.find((i) => i.id === id);
 
+  if (!inv && running) return <LoadingState label="Jagr is investigating…" />;
   if (!inv) {
     return (
       <EmptyState
@@ -59,6 +59,44 @@ export function WatchInvestigationPage() {
   return <Detail inv={inv} />;
 }
 
+function timelineOf(inv: WatchInvestigation): TimelineEntry[] {
+  const lead = inv.signals[0];
+  const timed: TimelineEntry[] = [{ key: 'signal', at: lead.onsetAt, label: 'Signal detected', title: `${lead.label} ${lead.magnitude}`, tone: 'signal' }];
+  const untimed: TimelineEntry[] = [];
+  const primary = readingOf(inv) ? inv.evidence.find((x) => x.provider === lead.provider && x.direction === 'degraded') : undefined;
+  for (const e of inv.evidence) {
+    if (e === primary) continue;
+    const text = e.statement.replace(/^[^:]{1,40}: /, '');
+    if (e.direction === 'change' && /release/i.test(e.statement)) {
+      const rel = inv.releaseAssociation;
+      timed.push({ key: e.id, at: e.onsetAt, label: 'Release', title: text, detail: rel && e.statement.includes(rel.version) ? `${rel.minutesBeforeOnset} min before the change began — a timing relationship, not a cause.` : undefined, tone: 'change' });
+    } else if (e.direction === 'change') timed.push({ key: e.id, at: e.onsetAt, label: 'Change', title: text, tone: 'change' });
+    else if (e.direction === 'degraded') {
+      const label = /review|feedback|★/i.test(e.statement) ? 'Customer signal' : /issue/i.test(e.statement) ? 'Issue signal' : 'Corroborating signal';
+      timed.push({ key: e.id, at: e.onsetAt, label, title: text, tone: 'evidence' });
+    } else if (e.direction === 'stable') untimed.push({ key: e.id, label: 'Checked — normal', title: text, tone: 'normal' });
+    else untimed.push({ key: e.id, label: 'Not checked', title: text, tone: 'gap' });
+  }
+  timed.sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
+  const confirmed = inv.statusHistory.find((h) => h.state === 'CONFIRMED')?.at ?? inv.updatedAt;
+  const assessed = inv.agentHypotheses
+    .filter((h) => h.kind !== 'external_or_unobserved' || strengthOf(h) !== 'weak')
+    .map((h) => `${hypothesisLabel(h.kind)} — ${strengthOf(h).replace('_', ' ')}`);
+  return [...timed, ...untimed, { key: 'assessment', at: confirmed, label: 'Assessment', title: assessed.join(' · '), detail: 'Evidence strength, not probability. Correlation is not causation.', tone: 'assessment' }];
+}
+
+function Details({ summary, children, defaultOpen = false }: { summary: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
+  return (
+    <details open={defaultOpen} className="group rounded-xl border border-line bg-surface">
+      <summary className="interactive flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-3 text-[13px] font-medium hover:bg-subtle/60 [&::-webkit-details-marker]:hidden">
+        <ChevronDown size={14} className="text-ink-3 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        {summary}
+      </summary>
+      <div className="border-t border-line p-4">{children}</div>
+    </details>
+  );
+}
+
 function Detail({ inv }: { inv: WatchInvestigation }) {
   const { state } = useProduct();
   const { createTaskFromDraft, state: ws } = useWorkspace();
@@ -66,108 +104,179 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
   const watches = inv.watchIds.map((id) => state.watches.find((w) => w.id === id)).filter(Boolean);
   const owner = state.watches.find((w) => w.id === inv.watchId);
   const emails = state.result?.emails.filter((e) => e.investigationId === inv.id) ?? [];
-  const reached = new Set(inv.statusHistory.map((h) => h.state));
-  const ended = inv.status === 'DISMISSED' || inv.status === 'RESOLVED';
+  const connections = state.result?.connections ?? state.connections;
+  const stateOf = (p: string) => connections.find((c) => c.provider === p)?.state;
 
   const actions = effectiveActions(inv, state.decisions);
   const trace = traceWithDecisions(inv, state.decisions);
   const approvals = actions.filter((a) => a.risk === 'HIGH' || a.risk === 'CRITICAL');
+  const waiting = approvals.filter((a) => a.effective === 'awaiting_approval');
   const fileTask = async () => {
     if (filed) return;
     const task = await createTaskFromDraft(taskDraftFor(inv));
     if (task) setFiled(task.id);
   };
 
+  const reading = readingOf(inv);
+  const at = (s: string) => inv.statusHistory.find((h) => h.state === s)?.at;
+  const calls = inv.trace.filter((s) => s.kind === 'tool_call');
+  const checked = [...new Set(calls.map((s) => s.source).filter((p): p is NonNullable<typeof p> => !!p))];
+  const gaps = inv.evidence.filter((e) => e.direction === 'gap');
+  const band = confidenceBand(inv.confidence);
+
+  const decision = (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-line bg-surface p-4">
+        <div className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Likely explanation</div>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink">{inv.likelyExplanation}</p>
+        <p className="mt-2 text-[12.5px] text-ink-2">
+          <span className="font-medium text-ink">Uncertainty.</span> {inv.uncertainty}
+        </p>
+      </div>
+      <div className="rounded-xl border border-ink/15 bg-surface p-4">
+        <div className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Recommended next step</div>
+        <p className="mt-1.5 text-[14px] font-medium text-ink">{inv.recommendedNextStep}</p>
+        {waiting.length > 0 && (
+          <a href={`#approve-${waiting[0].id}`} className="interactive mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink px-3 text-[12.5px] font-medium text-canvas hover:opacity-90">
+            Review {waiting.length} approval{waiting.length === 1 ? '' : 's'}
+          </a>
+        )}
+        <p className="mt-3 flex items-start gap-1.5 text-[11.5px] text-ink-3">
+          <Lock size={11} className="mt-0.5 shrink-0" /> Rollbacks, pricing, refunds and customer messages always need a human.
+        </p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="animate-fade-up">
-      <Link to="/investigations" className="mb-4 inline-flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink">
+    <div className="animate-fade-up space-y-6">
+      <Link to="/investigations" className="interactive inline-flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink">
         <ArrowLeft size={13} /> Investigations
       </Link>
-      <PageHeader
-        eyebrow={
-          <div className="flex flex-wrap items-center gap-2">
-            <AttentionBadge level={inv.attention} />
-            <InvestigationStateBadge state={inv.status} />
-            <span className="text-[12px] text-ink-3">{watches.map((w) => w!.name).join(' + ')}</span>
-            <Mono className="text-ink-3">{inv.id}</Mono>
-          </div>
-        }
-        title={inv.title}
-        description={inv.summary}
-        actions={
-          <div className="rounded-lg border border-line bg-surface px-3 py-2 shadow-card" title="Confidence that the problem is real — not that any explanation is the cause.">
-            <div className="text-[11px] text-ink-3">Investigation confidence</div>
-            <div className="text-[18px] font-semibold capitalize">{confidenceBand(inv.confidence)}</div>
-          </div>
-        }
-      />
 
-      {/* Lifecycle */}
-      <Card className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          {LIFECYCLE.map((s, i) => {
-            const h = inv.statusHistory.find((x) => x.state === s);
-            return (
-              <div key={s} className="flex items-center gap-2">
-                {i > 0 && <span className="h-px w-6 bg-line-strong" />}
-                <span className={cx('inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium', reached.has(s) ? 'bg-accent-soft text-accent' : 'bg-subtle text-ink-3')}>
-                  {reached.has(s) && <Check size={12} />}
-                  {s}
-                  {h && <span className="tabular font-mono text-[11px] opacity-80">{fmtTime(h.at)}</span>}
-                </span>
-              </div>
-            );
-          })}
-          {ended && (
-            <>
-              <span className="h-px w-6 bg-line-strong" />
-              <span className="rounded-md bg-ok-soft px-2 py-1 text-[12px] font-medium text-ok">
-                {inv.status} {fmtTime(inv.completedAt!)}
-              </span>
-            </>
-          )}
-          <span className="ml-auto">
-            <AgentWorkingLine inv={inv} />
-          </span>
+      <AttentionBanner level={inv.attention}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-ink-3">
+          <StatusBadge kind="attention" value={inv.attention} size="md" />
+          <span className="font-medium text-ink-2">{inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}</span>
+          <span>{watches.map((w) => w!.name).join(' + ')}</span>
+          <Mono className="text-ink-3">{inv.id}</Mono>
         </div>
-      </Card>
+        <h1 className="mt-3 text-[26px] leading-tight font-semibold tracking-[-0.02em] sm:text-[30px]">{headlineOf(inv)}</h1>
+        {reading && (
+          <div className="mt-2">
+            <MetricValue baseline={reading.baseline} current={reading.current} change={`${reading.change} vs baseline`} size="lg" />
+          </div>
+        )}
+        <dl className="num mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[12px]">
+          {[
+            ['Began', inv.signals[0].onsetAt],
+            ['Detected', at('DETECTED')],
+            ['Investigated', at('INVESTIGATING')],
+            ['Confirmed', at('CONFIRMED')],
+            [inv.status === 'RESOLVED' ? 'Resolved' : inv.status === 'DISMISSED' ? 'Dismissed' : '', inv.completedAt],
+          ]
+            .filter(([k, v]) => k && v)
+            .map(([k, v]) => (
+              <div key={k} className="flex items-baseline gap-1.5">
+                <dt className="text-ink-3">{k}</dt>
+                <dd className="font-mono font-medium text-ink">{fmtTime(v!)} UTC</dd>
+              </div>
+            ))}
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-3">Investigation confidence</dt>
+            <dd className="font-medium text-ink capitalize" title="Confidence that the problem is real — not that any explanation is the cause.">
+              {band}
+            </dd>
+          </div>
+        </dl>
+      </AttentionBanner>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="min-w-0 space-y-6">
-          <InvestigationSummary inv={inv} />
-          {/* Observed / Inferred / Unknown */}
+      {/* The three questions a PM asks first. One surface, not three cards. */}
+      <section aria-label="Summary" className="grid overflow-hidden rounded-xl border border-line bg-surface md:grid-cols-3 md:divide-x md:divide-line max-md:divide-y max-md:divide-line">
+        <div className="p-4">
+          <div className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">What changed</div>
+          <p className="mt-1.5 text-[14px] font-semibold text-ink">
+            {inv.signals[0].label} {inv.signals[0].magnitude}
+          </p>
+          <p className="mt-1 text-[12.5px] text-ink-2">
+            since {fmtTime(inv.signals[0].onsetAt)} UTC{inv.signals.length > 1 ? ` · ${inv.signals.length - 1} related signal${inv.signals.length > 2 ? 's' : ''}` : ''}
+          </p>
+        </div>
+        <div className="p-4">
+          <div className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Why it matters</div>
+          <p className="mt-1.5 text-[13px] text-ink">{inv.attentionReason}</p>
+          <p className="mt-1 text-[12.5px] text-ink-2">{attentionRoute(inv.attention, owner?.notificationPolicy.interruptAt)}</p>
+        </div>
+        <div className="p-4">
+          <div className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">What Jagr checked</div>
+          <p className="num mt-1.5 text-[14px] font-semibold text-ink">
+            {calls.length} tool calls · {checked.length} source{checked.length === 1 ? '' : 's'}
+          </p>
+          <p className="mt-1 flex flex-wrap gap-x-2 text-[12.5px] text-ink-2">
+            {checked.map((p) => (
+              <ProviderName key={p} provider={p} short />
+            ))}
+            {gaps.length > 0 && <span className="text-high">· {gaps.length} not checked</span>}
+          </p>
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-8">
           <section>
-            <SectionTitle hint="Jagr keeps what it saw, what it concluded from that, and what it doesn't know strictly apart.">Observed · Inferred · Unknown</SectionTitle>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Column icon={Eye} title="Observed" tone="ink" items={inv.observed} hint="Facts from the sources" />
-              <Column icon={Search} title="Inferred" tone="accent" items={inv.inferred} hint="Jagr's reading of the facts" />
-              <Column icon={HelpCircle} title="Unknown" tone="high" items={inv.unknowns} hint="Not established or not checked" />
+            <SectionHeader title="How it unfolded" hint="The signal, then each piece of evidence Jagr found, in the order it happened." />
+            <div className="rounded-xl border border-line bg-surface px-4 py-5">
+              <InvestigationTimeline entries={timelineOf(inv)} />
             </div>
           </section>
 
           <section>
-            <SectionTitle>Likely explanation</SectionTitle>
-            <Card>
-              <p className="text-[14.5px] leading-relaxed">{inv.likelyExplanation}</p>
-              <div className="mt-3 rounded-lg bg-subtle px-3 py-2 text-[13px] text-ink-2">
-                <span className="font-medium text-ink">Uncertainty:</span> {inv.uncertainty}
-              </div>
-            </Card>
+            <SectionHeader title="Hypotheses" hint="Every explanation Jagr kept open. Strength is how much independent evidence lines up — not the probability it is the cause." />
+            <HypothesisList hypotheses={inv.agentHypotheses} evidence={inv.evidence} />
+          </section>
+
+          <div className="lg:hidden">{decision}</div>
+
+          <section>
+            <SectionHeader title="Observed · Inferred · Unknown" hint="What Jagr saw, what it concluded from that, and what it doesn't know — kept strictly apart." />
+            <div className="grid overflow-hidden rounded-xl border border-line bg-surface md:grid-cols-3 md:divide-x md:divide-line max-md:divide-y max-md:divide-line">
+              {(
+                [
+                  ['Observed', 'Facts from the sources', inv.observed, 'text-ink'],
+                  ['Inferred', "Jagr's reading of the facts", inv.inferred, 'text-accent'],
+                  ['Unknown', 'Not established or not checked', inv.unknowns, 'text-high'],
+                ] as const
+              ).map(([title, hint, items, tone]) => (
+                <div key={title} className="p-4">
+                  <div className={cx('text-[12.5px] font-semibold', tone)}>{title}</div>
+                  <div className="text-[11.5px] text-ink-3">{hint}</div>
+                  <ul className="mt-2.5 space-y-2 text-[12.5px] leading-snug text-ink-2">
+                    {items.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </section>
 
           <section>
-            <SectionTitle hint="Every explanation Jagr kept open, with the evidence for and against it. None is presented as the cause.">Hypotheses</SectionTitle>
-            <HypothesisCards hypotheses={inv.agentHypotheses} evidence={inv.evidence} />
+            <SectionHeader title="Evidence" count={inv.evidence.length} hint="Each item shows its source, how it reached Jagr, and when. Open it to see the record." />
+            <div className="divide-y divide-line rounded-xl border border-line bg-surface px-4">
+              {inv.evidence.map((e) => (
+                <EvidenceItem key={e.id} evidence={e} source={<ProviderName provider={e.provider} short />} state={stateOf(e.provider)} action={e.link ? <SourceLinkButton link={e.link} compact /> : undefined} />
+              ))}
+            </div>
           </section>
 
           {actions.length > 0 && (
             <section id="actions">
-              <SectionTitle hint="Risk decides autonomy: LOW Jagr does · MEDIUM Jagr recommends · HIGH prepared + notify · CRITICAL approval.">Actions</SectionTitle>
-              <Card padded={false} className="overflow-hidden">
+              <SectionHeader title="Actions" hint="Risk decides autonomy — LOW: Jagr does it · MEDIUM: Jagr recommends · HIGH: prepared, waits for you · CRITICAL: approval required." />
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
                 {actions.map((a) => (
                   <ActionRow key={a.id} action={a} onDo={a.kind === 'create_jira_task' || a.kind === 'create_jira_incident' ? fileTask : undefined} />
                 ))}
-              </Card>
+              </div>
               {filed && (
                 <Link to={`/tasks?open=${filed}`} className="mt-2 inline-block text-[12.5px] font-medium text-accent hover:underline">
                   Task {filed} filed in the simulated tracker — view in Tasks
@@ -184,164 +293,42 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
           )}
 
           <section id="trace">
-            <SectionTitle hint="Signal → planner proposes → policy validates → tool call → evidence → hypotheses → stop → attention → action. Every pass, every call.">Agent trace</SectionTitle>
-            <div className="mb-2">
+            <SectionHeader title="Agent trace" hint="Every planner decision, validator verdict, tool call and result — recorded as Jagr worked." />
+            <div className="mb-3">
               <PlannerModeLine info={state.result?.planner} />
             </div>
-            <AgentTraceTimeline steps={trace} connections={state.result?.connections ?? state.connections} />
+            <AgentTraceTimeline steps={trace} connections={connections} />
           </section>
 
-          <section>
-            <SectionTitle hint="Each item links to the record it came from.">Evidence across sources</SectionTitle>
-            <Card padded={false} className="overflow-hidden">
-              {inv.evidence.map((e) => (
-                <div key={e.id} className="flex flex-wrap items-start gap-3 border-b border-line px-4 py-3 last:border-b-0">
-                  <span
-                    className={cx(
-                      'mt-1.5 size-2 shrink-0 rounded-full',
-                      e.direction === 'degraded' ? 'bg-crit' : e.direction === 'change' ? 'bg-accent' : e.direction === 'gap' ? 'bg-high' : 'bg-ok',
-                    )}
-                    title={e.direction}
-                  />
-                  <span className="min-w-0 flex-1 text-[13px]">
-                    {e.statement}
-                    {/* Source trust: which source, how it got here, when. */}
-                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-3">
-                      <ProviderName provider={e.provider} short />
-                      <SourceStateTag state={(state.result?.connections ?? state.connections).find((c) => c.provider === e.provider)?.state} />
-                      {e.onsetAt && <span className="font-mono">{fmtTime(e.onsetAt)} UTC</span>}
-                      <span>· {e.direction === 'gap' ? 'source gap' : e.direction === 'change' ? 'change' : e.direction}</span>
-                    </span>
-                  </span>
-                  {e.link && <SourceLinkButton link={e.link} compact />}
+          <Details summary={<span>Notification, run history &amp; deduplication <span className="font-normal text-ink-3">· {emails.length ? '1 email sent' : 'no email'} · {inv.runs.length} checks merged</span></span>}>
+            <div className="space-y-5">
+              {emails.length ? (
+                emails.map((e) => <EmailPreview key={e.id} email={e} />)
+              ) : (
+                <p className="text-[13px] text-ink-2">No email — {inv.attention === 'LOW' ? 'a fluctuation is not worth an interruption.' : `${inv.attention} findings go to the morning brief (this watch interrupts at ${owner?.notificationPolicy.interruptAt}).`}</p>
+              )}
+              <div>
+                <div className="mb-2 text-[12px] font-medium text-ink-2">{inv.runs.length} scheduled checks were merged into this one investigation instead of opening duplicates.</div>
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
+                  {inv.runs.map((r, i) => (
+                    <div key={i} className="grid grid-cols-[52px_1fr] gap-3 border-b border-line px-3 py-1.5 text-[12px] last:border-b-0">
+                      <span className="num font-mono text-ink-3">{fmtTime(r.at)}</span>
+                      <span className={r.watchId !== inv.watchId ? 'text-accent' : r.anomalous ? 'text-ink-2' : 'text-ink-3'}>{r.note}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </Card>
-          </section>
-
-          <section>
-            <SectionTitle hint={`${inv.runs.length} scheduled checks were merged into this one investigation instead of opening duplicates.`}>Run history &amp; deduplication</SectionTitle>
-            <Card padded={false} className="max-h-72 overflow-y-auto">
-              {inv.runs.map((r, i) => (
-                <div key={i} className="grid grid-cols-[52px_1fr] gap-3 border-b border-line px-4 py-2 text-[12.5px] last:border-b-0">
-                  <span className="tabular font-mono text-ink-3">{fmtTime(r.at)}</span>
-                  <span className={r.watchId !== inv.watchId ? 'text-accent' : r.anomalous ? '' : 'text-ink-3'}>{r.note}</span>
-                </div>
-              ))}
-            </Card>
-          </section>
+              </div>
+              <p className="text-[12px] text-ink-3">
+                Dedupe key <Mono>{inv.dedupeKey}</Mono>
+              </p>
+            </div>
+          </Details>
         </div>
 
-        <aside className="space-y-6">
-          <AttentionDecision inv={inv} interruptAt={owner?.notificationPolicy.interruptAt} />
-          <Card>
-            <Eyebrow className="mb-2">Recommended next step</Eyebrow>
-            <p className="text-[14px] font-medium">{inv.recommendedNextStep}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {inv.sourceLinks.slice(0, 6).map((l) => (
-                <SourceLinkButton key={l.href} link={l} compact />
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-1.5 border-t border-line pt-3 text-[12px] text-ink-3">
-              <Lock size={11} /> Rollbacks, pricing, refunds and customer messages need human approval — Jagr won’t do them.
-            </div>
-          </Card>
-
-          <Card>
-            <Eyebrow className="mb-2">Correlated sources</Eyebrow>
-            <ul className="space-y-1.5 text-[13px]">
-              {Object.keys(PROVIDERS)
-                .filter((p) => p !== 'email')
-                .map((p) => {
-                  const hit = inv.correlatedProviders.includes(p as never);
-                  const gap = inv.evidence.some((e) => e.provider === p && e.direction === 'gap');
-                  const out = !owner?.sources.includes(p as never);
-                  return (
-                    <li key={p} className="flex items-center justify-between gap-2">
-                      <ProviderName provider={p as never} />
-                      <span className={cx('text-[12px]', hit ? 'font-medium text-crit' : gap ? 'text-high' : 'text-ink-3')}>{hit ? 'Degraded' : gap ? 'Unavailable' : out ? 'Not in watch' : 'No change'}</span>
-                    </li>
-                  );
-                })}
-            </ul>
-            {inv.releaseAssociation && (
-              <p className="mt-3 border-t border-line pt-3 text-[12.5px] text-ink-2">
-                Release <span className="font-medium text-ink">{inv.releaseAssociation.version}</span> shipped {inv.releaseAssociation.minutesBeforeOnset} min before onset — temporal association only.
-              </p>
-            )}
-          </Card>
-
-          <section>
-            <Eyebrow className="mb-2">{emails.length ? 'Email sent' : 'Notification'}</Eyebrow>
-            {emails.length ? (
-              emails.map((e) => <EmailPreview key={e.id} email={e} />)
-            ) : (
-              <Card>
-                <p className="text-[13px] text-ink-2">
-                  No email — {inv.attention === 'LOW' ? 'a fluctuation is not worth an interruption.' : `${inv.attention} findings go to the morning brief (this watch interrupts at ${owner?.notificationPolicy.interruptAt}).`}
-                </p>
-              </Card>
-            )}
-          </section>
-          <p className="text-[12px] text-ink-3">
-            Area: {AREA_LABEL[inv.area]} · dedupe key <Mono>{inv.dedupeKey}</Mono>
-          </p>
+        <aside className="hidden lg:block">
+          <div className="sticky top-20">{decision}</div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function Column({ icon: Icon, title, items, hint, tone }: { icon: typeof Eye; title: string; items: string[]; hint: string; tone: 'ink' | 'accent' | 'high' }) {
-  return (
-    <Card>
-      <div className={cx('flex items-center gap-1.5 text-[13px] font-semibold', tone === 'accent' ? 'text-accent' : tone === 'high' ? 'text-high' : 'text-ink')}>
-        <Icon size={14} /> {title}
-      </div>
-      <div className="mb-2 text-[11.5px] text-ink-3">{hint}</div>
-      <ul className="space-y-2 text-[12.5px] leading-snug">
-        {items.map((x) => (
-          <li key={x}>{x}</li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-/** The three questions a PM asks first — answered from the investigation, not a generated summary. */
-function InvestigationSummary({ inv }: { inv: WatchInvestigation }) {
-  const lead = inv.signals[0];
-  const calls = inv.trace.filter((s) => s.kind === 'tool_call');
-  const checked = [...new Set(calls.map((s) => s.source).filter((p): p is NonNullable<typeof p> => !!p))];
-  const gaps = inv.evidence.filter((e) => e.direction === 'gap');
-  return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <Card>
-        <Eyebrow className="mb-1">What changed</Eyebrow>
-        <p className="text-[14px] font-semibold">
-          {lead.label} {lead.magnitude}
-        </p>
-        <p className="mt-1 text-[12.5px] text-ink-2">since {fmtTime(lead.onsetAt)} UTC{inv.signals.length > 1 ? ` · ${inv.signals.length - 1} related signal${inv.signals.length > 2 ? 's' : ''}` : ''}</p>
-      </Card>
-      <Card>
-        <Eyebrow className="mb-1">Why it matters</Eyebrow>
-        <p className="text-[14px] font-semibold">
-          <AttentionBadge level={inv.attention} />
-        </p>
-        <p className="mt-1 text-[12.5px] text-ink-2">{inv.attentionReason}</p>
-      </Card>
-      <Card>
-        <Eyebrow className="mb-1">What Jagr checked</Eyebrow>
-        <p className="text-[14px] font-semibold">
-          {calls.length} tool calls · {checked.length} source{checked.length === 1 ? '' : 's'}
-        </p>
-        <p className="mt-1 flex flex-wrap gap-x-2 text-[12.5px] text-ink-2">
-          {checked.map((p) => (
-            <ProviderName key={p} provider={p} short />
-          ))}
-          {gaps.length > 0 && <span className="text-high">· {gaps.length} gap{gaps.length === 1 ? '' : 's'} stated</span>}
-        </p>
-      </Card>
     </div>
   );
 }

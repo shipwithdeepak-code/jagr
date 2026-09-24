@@ -11,6 +11,7 @@ import { SeriesChart } from '@/components/charts';
 import { Badge, Button, Card, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { ImportedSources } from '@/components/imports';
+import { SourceCoverage } from '@/components/primitives';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 
 const OPS: Record<string, string> = { metrics: 'getMetrics()', issues: 'getIssues()', releases: 'getReleases()', reviews: 'getReviews()', events: 'getEvents()', changes: 'getChanges()', send_email: 'send()' };
@@ -58,14 +59,7 @@ function SampleSources() {
           <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. A real Jira Cloud connector exists behind the same interface (see Jira). OAuth and credentials are not implemented yet; the adapters are shaped so real connectors drop in without changing the engine. You can simulate an outage to see how Jagr reports gaps instead of guessing.
         </div>
       </div>
-      <div className="mb-5 flex flex-wrap gap-4 text-[12px] text-ink-3">
-        {(['connected', 'simulated', 'unavailable', 'error'] as ConnectionState[]).map((s) => (
-          <span key={s} className="inline-flex items-center gap-1.5">
-            <ConnectionBadge state={s} />
-            {s === 'connected' ? 'live credentials' : s === 'simulated' ? 'fixture data, clearly labelled' : s === 'unavailable' ? 'cannot be reached — recorded as a gap' : 'responded with an error — recorded as a gap'}
-          </span>
-        ))}
-      </div>
+      <SourceCoverage connections={state.connections} />
       <div className="grid gap-4 md:grid-cols-2">
         {state.connections.map((c) => {
           const meta = PROVIDERS[c.provider];

@@ -86,6 +86,12 @@ export interface Watch {
   schedule: WatchSchedule;
   timezone: string;
   severityThreshold: AttentionLevel;
+  /**
+   * Optional per-metric detection thresholds, keyed by metric id (e.g. 'ga4.checkout_conversion').
+   * Same unit as the metric's default: % change for relative metrics, points for absolute ones,
+   * always compared against the metric's baseline. Missing = the metric's default threshold.
+   */
+  thresholds?: Partial<Record<string, number>>;
   notificationPolicy: NotificationPolicy;
   status: 'active' | 'paused';
   createdAt: ISO;

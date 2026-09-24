@@ -187,13 +187,17 @@ export async function runInvestigation(args: {
   investigationId?: string;
   /** Source display names for this run (imported data renames channels). */
   labels?: ProviderLabels;
+  /** Called with each trace step as it is recorded (live progress). */
+  onStep?: (step: TraceStep) => void;
 }): Promise<InvestigationOutput> {
   const P = labelOf(args.labels);
   const { toolbox: tb, watch, primary, area, onsetAt, at, pass } = args;
   const trace: TraceStep[] = [];
   let tick = 0;
   const step = (s: Omit<TraceStep, 'id' | 'at' | 'pass'>) => {
-    trace.push({ id: `${at}-${pass}-${trace.length}`, at: addSeconds(at, tick), pass, ...s });
+    const recorded: TraceStep = { id: `${at}-${pass}-${trace.length}`, at: addSeconds(at, tick), pass, ...s };
+    trace.push(recorded);
+    args.onStep?.(recorded);
     tick += s.kind === 'tool_call' ? 3 : 1;
   };
 
@@ -291,14 +295,14 @@ export async function runInvestigation(args: {
           statement: `${P('jira').short}: ${product.length} new ${areaLabel} ${product.length === 1 ? 'issue' : 'issues'} since ${fmtTime(product[0].createdAt)} (${product.slice(0, 4).map((i) => i.id).join(', ')}${product.length > 4 ? ', …' : ''}).`,
           onsetAt: product[0].createdAt,
           refs: product.map((i) => ({ provider: 'jira', kind: 'issue', id: i.id })),
-          link: link({ provider: 'jira', kind: 'issue', id: product[0].id }, 'Open Jira'),
+          link: link({ provider: 'jira', kind: 'issue', id: product[0].id }, `Open ${P('jira').short}`),
         },
         'issues',
       );
     }
     if (ext) {
       add(
-        { id: `jira:external:${ext.id}`, provider: 'jira', direction: 'change', statement: `${P('jira').short}: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [{ provider: 'jira', kind: 'issue', id: ext.id }], link: link({ provider: 'jira', kind: 'issue', id: ext.id }, 'Open Jira') },
+        { id: `jira:external:${ext.id}`, provider: 'jira', direction: 'change', statement: `${P('jira').short}: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [{ provider: 'jira', kind: 'issue', id: ext.id }], link: link({ provider: 'jira', kind: 'issue', id: ext.id }, `Open ${P('jira').short}`) },
         'external_issue',
       );
     }

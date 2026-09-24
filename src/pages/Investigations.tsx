@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ChevronRight, CircleAlert, GitPullRequest, Telescope } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, CircleAlert, GitPullRequest, RefreshCw, Telescope } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Action, Evidence, Investigation, OvernightRun, TimelineEntry } from '@/domain/types';
@@ -12,6 +12,7 @@ import { SeriesChart, type ChartMarker } from '@/components/charts';
 import { EvidenceGraph } from '@/components/EvidenceGraph';
 import {
   Badge,
+  Button,
   Card,
   ConfidenceMeter,
   cx,
@@ -34,6 +35,7 @@ import { useProduct } from '@/state/productContext';
 import { confidenceBand } from '@/product/engine/monitor';
 import { AttentionBadge, InvestigationStateBadge } from '@/components/product';
 import { AuditTable } from './Trace';
+import { EmptyPanel, LoadingState } from '@/components/primitives';
 
 export function InvestigationsPage() {
   const { state } = useWorkspace();
@@ -51,7 +53,7 @@ export function InvestigationsPage() {
         actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'dismissed', label: 'Dismissed' }, { value: 'all', label: 'All' }]} />}
       />
 
-      <SectionTitle hint="From the watches you configured, on simulated Jira, GA4, App Store and Google Play data.">From your watches</SectionTitle>
+      <SectionTitle hint={product.mode === 'imported' ? 'From the watches you configured, on the data you imported into this browser.' : 'From the watches you configured, on simulated Jira, GA4, App Store and Google Play data.'}>From your watches</SectionTitle>
       <Card padded={false} className="mb-10 overflow-hidden">
         <div className="hidden grid-cols-[96px_1fr_130px_150px_100px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
           <span>Attention</span>
@@ -61,7 +63,36 @@ export function InvestigationsPage() {
           <span>Opened</span>
           <span />
         </div>
-        {watchInvs.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-ink-3">{product.running ? 'Running monitoring…' : 'Nothing here.'}</div>}
+        {watchInvs.length === 0 && (
+          <div className="p-4">
+            {product.running ? (
+              <LoadingState label="Monitoring is running — investigations appear here as they open." />
+            ) : !product.state.result ? (
+              <EmptyPanel
+                icon={Telescope}
+                title="No investigations yet"
+                why={product.state.watches.length ? 'Jagr opens an investigation when a watch sees a meaningful change. Run monitoring to check your watches now.' : 'Investigations come from watches. Create a watch, then run monitoring.'}
+                action={
+                  product.state.watches.length ? (
+                    <Button variant="primary" icon={RefreshCw} onClick={() => void product.runMonitoring()} disabled={!product.mode}>
+                      Run monitoring
+                    </Button>
+                  ) : (
+                    <Link to="/watches?new=1" className="inline-flex h-8.5 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas">
+                      Create watch
+                    </Link>
+                  )
+                }
+              />
+            ) : (
+              <EmptyPanel
+                icon={Telescope}
+                title={tab === 'dismissed' ? 'Nothing dismissed' : 'Nothing needs investigating'}
+                why={tab === 'dismissed' ? 'Changes that did not persist are dismissed automatically and listed here.' : 'Your watches ran and found no meaningful changes. Quiet watches are reported in the morning brief.'}
+              />
+            )}
+          </div>
+        )}
         {watchInvs.map((inv) => (
           <Link key={inv.id} to={inv.jagrPath} className="grid grid-cols-1 gap-2 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-subtle md:grid-cols-[96px_1fr_130px_150px_100px_24px] md:items-center md:gap-4">
             <span>

@@ -24,7 +24,7 @@ import type { World } from '../integrations/world';
 import { planJobs } from '../scheduler';
 import { ATTENTION_RANK, assessAttention } from './attention';
 import { composeBrief } from './brief';
-import { areasPresent, fmtMagnitude, readIssues, readMetric, readReviews, type DetectionStatus } from './detect';
+import { areasPresent, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect';
 import { reason } from './investigate';
 import { createToolbox } from '../agent/tools';
 import { checkRolloutBeforeAction, runInvestigation } from '../agent/investigator';
@@ -48,7 +48,18 @@ export interface MonitorOptions {
   window?: { start: string; end: string };
   appBaseUrl?: string;
   recipient?: string;
+  /**
+   * Live progress for the UI: what the run is actually doing, as it happens. Every `step` is the
+   * same TraceStep that lands in the investigation's trace — nothing is emitted that did not run.
+   * A throwing listener never affects the run.
+   */
+  onEvent?: (e: RunEvent) => void;
 }
+
+export type RunEvent =
+  | { type: 'job'; index: number; total: number; watchName: string; at: string }
+  | { type: 'investigation'; id: string; title: string; firstPass: boolean }
+  | { type: 'step'; investigationId: string; step: TraceStep };
 
 interface Finding {
   signal: DetectedSignal;
@@ -77,8 +88,9 @@ async function observe(reg: AdapterRegistry, watch: Watch, at: string, worldStar
     const adapter = reg.sources[provider];
     try {
       if (meta.kind === 'metric') {
-        const [series] = await adapter.getMetrics([sig.key], { start: worldStart, end: at });
-        if (!series) continue;
+        const [raw] = await adapter.getMetrics([sig.key], { start: worldStart, end: at });
+        if (!raw) continue;
+        const series = withWatchThreshold(raw, watch.thresholds);
         const r = readMetric(series);
         if (r.status === 'normal') continue;
         findings.push({
@@ -167,7 +179,16 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
   const log: SchedulerLogEntry[] = [];
   let lastBrief = window.start;
 
-  for (const job of planJobs(o.watches, window, o.brief)) {
+  const emit = (e: RunEvent) => {
+    try {
+      o.onEvent?.(e);
+    } catch {
+      /* progress is best-effort */
+    }
+  };
+  const jobs = planJobs(o.watches, window, o.brief);
+  for (const [index, job] of jobs.entries()) {
+    if (job.type !== 'morning_brief') emit({ type: 'job', index, total: jobs.length, watchName: o.watches.find((w) => w.id === job.watchId)?.name ?? '', at: job.at });
     if (job.type === 'morning_brief') {
       const brief = composeBrief({ at: job.at, since: lastBrief, watches: o.watches, investigations, emails, log });
       briefs.push(brief);
@@ -294,7 +315,11 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         : reopened
           ? 'degraded again after recovering — reopened'
           : `scheduled re-check by ${watch.name}`;
+      const invId = inv.id;
+      // The investigation's title is written after this pass; name it by what was detected.
+      emit({ type: 'investigation', id: invId, title: inv.title || `${lead.label} ${lead.magnitude}`, firstPass });
       const out = await runInvestigation({
+        onStep: (step) => emit({ type: 'step', investigationId: invId, step }),
         toolbox: createToolbox(reg, watch, o.world.start),
         watch,
         primary: lead,
@@ -382,6 +407,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         });
         releases.push(...check.releases);
         out.trace.push(...check.steps);
+        for (const step of check.steps) emit({ type: 'step', investigationId: invId, step });
         out.toolCalls += check.steps.filter((x) => x.kind === 'tool_call').length;
       }
 
@@ -396,7 +422,9 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       if (firstPass || reopened || newSignal || newActions.length || before !== after) {
         inv.toolCalls += out.toolCalls;
         inv.stopReason = out.stopReason;
-        inv.trace.push(...out.trace, ...closingSteps(inv, out.trace, newActions, prevAttention !== inv.attention || firstPass, P));
+        const closing = closingSteps(inv, out.trace, newActions, prevAttention !== inv.attention || firstPass, P);
+        inv.trace.push(...out.trace, ...closing);
+        for (const step of closing) emit({ type: 'step', investigationId: invId, step });
       } else {
         const t0 = out.trace[0]?.at ?? at;
         inv.trace.push({ id: `${inv.id}-recheck-${at}`, at: t0, pass: maxPass(inv), kind: 'recheck', title: `Re-checked: ${lead.label} still ${lead.magnitude}`, detail: `${out.toolCalls} tool calls · no material change to evidence, explanations or attention.` });

@@ -8,6 +8,8 @@ import {
   Newspaper,
   RefreshCw,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Moon,
   Plug,
   Radar,
@@ -27,6 +29,7 @@ import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decis
 import { useProduct } from '@/state/productContext';
 import { ENVIRONMENT, EnvironmentContext, environmentForPath, taskEnvironment, initialEnvironment, readStoredEnvironment, storeEnvironment, type AppEnvironment } from '@/state/environment';
 import { Logo, LogoMark } from './Logo';
+import { RunProgressPanel } from './runProgress';
 import { RunPlayer } from './RunPlayer';
 import { ShellContext } from './shell';
 import { useToast } from './toast';
@@ -90,7 +93,7 @@ function PlannerSwitch() {
   const { plannerChoice, llmOption, setPlannerChoice, running } = useProduct();
   const value = plannerChoice === 'llm' && llmOption.available ? 'llm' : 'deterministic';
   return (
-    <label className="hidden items-center gap-1.5 text-[12px] text-ink-3 md:flex" title={llmOption.available ? 'Choose which planner investigates the simulated data. The policy validator, tools and approvals are the same either way.' : llmOption.reason}>
+    <label className="hidden items-center gap-1.5 text-[12px] text-ink-3 md:flex" title={llmOption.available ? 'Choose which planner investigates this workspace’s data. The policy validator, tools and approvals are the same either way.' : llmOption.reason}>
       Planner
       <select
         aria-label="Planner"
@@ -116,6 +119,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { theme, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Desktop sidebar can collapse to icons; a per-browser preference, like the theme.
+  const [collapsed, setCollapsedState] = useState(() => {
+    try {
+      return localStorage.getItem('jagr:sidebar') === 'collapsed';
+    } catch {
+      return false;
+    }
+  });
+  const setCollapsed = (v: boolean) => {
+    setCollapsedState(v);
+    try {
+      localStorage.setItem('jagr:sidebar', v ? 'collapsed' : 'expanded');
+    } catch {
+      /* preference only */
+    }
+  };
   const [player, setPlayer] = useState<{ run: OvernightRun; mode: 'demo' | 'quick' } | null>(null);
   const [confirmDemo, setConfirmDemo] = useState(false);
   const [running, setRunning] = useState(false);
@@ -143,21 +162,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: '/investigations', label: 'Investigations', icon: Telescope, count: watchFindings || undefined, alert: watchFindings > 0 },
     { to: '/watches', label: 'Watches', icon: Binoculars, count: product.state.watches.filter((w) => w.status === 'active').length || undefined },
     { to: '/sources', label: 'Sources', icon: Plug },
-    { to: '/briefs', label: 'Briefs', icon: Newspaper },
   ];
-  const secondary: NavItem[] = [
+  const workspaceNav: NavItem[] = [
+    { to: '/briefs', label: 'Briefs', icon: Newspaper },
     { to: '/tasks', label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
     { to: '/approvals', label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
+  ];
+  const system: NavItem[] = [
     { to: '/trace', label: 'Agent Trace', icon: ScrollText },
     { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/about', label: 'About this build', icon: BookOpen },
   ];
   const demo: NavItem[] = [
     { to: '/demo', label: 'Demo night', icon: Moon },
     { to: '/signals', label: 'Signals', icon: Activity },
-  ];
-  const footer: NavItem[] = [
-    { to: '/settings', label: 'Settings', icon: Settings },
-    { to: '/about', label: 'About this build', icon: BookOpen },
   ];
 
   const startRun = useCallback(async () => {
@@ -192,49 +211,50 @@ export function AppShell({ children }: { children: ReactNode }) {
     toast({ tone: b.counts.critical ? 'warning' : 'success', title: 'Morning brief ready', body: `${b.counts.critical} critical · ${b.counts.attention} need attention · ${b.counts.normal} normal` });
   };
 
-  const sidebar = (
-    <nav className="flex h-full flex-col gap-1 overflow-y-auto px-3 py-4" aria-label="Main">
-      <div className="mb-4 flex items-center justify-between px-2">
-        <Logo />
-        <button className="rounded-md p-1 text-ink-3 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+  const renderSidebar = (compact: boolean) => (
+    <nav className={cx('flex h-full flex-col gap-0.5 overflow-y-auto py-4', compact ? 'px-2' : 'px-3')} aria-label="Main">
+      <div className={cx('mb-4 flex items-center', compact ? 'justify-center' : 'justify-between px-2')}>
+        {compact ? <LogoMark /> : <Logo />}
+        <button className="interactive rounded-md p-1 text-ink-3 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
           <X size={16} />
         </button>
       </div>
-      <div className="mb-3 rounded-lg border border-line bg-surface px-2.5 py-2">
-        <div className="text-[12.5px] font-medium text-ink">Tempo · Product</div>
-        <div className="text-[11.5px] text-ink-3">{env === 'demo' ? 'Demo night · simulated replay' : product.mode === 'imported' ? 'Workspace · your data (browser-local)' : 'Workspace · sample data (simulated)'}</div>
-      </div>
+      {!compact && (
+        <div className="mb-3 px-2.5 text-[11.5px] leading-snug text-ink-3">
+          <span className="font-medium text-ink-2">Tempo · Product</span>
+          <br />
+          {env === 'demo' ? 'Demo night · simulated replay' : product.mode === 'imported' ? 'Your data · browser-local' : product.mode === 'sample' ? 'Sample data · simulated' : 'Not set up yet'}
+        </div>
+      )}
       {primary.map((it) => (
-        <NavRow key={it.to} item={it} />
+        <NavRow key={it.to} item={it} compact={compact} />
       ))}
-      <NavGroup label="Agent" />
-      {secondary.map((it) => (
-        <NavRow key={it.to} item={it} />
+      <NavGroup label="Workspace" compact={compact} />
+      {workspaceNav.map((it) => (
+        <NavRow key={it.to} item={it} compact={compact} />
       ))}
-      <NavGroup label="Demo night replay" />
+      <NavGroup label="System" compact={compact} />
+      {system.map((it) => (
+        <NavRow key={it.to} item={it} compact={compact} />
+      ))}
+      <NavGroup label="Demo night" compact={compact} />
       {demo.map((it) => (
-        <NavRow key={it.to} item={it} />
+        <NavRow key={it.to} item={it} compact={compact} />
       ))}
-      <div className="my-2 h-px bg-line" />
-      {footer.map((it) => (
-        <NavRow key={it.to} item={it} />
-      ))}
-      <div className="mt-auto flex flex-col gap-2 pt-4">
-        <button onClick={toggle} className="flex h-8 items-center gap-2 rounded-lg px-2.5 text-[13px] text-ink-2 hover:bg-subtle hover:text-ink" aria-label="Toggle theme">
+      <div className="mt-auto flex flex-col gap-0.5 pt-4">
+        <button onClick={toggle} title={compact ? (theme === 'dark' ? 'Light theme' : 'Dark theme') : undefined} className={cx('interactive flex h-8 items-center gap-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-subtle hover:text-ink', compact ? 'justify-center' : 'px-2.5')} aria-label="Toggle theme">
           {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+          {!compact && (theme === 'dark' ? 'Light theme' : 'Dark theme')}
         </button>
         <button
-          onClick={requestDemo}
-          className="group flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5 text-left shadow-card transition-colors hover:border-line-strong"
+          onClick={() => setCollapsed(!collapsed)}
+          className={cx('interactive hidden h-8 items-center gap-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-subtle hover:text-ink lg:flex', compact ? 'justify-center' : 'px-2.5')}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand sidebar' : undefined}
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink text-canvas">
-            <Radar size={15} />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-[13px] font-semibold text-ink">Demo night</span>
-            <span className="block truncate text-[11.5px] text-ink-3">Reset &amp; replay the scripted night · ~30s</span>
-          </span>
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          {!compact && 'Collapse'}
         </button>
       </div>
     </nav>
@@ -242,15 +262,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-canvas">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-canvas lg:block">{sidebar}</aside>
+      <aside className={cx('fixed inset-y-0 left-0 z-30 hidden border-r border-line bg-canvas transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block', collapsed ? 'w-16' : 'w-60')}>{renderSidebar(collapsed)}</aside>
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMenuOpen(false)} />
-          <aside className="animate-fade-up absolute inset-y-0 left-0 w-72 border-r border-line bg-canvas">{sidebar}</aside>
+          <aside className="animate-slide-in absolute inset-y-0 left-0 w-72 border-r border-line bg-canvas">{renderSidebar(false)}</aside>
         </div>
       )}
 
-      <div className="lg:pl-60">
+      <div className={cx('transition-[padding] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'lg:pl-16' : 'lg:pl-60')}>
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur sm:px-6">
           <button className="-ml-1 rounded-md p-1.5 text-ink-2 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu size={18} />
@@ -285,9 +305,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             {env === 'workspace' ? (
               <>
                 <PlannerSwitch />
+                {/* Overview owns its own Run button; before a workspace exists there is nothing to run. */}
+                {location.pathname !== '/' && product.mode && (
                 <Button
                   variant="primary"
                   icon={RefreshCw}
+                  aria-label="Run monitoring"
                   disabled={product.running || !product.mode || (product.mode === 'imported' && !product.state.watches.length)}
                   title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : undefined}
                   onClick={async () => {
@@ -302,8 +325,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                     );
                   }}
                 >
-                  {product.running ? 'Running…' : 'Run monitoring'}
+                  <span className="max-sm:sr-only">{product.running ? 'Running…' : 'Run monitoring'}</span>
                 </Button>
+                )}
               </>
             ) : (
               <>
@@ -316,6 +340,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
+          {env === 'workspace' && product.progress && (
+            <div className="mb-6">
+              <RunProgressPanel progress={product.progress} planner={product.plannerChoice === 'llm' && product.llmOption.available ? `AI planner · ${product.llmOption.label}` : 'Deterministic planner'} />
+            </div>
+          )}
           <ShellContext.Provider value={{ startRun: () => void startRun(), requestDemo, running }}>
             <EnvironmentContext.Provider value={{ environment: env }}>{children}</EnvironmentContext.Provider>
           </ShellContext.Provider>
@@ -345,28 +374,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function NavRow({ item }: { item: NavItem }) {
+function NavRow({ item, compact = false }: { item: NavItem; compact?: boolean }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
+      title={compact ? item.label : undefined}
+      aria-label={compact ? (item.count !== undefined ? `${item.label} (${item.count})` : item.label) : undefined}
       className={({ isActive }) =>
         cx(
-          'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors',
+          'interactive relative flex h-8 items-center gap-2.5 rounded-lg text-[13px] transition-colors',
+          compact ? 'justify-center' : 'px-2.5',
           isActive ? 'bg-surface font-medium text-ink shadow-card ring-1 ring-line' : 'text-ink-2 hover:bg-subtle hover:text-ink',
         )
       }
     >
       <Icon size={15} className="shrink-0" />
-      <span className="truncate">{item.label}</span>
-      {item.count !== undefined && (
+      {!compact && <span className="truncate">{item.label}</span>}
+      {compact && item.count !== undefined && <span aria-hidden className={cx('absolute top-1 right-1.5 size-1.5 rounded-full', item.alert ? 'bg-high' : 'bg-ink-3')} />}
+      {!compact && item.count !== undefined && (
         <span className={cx('tabular ml-auto rounded-md px-1.5 text-[11px] font-medium', item.alert ? 'bg-high-soft text-high' : 'text-ink-3')}>{item.count}</span>
       )}
     </NavLink>
   );
 }
 
-function NavGroup({ label }: { label: string }) {
+function NavGroup({ label, compact = false }: { label: string; compact?: boolean }) {
+  if (compact) return <div className="mx-2 mt-3 mb-2 border-t border-line" role="separator" aria-label={label} />;
   return <div className="mt-4 mb-1 px-2.5 text-[10.5px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{label}</div>;
 }
