@@ -185,4 +185,13 @@ describe('single-tenant bootstrap', () => {
     expect(watch.sources).toEqual(['amplitude', 'jira']);
     expect((await app(req('DELETE', `/api/workspaces/${OWNER_WORKSPACE_ID}/watches/${watch.id}`, session))).status).toBe(200);
   });
+
+  it('checking a connection without a live connector reports it honestly', async () => {
+    const { app } = await boot();
+    const { session } = await signIn(app, 'code-owner');
+    const r = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-intercom/check`, session));
+    expect(r.status).toBe(200);
+    expect((r.body as { check: { state: string; detail: string } }).check).toMatchObject({ state: 'error', detail: expect.stringMatching(/No connector/) });
+    expect((await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/nope/check`, session))).status).toBe(404);
+  });
 });

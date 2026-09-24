@@ -4,6 +4,8 @@ import type { HttpClient } from '../ports/http';
 import type { JobQueue, LeasedJob } from '../ports/jobs';
 import type { AuditEntry, Connection, Repositories, Transactor, Workspace } from '../ports/persistence';
 import type { SecretPayload, SecretStore } from '../ports/secrets';
+import { SecretNotFound } from '../ports/secrets';
+import type { ConnectorCheck } from '../integrations/connectors/types';
 import type { ImportedDataset } from '../imports/schemas';
 import type { RegisteredSource } from '../roles/types';
 import { SourceRegistry } from '../roles/registry';
@@ -24,13 +26,19 @@ import type { InvestigationPlanner } from '../agent/planner';
 /** Builds one source from a connection. Registered per connector provider ('amplitude', 'github', …). */
 export type ConnectorFactory = (conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }) => RegisteredSource;
 
+/** A registered connector: builds a source from a connection, and probes its credential. */
+export interface Connector {
+  build: ConnectorFactory;
+  check(conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }): Promise<ConnectorCheck>;
+}
+
 export interface MonitoringDeps {
   repos: Repositories;
   tx: Transactor;
   clock: Clock;
   secrets: SecretStore;
   http: HttpClient;
-  connectors: Record<string, ConnectorFactory>;
+  connectors: Record<string, Connector>;
   planner?: InvestigationPlanner;
   appBaseUrl?: string;
 }
@@ -59,12 +67,28 @@ export async function sourcesForRun(deps: MonitoringDeps, ws: Workspace, at: str
   const sources: RegisteredSource[] = [];
   const connections: SourceConnection[] = [];
   for (const c of conns) {
-    const factory = c.provider in deps.connectors ? deps.connectors[c.provider] : undefined;
-    const readable = !!factory && c.state !== 'needs_reconnect' && c.state !== 'not_configured';
-    const secret = readable && c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
-    if (readable && factory) sources.push(factory(c, { secret, http: deps.http, clock: deps.clock }));
-    const hasConnector = c.provider in deps.connectors;
-    connections.push(readable ? toSourceConnection(c) : { ...toSourceConnection(c), state: c.state === 'needs_reconnect' ? 'needs_reconnect' : 'not_configured', detail: hasConnector ? c.detail : `No connector for “${c.provider}” in this deployment.` });
+    // Channels (notification targets) are not evidence sources.
+    if (!c.roles.length) continue;
+    const connector = Object.prototype.hasOwnProperty.call(deps.connectors, c.provider) ? deps.connectors[c.provider] : undefined;
+    if (!connector) {
+      connections.push({ ...toSourceConnection(c), state: c.state === 'needs_reconnect' ? 'needs_reconnect' : 'not_configured', detail: `No connector for “${c.provider}” in this deployment.` });
+      continue;
+    }
+    if (c.state === 'needs_reconnect' || c.state === 'not_configured') {
+      connections.push(toSourceConnection(c));
+      continue;
+    }
+    // A connection that cannot be set up (missing credential, invalid config) is a gap for this run —
+    // one broken connection never stops the others.
+    try {
+      const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
+      const src = connector.build(c, { secret, http: deps.http, clock: deps.clock });
+      sources.push(src);
+      connections.push(src.connection);
+    } catch (e) {
+      const missing = e instanceof SecretNotFound;
+      connections.push({ ...toSourceConnection(c), state: missing ? 'needs_reconnect' : 'error', detail: missing ? 'The stored credential is missing; reconnect this source.' : (e as Error).message.slice(0, 300) });
+    }
   }
   // Live sources are read "as of" the run; a day of history gives detection its baseline window.
   const world: World = { id: `live-${ws.id}`, name: ws.name, start: new Date(Date.parse(at) - 24 * 3_600_000).toISOString(), end: at, metrics: [], issues: [], releases: [], reviews: [] };
@@ -153,4 +177,31 @@ export async function drainJobs(deps: MonitoringDeps & { queue: JobQueue }, opts
     }
   }
   return { done, failed };
+}
+
+/**
+ * Probe a connection's credential and record the outcome on the connection. A rejected credential
+ * marks it needs_reconnect (it will not be read until reconnected); an unreachable provider only
+ * records the error — an outage is not a configuration change.
+ */
+export async function checkConnection(deps: MonitoringDeps, workspaceId: string, connectionId: string): Promise<ConnectorCheck> {
+  const c = await deps.repos.connections.get(workspaceId, connectionId);
+  if (!c) throw new Error(`Connection ${connectionId} not found.`);
+  const connector = Object.prototype.hasOwnProperty.call(deps.connectors, c.provider) ? deps.connectors[c.provider] : undefined;
+  if (!connector) return { state: 'error', detail: `No connector for “${c.provider}” in this deployment.` };
+  let result: ConnectorCheck;
+  try {
+    const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
+    result = await connector.check(c, { secret, http: deps.http, clock: deps.clock });
+  } catch (e) {
+    if (!(e instanceof SecretNotFound)) throw e;
+    result = { state: 'needs_reconnect', detail: 'The stored credential is missing; reconnect this source.' };
+  }
+  const now = deps.clock.now();
+  const next: Connection =
+    result.state === 'unavailable'
+      ? { ...c, lastError: result.detail, updatedAt: now }
+      : { ...c, state: result.state, detail: result.detail, externalAccount: result.account ?? c.externalAccount, lastError: result.state === 'connected' ? undefined : result.detail, updatedAt: now };
+  await deps.repos.connections.save(workspaceId, next);
+  return result;
 }

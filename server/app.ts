@@ -5,7 +5,7 @@ import { decide } from '../src/product/agent/decisions';
 import { ApprovalRequiredError } from '../src/product/agent/actions';
 import { commitServerImport, exportServerWorkspace, planImport } from '../src/product/export/workspace';
 import { schedulerTick } from '../src/product/app/scheduler';
-import { drainJobs, runWorkspaceNow } from '../src/product/app/monitoring';
+import { checkConnection, drainJobs, runWorkspaceNow } from '../src/product/app/monitoring';
 import type { Runtime } from './runtime';
 import type { ApiRequest, ApiResponse } from './http/types';
 import { json, redirect } from './http/types';
@@ -115,6 +115,13 @@ export function createApp(rt: Runtime) {
       await rt.repos.watches.remove(id, sub);
       await audit(id, p, 'watch.removed', sub);
       return json(200, { ok: true });
+    }
+    // Probe a connection's credential now; the outcome is recorded on the connection.
+    if (section === 'connections' && sub && rest[2] === 'check' && req.method === 'POST') {
+      if (!(await rt.repos.connections.get(id, sub))) return json(404, { error: 'Connection not found.' });
+      const result = await checkConnection(rt, id, sub);
+      await audit(id, p, 'connection.checked', sub, result.state);
+      return json(200, { check: result });
     }
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {

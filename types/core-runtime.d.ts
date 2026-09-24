@@ -10,9 +10,11 @@ declare function clearTimeout(id: unknown): void;
 declare class URL {
   constructor(url: string, base?: string);
   readonly host: string;
+  readonly hostname: string;
+  readonly protocol: string;
   readonly href: string;
   readonly pathname: string;
-  readonly searchParams: { get(name: string): string | null; set(name: string, value: string): void };
+  readonly searchParams: { get(name: string): string | null; set(name: string, value: string): void; append(name: string, value: string): void };
   toString(): string;
 }
 
