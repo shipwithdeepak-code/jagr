@@ -90,7 +90,7 @@ export const OWNER_CONNECTORS: OwnerConnectorSpec[] = [
     roles: ['feedback'],
     required: ['JAGR_INTERCOM_TOKEN'],
     secret: (env) => ({ kind: 'api_key', fields: { token: env.JAGR_INTERCOM_TOKEN! } }),
-    config: (env) => ({ region: env.JAGR_INTERCOM_REGION === 'eu' ? 'eu' : env.JAGR_INTERCOM_REGION === 'au' ? 'au' : 'us' }),
+    config: (env) => ({ region: env.JAGR_INTERCOM_REGION === 'eu' ? 'eu' : env.JAGR_INTERCOM_REGION === 'au' ? 'au' : 'us', ...(env.JAGR_INTERCOM_APP_ID ? { appId: env.JAGR_INTERCOM_APP_ID } : {}) }),
   },
   {
     source: 'slack',

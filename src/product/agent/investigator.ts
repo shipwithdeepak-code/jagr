@@ -408,8 +408,8 @@ export async function runInvestigation(args: {
     if (o.stale) staleGap(source, o.stale.freshAsOf);
     if (!o.data.length && o.stale) return { ok: true, result: `No negative feedback about ${areaLabel} up to ${fmtTime(o.stale.freshAsOf)}${staleNote(source, o)} — absence after that is unknown`, refs: [] };
     if (!o.data.length) {
-      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: 'getFeedback', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
-      return { ok: true, result: `No negative reviews about ${areaLabel}`, refs: [] };
+      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no negative feedback mentions ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: 'getFeedback', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
+      return { ok: true, result: `No negative feedback about ${areaLabel}`, refs: [] };
     }
     g.feedback.push(...o.data);
     const refs = o.data.map((r) => r.ref);
@@ -425,7 +425,7 @@ export async function runInvestigation(args: {
       },
       'reviews',
     );
-    return { ok: true, result: `${o.data.length} negative ${o.data.length === 1 ? 'review' : 'reviews'}: “${o.data[0].title}”${o.data.length > 1 ? ' …' : ''}`, refs };
+    return { ok: true, result: `${o.data.length} ${feedbackNoun(o.data).short}: “${o.data[0].title}”${o.data.length > 1 ? ' …' : ''}`, refs };
   };
 
   // ── Hypotheses to keep open, by kind of signal ─────────────
@@ -488,7 +488,7 @@ export async function runInvestigation(args: {
   }
   for (const source of src.withRole('feedback')) {
     if (primaryMeta.kind === 'feedback' && primary.provider === source) continue;
-    addCandidate({ key: `feedback:${source}`, tool: 'getFeedback', source, noun: 'reviews', input: `1–2★ reviews mentioning ${areaLabel} since ${fmtTime(since)}`, tests: ['shared_product_issue', 'customer_only'], why: `Are ${P(source).short} customers complaining about ${areaLabel}?`, exec: async () => reviewsStep(await tb.getFeedback({ since, until: at, area, source }), source) });
+    addCandidate({ key: `feedback:${source}`, tool: 'getFeedback', source, noun: 'feedback', input: `negative feedback mentioning ${areaLabel} since ${fmtTime(since)}`, tests: ['shared_product_issue', 'customer_only'], why: `Are ${P(source).short} customers complaining about ${areaLabel}?`, exec: async () => reviewsStep(await tb.getFeedback({ since, until: at, area, source }), source) });
   }
 
   // Candidates that read one source vs. a role query across several.

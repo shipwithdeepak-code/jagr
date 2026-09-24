@@ -1,5 +1,6 @@
 import type { EvidenceStrength, HypothesisKind, ToolName } from '../types.js';
 import { PLANNER_TOOL_NAME } from './plannerSchema.js';
+import { redactPersonalData } from '../lib/redact.js';
 import type { SourceId } from '../roles/types.js';
 
 /**
@@ -91,7 +92,8 @@ export function buildPlannerPrompt(input: PlannerInput): string {
     .map((o) => `- ${o.id} — ${o.source} (${o.sourceFailed ? 'failed earlier this pass' : o.sourceState})${o.alreadyQueried ? ' — already queried this pass' : ''} — tests ${o.tests.join(', ') || 'nothing open'} — ${o.question}`)
     .join('\n');
   const ev = input.evidence.map((e) => `- [${e.source}, ${e.direction}] ${e.statement}`).join('\n') || '- none yet';
-  return `Signal: ${input.signal.label} ${input.signal.magnitude} (${input.signal.key}), area: ${input.area}. Investigation ${input.investigationId}, pass ${input.pass}.
+  // Defence in depth: sources redact customer text when they read it; nothing personal leaves in a prompt either.
+  return redactPersonalData(`Signal: ${input.signal.label} ${input.signal.magnitude} (${input.signal.key}), area: ${input.area}. Investigation ${input.investigationId}, pass ${input.pass}.
 Tool calls used: ${input.budget.used} of ${input.budget.max}.
 
 Hypotheses:
@@ -101,7 +103,7 @@ Evidence so far:
 ${ev}
 
 Tool options:
-${opts}`;
+${opts}`);
 }
 
 /** Only the parts of the state that should change a plan — so identical states reuse one model call. */

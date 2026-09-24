@@ -117,7 +117,7 @@ export interface Reasoning {
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 
-export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Gathered, area: Area, onsetAt: string, critical: boolean, persistent = true, labels?: ProviderLabels): Reasoning {
+export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Gathered, area: Area, onsetAt: string, critical: boolean, persistent = true, labels?: ProviderLabels, simulatedLinks: (p: ProviderId) => boolean = () => true): Reasoning {
   const P = labelOf(labels);
   const degraded = g.evidence.filter((e) => e.direction === 'degraded');
   const correlatedProviders = [...new Set([primary.provider, ...degraded.map((e) => e.provider)])];
@@ -229,7 +229,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     }
   }
   for (const s of signals) for (const r of s.refs) {
-    const l = makeLink(r, `Open ${P(r.provider).short}`, true);
+    const l = makeLink(r, `Open ${P(r.provider).short}`, simulatedLinks(r.provider));
     if (!seen.has(l.href)) {
       seen.add(l.href);
       sourceLinks.push(l);

@@ -49,9 +49,13 @@ Every connector must pass `testkit/connectorContract.ts` against recorded provid
 
 ## Personal data
 
-`connectors/redact.ts` removes email addresses, phone numbers, links, card numbers and credential-looking
+`lib/redact.ts` (re-exported as `connectors/redact.ts`) removes email addresses, phone numbers, links, card numbers and credential-looking
 strings from customer text before it becomes a record — so it is never stored, shown as evidence, exported
 or sent to an AI planner. Names are not removed.
+
+Two further guards: the AI planner prompt is passed through the same redaction before it leaves Jagr (defence in
+depth), and a workspace with `settings.aiEgressAllowed = false` never calls an AI planner (the deterministic
+planner runs instead).
 
 ## Connectors in this build
 
@@ -61,6 +65,7 @@ or sent to an AI planner. Names are not removed.
 | Amplitude | metrics, changes (annotations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live project** (`npm run eval:connectors`) |
 | GitHub | changes (deployments, releases) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live repository** |
 | Jira Cloud | work items, changes (released versions) | Implemented on the existing Jira Cloud client; contract-tested on fixtures in the documented API shape; **not yet verified against a live site** |
+| Intercom | feedback (support conversations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live workspace** |
 
 ## Amplitude
 
@@ -138,3 +143,17 @@ are configuration.
 
 Limitations: Jira Cloud only (no Data Center); JQL dates use the API user's timezone — use a service account set to
 UTC; one project per workspace.
+
+## Intercom
+
+REST API (version 2.11), read-only, with an **access token** (read conversations). Region hosts: `api.intercom.io`,
+`api.eu.intercom.io`, `api.au.intercom.io`.
+
+- **Feedback** — `POST /conversations/search`, conversations created in the window (ascending, cursor-paginated, up
+  to 4 × 50). Only conversations a **customer** started (author type user / lead / contact); outbound admin and bot
+  messages are not feedback. Channel `support`; conversation rating kept when present (1–5); team tags kept (used
+  for area classification).
+- The first message is converted to plain text and **redacted before it becomes a record**. Author name, email and
+  id are never read into a record. Names written inside a message are not detected.
+- Deep link into the inbox when `JAGR_INTERCOM_APP_ID` is set.
+- `check()` calls `/me` and keeps only the workspace name (never the admin's email).

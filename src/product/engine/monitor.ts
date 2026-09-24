@@ -361,6 +361,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       // The investigation's title is written after this pass; name it by what was detected.
       emit({ type: 'investigation', id: invId, title: inv.title || `${lead.label} ${lead.magnitude}`, firstPass });
       const sources = sourceDirectory(reg, watch);
+      const linkSimulated = (p: ProviderId) => !isSourceId(p) || reg.isSimulated(p);
       const out = await runInvestigation({
         onStep: (step) => emit({ type: 'step', investigationId: invId, step }),
         toolbox: createToolbox(reg, watch, o.world.start, labels),
@@ -373,7 +374,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         at,
         pass: maxPass(inv) + 1,
         trigger,
-        simulatedLinks: (p) => (!isSourceId(p) ? true : reg.isSimulated(p)),
+        simulatedLinks: linkSimulated,
         connectionState: (p) => (p === 'email' ? email.connection().state : !isSourceId(p) ? 'not_configured' : (reg.connection(p)?.state ?? 'not_configured')),
         connectionDetail: (p) => (p === 'email' ? email.connection().detail : !isSourceId(p) ? 'A notification channel, not an evidence source' : (reg.connection(p)?.detail ?? 'Not part of this workspace')),
         freshAsOf: (p) => (isSourceId(p) ? reg.connection(p)?.freshAsOf : undefined),
@@ -381,10 +382,10 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         investigationId: inv.id,
         labels,
       });
-      const r = reason(lead, inv.signals, out.gathered, inv.area, onset, false, persistent, labels);
+      const r = reason(lead, inv.signals, out.gathered, inv.area, onset, false, persistent, labels, linkSimulated);
       const attention = assessAttention({ signals: inv.signals, anomalous, corroborating: r.corroborating, releaseAssociated: !!r.releaseAssociation, blockerIssues: grp.reduce((a, f) => a + f.blockers, 0) });
       const critical = attention.level === 'CRITICAL';
-      const final = critical ? reason(lead, inv.signals, out.gathered, inv.area, onset, true, persistent, labels) : r;
+      const final = critical ? reason(lead, inv.signals, out.gathered, inv.area, onset, true, persistent, labels, linkSimulated) : r;
 
       const prevAttention = inv.attention;
       if (ATTENTION_RANK[attention.level] >= ATTENTION_RANK[prevAttention]) {

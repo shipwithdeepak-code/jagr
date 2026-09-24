@@ -95,6 +95,9 @@ export async function sourcesForRun(deps: MonitoringDeps, ws: Workspace, at: str
   return { registry: new SourceRegistry(sources), world, connections };
 }
 
+/** The AI planner, only for workspaces that allow evidence to be sent to an AI provider. */
+const plannerFor = (deps: MonitoringDeps, ws: Workspace) => (ws.settings.aiEgressAllowed ? deps.planner : undefined);
+
 export interface RunSummary {
   workspaceId: string;
   investigations: number;
@@ -128,7 +131,7 @@ export async function runWatchJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'wo
   if (!watches.some((w) => w.id === watchId && w.status === 'active')) return { workspaceId: ws.id, investigations: 0, touched: [], notifications: 0 };
   const { registry, world, connections } = await sourcesForRun(deps, ws, at);
   const scheduled: ScheduledJob = { id: `run:${watchId}:${at}`, type: 'watch_run', at, watchId };
-  const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), planner: deps.planner, appBaseUrl: deps.appBaseUrl });
+  const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
   return persistRun(deps, ws, r, 'monitor.watch', at);
 }
 
@@ -144,7 +147,7 @@ export async function runWorkspaceNow(deps: MonitoringDeps, workspaceId: string)
   const stored = await deps.repos.watches.list(ws.id);
   const watches = ws.mode === 'imported' ? watchesForImportedData(stored, connections) : stored;
   const brief = ws.mode === 'imported' ? { ...ws.brief, time: world.end.slice(11, 16), timezone: 'UTC' } : ws.brief;
-  const r = await runMonitoring({ world, registry, watches, connections, brief, planner: deps.planner, appBaseUrl: deps.appBaseUrl });
+  const r = await runMonitoring({ world, registry, watches, connections, brief, planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
   return persistRun(deps, ws, r, 'monitor.run_now', at);
 }
 
