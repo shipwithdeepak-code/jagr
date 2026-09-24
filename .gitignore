@@ -1,0 +1,12 @@
+node_modules
+dist
+*.tsbuildinfo
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local Claude / dev-server configuration
+.claude/
