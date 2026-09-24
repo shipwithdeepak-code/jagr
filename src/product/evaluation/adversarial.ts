@@ -60,6 +60,8 @@ const live = (r: MonitoringResult) => r.investigations.filter((i) => i.status !=
 const inArea = (r: MonitoringResult, area: string) => r.investigations.filter((i) => i.area === area && i.status !== 'DISMISSED');
 const hyp = (r: MonitoringResult, area: string, kind: string) => inArea(r, area)[0]?.agentHypotheses.find((h) => h.kind === kind);
 const toolsUsed = (r: MonitoringResult) => new Set(r.investigations.flatMap((i) => i.trace.filter((s) => s.kind === 'tool_call').map((s) => s.tool)));
+/** Tool calls as `tool(source)` — e.g. getChanges(app_store). */
+const callsUsed = (r: MonitoringResult) => new Set(r.investigations.flatMap((i) => i.trace.filter((s) => s.kind === 'tool_call').map((s) => `${s.tool}(${s.source})`)));
 
 const conv = (change: number, from = '19:00', to?: string) => ({ 'ga4.checkout_conversion': [{ from, to, change }] });
 
@@ -146,7 +148,7 @@ export const ADVERSARIAL_CASES: AdversarialCase[] = [
       const rel = hyp(r, 'checkout', 'release_related');
       return [
         ck('uncertainty', 'Release explanation ruled out', rel?.status === 'ruled_out', rel ? rel.status : 'no hypothesis'),
-        ck('tool_selection', 'Checked release history before ruling it out', toolsUsed(r).has('getJiraRelease') || toolsUsed(r).has('getStoreReleases'), [...toolsUsed(r)].join(', ')),
+        ck('tool_selection', 'Checked release history before ruling it out', toolsUsed(r).has('getChanges'), [...callsUsed(r)].join(', ')),
         ck('approval', 'No rollout or rollback proposed', !r.actions.some((a) => a.kind === 'pause_rollout' || a.kind === 'rollback_release'), r.actions.map((a) => a.kind).join(', ') || 'none'),
         ck('causality', 'Explanation does not tie the change to a release', !!inv && !/(after|following) release|release \\d/i.test(inv.likelyExplanation), inv?.likelyExplanation.slice(0, 110) ?? ''),
       ];
@@ -188,7 +190,7 @@ export const ADVERSARIAL_CASES: AdversarialCase[] = [
       const inv = inArea(r, 'checkout')[0];
       return [
         ck('grounding', 'No Jira evidence fabricated', !!inv && !inv.evidence.some((e) => e.provider === 'jira' && e.direction !== 'gap'), `${inv?.evidence.filter((e) => e.provider === 'jira' && e.direction !== 'gap').length ?? 0} items`),
-        ck('tool_selection', 'Falls back to store release history', toolsUsed(r).has('getStoreReleases'), [...toolsUsed(r)].join(', ')),
+        ck('tool_selection', 'Falls back to store release history', callsUsed(r).has('getChanges(app_store)') || callsUsed(r).has('getChanges(google_play)'), [...callsUsed(r)].join(', ')),
         ck('uncertainty', 'Says Jira is returning an error', !!inv?.unknowns.some((u) => u.includes('Jira is returning an error')), inv?.unknowns.find((u) => u.includes('Jira')) ?? 'not mentioned'),
       ];
     },
@@ -204,7 +206,7 @@ export const ADVERSARIAL_CASES: AdversarialCase[] = [
       const art = hyp(r, 'checkout', 'measurement_artifact');
       return [
         ck('false_interruption', 'No email', r.emails.length === 0, `${r.emails.length} email(s)`),
-        ck('tool_selection', 'Checked an independent measure (revenue)', !!inv?.trace.some((s) => s.kind === 'tool_call' && s.input === 'ga4.purchase_revenue'), 'purchase revenue queried'),
+        ck('tool_selection', 'Checked an independent measure (revenue)', !!inv?.trace.some((s) => s.kind === 'tool_call' && s.input === 'purchase_revenue'), 'purchase revenue queried'),
         ck('uncertainty', 'Keeps "measurement artifact" open', !!art && art.status !== 'ruled_out', art ? `${art.status} / ${art.strength}` : 'no hypothesis'),
         ck('uncertainty', 'Says the sources conflict', !!inv && /conflict/i.test(inv.likelyExplanation), inv?.likelyExplanation.slice(0, 90) ?? ''),
       ];
@@ -266,7 +268,7 @@ export const ADVERSARIAL_CASES: AdversarialCase[] = [
       const inv = inArea(r, 'checkout')[0];
       const cust = hyp(r, 'checkout', 'customer_only');
       return [
-        ck('tool_selection', 'Checked analytics for real impact', !!inv?.trace.some((s) => s.kind === 'tool_call' && s.tool === 'getAnalyticsMetric'), 'GA4 queried'),
+        ck('tool_selection', 'Checked analytics for real impact', !!inv?.trace.some((s) => s.kind === 'tool_call' && s.tool === 'getMetric' && s.source === 'ga4'), 'GA4 queried'),
         ck('severity', 'MEDIUM — brief, not email', inv?.attention === 'MEDIUM' && r.emails.length === 0, `${inv?.attention ?? '—'}, ${r.emails.length} email(s)`),
         ck('uncertainty', '"Customer-reported only" supported', cust?.status === 'supported', cust ? `${cust.status} / ${cust.strength}` : 'no hypothesis'),
       ];
@@ -333,7 +335,7 @@ export const ADVERSARIAL_CASES: AdversarialCase[] = [
     world: () => buildWorld(fullCheckout),
     watches: () => [w('checkout_health')],
     check: (r) => {
-      const link = r.actions.find((a) => a.kind === 'link_issues');
+      const link = r.actions.find((a) => a.kind === 'link_work_items');
       const inv = inArea(r, 'checkout')[0];
       return [
         ck('approval', 'Low-risk action done without asking', link?.status === 'executed', link ? `${link.risk}: ${link.status}` : 'not proposed'),

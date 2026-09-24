@@ -1,7 +1,7 @@
 import type { ProviderId, SourceConnection, Watch } from '../types';
 import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '../integrations/types';
 import { METRIC_DEFS, type World } from '../integrations/world';
-import { SIGNALS } from '../catalog';
+import { signalsForSources } from '../catalog';
 import type { ImportedDataset, MetricRow } from './schemas';
 
 /**
@@ -121,6 +121,7 @@ export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: strin
       end,
       bucketMinutes,
       metrics,
+      metricCatalog: METRIC_DEFS.map(({ base: _b, std: _s, ...def }) => (void _b, void _s, def)),
       issues: issuesM.items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       releases: releasesM.items.sort((a, b) => a.releasedAt.localeCompare(b.releasedAt)),
       reviews: feedbackM.items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
@@ -141,7 +142,7 @@ export function watchesForImportedData(watches: Watch[], connections: SourceConn
   return watches
     .map((w) => {
       const sources = w.sources.filter((p) => usable.has(p));
-      return { ...w, sources, signals: w.signals.filter((s) => s.key === 'releases' || sources.includes(SIGNALS[s.key].provider as ProviderId)) };
+      return { ...w, sources, signals: signalsForSources(w.signals, sources) };
     })
     .filter((w) => w.sources.length > 0);
 }

@@ -1,4 +1,4 @@
-import { addMinutes, addSeconds, fmtTime, minutesBetween } from '@/lib/time';
+import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time';
 import type {
   AgentHypothesis,
   Area,
@@ -13,9 +13,10 @@ import type {
   TraceStep,
   Watch,
 } from '../types';
-import { AREA_LABEL, AREA_METRICS, SIGNALS } from '../catalog';
+import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '../catalog';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { IssueRecord, ReleaseRecord, ReviewRecord } from '../integrations/types';
+import type { ChangeRecord, FeedbackItem, SourceId, WorkItem } from '../roles/types';
+import type { SourceRegistry } from '../roles/registry';
 import { metricEvidence, type Gathered } from '../engine/investigate';
 import type { MetricResult, ToolOutcome, Toolbox } from './tools';
 import { FAILURE_LABEL, HYPOTHESIS_ID, validatePlan, type InvestigationPlanner, type PlannerInput, type PlannerOption } from './planner';
@@ -54,7 +55,11 @@ type Tag =
 interface Candidate {
   key: string;
   tool: ToolName;
-  source: Exclude<ProviderId, 'email'>;
+  source: SourceId;
+  /** getMetric candidates: the metric key (qualifies the option id). */
+  metric?: string;
+  /** How the candidate is named in "Not checked: …" (e.g. "releases", "crash rate"). */
+  noun: string;
   input: string;
   tests: HypothesisKind[];
   why: string;
@@ -69,21 +74,35 @@ export interface InvestigationOutput {
   stopReason: string;
   signalPersisted: boolean;
   revenueStable: boolean;
-  externalIssue?: IssueRecord;
+  externalIssue?: WorkItem;
 }
 
 export const BUDGET = 9;
 const STALE_LIMIT = 3;
-const TOOL_NOUN: Record<ToolName, string> = {
-  getAnalyticsMetric: 'metric',
-  getAnalyticsTraffic: 'traffic',
-  getJiraRelease: 'releases',
-  getRecentJiraIssues: 'issues',
-  getStoreReleases: 'releases',
-  getStoreCrashRate: 'crash rate',
-  getAppStoreReviews: 'reviews',
-  getPlayStoreReviews: 'reviews',
-};
+/**
+ * The sources a watch can consult, by role. Built from the registry; the investigator never learns
+ * which vendor (if any) is behind a source id.
+ */
+export interface SourceDirectory {
+  /** Sources in the watch that implement a role, in registry order. */
+  withRole(role: 'changes' | 'work_items' | 'feedback'): SourceId[];
+  /** The source (in the watch) that serves a metric. */
+  metricSource(key: string): SourceId | undefined;
+  /** Metrics served by sources in the watch, in registry order. */
+  metrics(): { source: SourceId; key: string }[];
+  /** The change source reports rollout state (staged / phased releases). */
+  tracksRollout(source: SourceId): boolean;
+}
+
+export function sourceDirectory(reg: SourceRegistry, watch: Watch): SourceDirectory {
+  const among = watch.sources.filter((p): p is SourceId => p !== 'email');
+  return {
+    withRole: (role) => reg.withRole(role, among).map((s) => s.id),
+    metricSource: (key) => reg.metricSource(key, among)?.source,
+    metrics: () => reg.metrics(among).map((m) => ({ source: m.source, key: m.def.key })),
+    tracksRollout: (id) => !!reg.get(id)?.changes?.tracksRollout,
+  };
+}
 
 /**
  * Pre-action check: before recommending a rollout change, confirm the release is still rolling out.
@@ -92,32 +111,33 @@ const TOOL_NOUN: Record<ToolName, string> = {
 export async function checkRolloutBeforeAction(args: {
   labels?: ProviderLabels;
   toolbox: Toolbox;
+  sources: SourceDirectory;
   watch: Watch;
   version: string;
   since: string;
   until: string;
   at: string;
   pass: number;
-}): Promise<{ releases: ReleaseRecord[]; steps: TraceStep[] }> {
+}): Promise<{ releases: ChangeRecord[]; steps: TraceStep[] }> {
   const P = labelOf(args.labels);
   const steps: TraceStep[] = [];
-  const releases: ReleaseRecord[] = [];
+  const releases: ChangeRecord[] = [];
   let tick = 0;
   const step = (s: Omit<TraceStep, 'id' | 'at' | 'pass'>) => {
     steps.push({ id: `${args.at}-${args.pass}-rollout-${steps.length}`, at: addSeconds(args.at, tick++), pass: args.pass, ...s });
   };
-  for (const store of ['google_play', 'app_store'] as const) {
-    if (!args.watch.sources.includes(store)) continue;
-    const input = `${store === 'app_store' ? 'iOS' : 'Android'} releases ${fmtTime(args.since)}–${fmtTime(args.until)}`;
-    step({ kind: 'tool_call', title: `${P(store).short} → ${input}`, tool: 'getStoreReleases', source: store, input, why: `Before recommending an action on ${args.version}, check whether it is still rolling out on ${store === 'app_store' ? 'iOS' : 'Android'}.` });
-    const o = await args.toolbox.getStoreReleases({ since: args.since, until: args.until, store });
+  // Only sources that report rollout state can answer "is it still rolling out?".
+  for (const source of args.sources.withRole('changes').filter((s) => args.sources.tracksRollout(s))) {
+    const input = `${P(source).short} releases ${fmtTime(args.since)}–${fmtTime(args.until)}`;
+    step({ kind: 'tool_call', title: `${P(source).short} → ${input}`, tool: 'getChanges', source, input, why: `Before recommending an action on ${args.version}, check whether it is still rolling out on ${P(source).short}.` });
+    const o = await args.toolbox.getChanges({ since: args.since, until: args.until, source });
     if (!o.ok) {
-      step({ kind: 'result', title: `${P(store).name} ${o.state === 'not_in_watch' ? 'is not part of this watch' : `is ${o.state}`} — rollout state unknown`, tool: 'getStoreReleases', source: store, status: o.state === 'error' ? 'error' : 'unavailable' });
+      step({ kind: 'result', title: `${P(source).name} ${o.state === 'not_in_watch' ? 'is not part of this watch' : `is ${o.state}`} — rollout state unknown`, tool: 'getChanges', source, status: o.state === 'error' ? 'error' : 'unavailable' });
       continue;
     }
     const r = o.data.find((x) => x.version === args.version);
     if (r) releases.push(r);
-    step({ kind: 'result', title: r ? `${args.version}: ${r.rollout ?? 'full release'} since ${fmtTime(r.releasedAt)}` : `No ${args.version} release on this store`, tool: 'getStoreReleases', source: store, status: 'ok', refs: r ? [{ provider: store, kind: 'release', id: r.id }] : [] });
+    step({ kind: 'result', title: r ? `${args.version}: ${r.rollout ?? 'full release'} since ${fmtTime(r.at)}` : `No ${args.version} release in this source`, tool: 'getChanges', source, status: 'ok', refs: r ? [r.ref] : [] });
   }
   return { releases, steps };
 }
@@ -171,6 +191,7 @@ const CEILING: Record<HypothesisKind, EvidenceStrength> = {
 
 export async function runInvestigation(args: {
   toolbox: Toolbox;
+  sources: SourceDirectory;
   watch: Watch;
   primary: DetectedSignal;
   signals: DetectedSignal[];
@@ -201,7 +222,7 @@ export async function runInvestigation(args: {
     tick += s.kind === 'tool_call' ? 3 : 1;
   };
 
-  const g: Gathered = { evidence: [], gaps: [], notInWatch: [], releases: [], issues: [], reviews: [] };
+  const g: Gathered = { evidence: [], gaps: [], notInWatch: [], changes: [], workItems: [], feedback: [] };
   const tags = new Map<string, Set<Tag>>();
   const add = (e: EvidenceItem, ...t: Tag[]) => {
     g.evidence.push(e);
@@ -214,11 +235,11 @@ export async function runInvestigation(args: {
   const since = addMinutes(onsetAt, -60);
   const changeWindow = { since: addMinutes(onsetAt, -240), until: addMinutes(onsetAt, 30) };
   let revenueStable = false;
-  let externalIssue: IssueRecord | undefined;
+  let externalIssue: WorkItem | undefined;
   let persisted = true;
 
   // ── Outcome helpers ─────────────────────────────────────────
-  const gap = (source: Exclude<ProviderId, 'email'>, o: Extract<ToolOutcome<unknown>, { ok: false }>) => {
+  const gap = (source: SourceId, o: Extract<ToolOutcome<unknown>, { ok: false }>) => {
     if (o.state === 'not_in_watch') {
       if (!g.notInWatch.includes(source)) g.notInWatch.push(source);
       return `${P(source).name} is not part of this watch`;
@@ -239,31 +260,31 @@ export async function runInvestigation(args: {
     return detail;
   };
 
-  const metricStep = (o: ToolOutcome<MetricResult>, source: Exclude<ProviderId, 'email'>, onData: (m: MetricResult) => Tag[]) => {
+  const metricStep = (o: ToolOutcome<MetricResult>, source: SourceId, onData: (m: MetricResult) => Tag[]) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     const t = onData(o.data);
-    if (o.data.series.id === areaMetric) g.areaMetric = o.data;
+    if (o.data.series.key === areaMetric) g.areaMetric = o.data;
     const e = metricEvidence(o.data.series, o.data.reading, args.simulatedLinks(source), args.labels);
     add(e, ...t);
     return { ok: true, result: e.statement.replace(/^[^:]+: /, ''), refs: e.refs };
   };
 
-  const releaseStep = (o: ToolOutcome<ReleaseRecord[]>, source: Exclude<ProviderId, 'email'>) => {
+  const releaseStep = (o: ToolOutcome<ChangeRecord[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (!o.data.length) {
-      add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${P(source).short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: source === 'jira' ? 'getJiraRelease' : 'getStoreReleases', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
+      add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${P(source).short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: 'getChanges', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
       return { ok: true, result: `No releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}`, refs: [] };
     }
     for (const r of o.data) {
-      g.releases.push(r);
-      const ref: SourceRef = { provider: source, kind: 'release', id: r.id };
+      g.changes.push(r);
+      const ref: SourceRef = r.ref;
       add(
         {
           id: `${source}:release:${r.id}`,
           provider: source,
           direction: 'change',
-          statement: `${P(source).short}: release ${r.version}${r.platform !== 'all' ? ` (${r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : 'web'})` : ''} at ${fmtTime(r.releasedAt)}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}.`,
-          onsetAt: r.releasedAt,
+          statement: `${P(source).short}: release ${r.version}${r.platform && r.platform !== 'all' ? ` (${r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : 'web'})` : ''} at ${fmtTime(r.at)}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}.`,
+          onsetAt: r.at,
           refs: [ref],
           link: link(ref, `Open ${P(source).short}`),
         },
@@ -271,52 +292,52 @@ export async function runInvestigation(args: {
       );
     }
     const r = o.data[o.data.length - 1];
-    return { ok: true, result: `Release ${r.version} at ${fmtTime(r.releasedAt)} — ${Math.round(minutesBetween(r.releasedAt, onsetAt))} min before the change began`, refs: o.data.map((x) => ({ provider: source, kind: 'release' as const, id: x.id })) };
+    return { ok: true, result: `Release ${r.version} at ${fmtTime(r.at)} — ${Math.round(minutesBetween(r.at, onsetAt))} min before the change began`, refs: o.data.map((x) => x.ref) };
   };
 
-  const issuesStep = (o: ToolOutcome<IssueRecord[]>) => {
-    if (!o.ok) return { ok: false, state: o.state, result: gap('jira', o), refs: [] };
+  const issuesStep = (o: ToolOutcome<WorkItem[]>, source: SourceId) => {
+    if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     const issues = o.data;
     if (!issues.length) {
-      add({ id: `jira:no_issues:${area}`, provider: 'jira', direction: 'stable', statement: `${P('jira').short}: no new ${areaLabel} issues since ${fmtTime(since)}.`, refs: [], query: { tool: 'getRecentJiraIssues', input: `${areaLabel} issues since ${fmtTime(since)}` } }, 'no_issues');
+      add({ id: `${source}:no_issues:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no new ${areaLabel} issues since ${fmtTime(since)}.`, refs: [], query: { tool: 'getWorkItems', input: `${areaLabel} issues since ${fmtTime(since)}` } }, 'no_issues');
       return { ok: true, result: `No new ${areaLabel} issues`, refs: [] };
     }
-    g.issues.push(...issues);
+    g.workItems.push(...issues);
     const ext = issues.find((i) => i.labels.some((l) => EXTERNAL_LABELS.includes(l)));
     if (ext) externalIssue = ext;
     const product = issues.filter((i) => i !== ext);
-    const refs = issues.map((i): SourceRef => ({ provider: 'jira', kind: 'issue', id: i.id }));
+    const refs = issues.map((i) => i.ref);
     if (product.length) {
       add(
         {
-          id: `jira:issues:${area}`,
-          provider: 'jira',
+          id: `${source}:issues:${area}`,
+          provider: source,
           direction: 'degraded',
-          statement: `${P('jira').short}: ${product.length} new ${areaLabel} ${product.length === 1 ? 'issue' : 'issues'} since ${fmtTime(product[0].createdAt)} (${product.slice(0, 4).map((i) => i.id).join(', ')}${product.length > 4 ? ', …' : ''}).`,
+          statement: `${P(source).short}: ${product.length} new ${areaLabel} ${product.length === 1 ? 'issue' : 'issues'} since ${fmtTime(product[0].createdAt)} (${product.slice(0, 4).map((i) => i.id).join(', ')}${product.length > 4 ? ', …' : ''}).`,
           onsetAt: product[0].createdAt,
-          refs: product.map((i) => ({ provider: 'jira', kind: 'issue', id: i.id })),
-          link: link({ provider: 'jira', kind: 'issue', id: product[0].id }, `Open ${P('jira').short}`),
+          refs: product.map((i) => i.ref),
+          link: link(product[0].ref, `Open ${P(source).short}`),
         },
         'issues',
       );
     }
     if (ext) {
       add(
-        { id: `jira:external:${ext.id}`, provider: 'jira', direction: 'change', statement: `${P('jira').short}: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [{ provider: 'jira', kind: 'issue', id: ext.id }], link: link({ provider: 'jira', kind: 'issue', id: ext.id }, `Open ${P('jira').short}`) },
+        { id: `${source}:external:${ext.id}`, provider: source, direction: 'change', statement: `${P(source).short}: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [ext.ref], link: link(ext.ref, `Open ${P(source).short}`) },
         'external_issue',
       );
     }
     return { ok: true, result: `${issues.length} ${areaLabel} ${issues.length === 1 ? 'issue' : 'issues'}: ${issues.slice(0, 3).map((i) => i.id).join(', ')}${ext ? ` — ${ext.id} is a third-party report` : ''}`, refs };
   };
 
-  const reviewsStep = (o: ToolOutcome<ReviewRecord[]>, source: 'app_store' | 'google_play') => {
+  const reviewsStep = (o: ToolOutcome<FeedbackItem[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (!o.data.length) {
-      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: source === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
+      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: 'getFeedback', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
       return { ok: true, result: `No negative reviews about ${areaLabel}`, refs: [] };
     }
-    g.reviews.push(...o.data);
-    const refs = o.data.map((r): SourceRef => ({ provider: source, kind: 'review', id: r.id }));
+    g.feedback.push(...o.data);
+    const refs = o.data.map((r) => r.ref);
     add(
       {
         id: `${source}:reviews:${area}`,
@@ -333,56 +354,72 @@ export async function runInvestigation(args: {
   };
 
   // ── Hypotheses to keep open, by kind of signal ─────────────
-  const primaryMeta = SIGNALS[primary.key];
-  const customerPrimary = primaryMeta.kind === 'issues' || primaryMeta.kind === 'reviews';
-  const crashPrimary = primary.key.endsWith('crash_free_sessions');
+  const primaryMeta = signalMeta(primary.key);
+  const customerPrimary = primaryMeta.kind === 'work_items' || primaryMeta.kind === 'feedback';
+  const crashPrimary = primaryMeta.purpose === 'stability';
+  const primaryMetric = primaryMeta.metric;
+  const src = args.sources;
   const kinds: HypothesisKind[] = customerPrimary
     ? ['customer_only', 'shared_product_issue', 'release_related', 'external_or_unobserved']
     : crashPrimary
       ? ['release_related', 'shared_product_issue', 'external_or_unobserved']
       : ['release_related', 'shared_product_issue', 'demand_shift', 'measurement_artifact', 'external_or_unobserved'];
 
-  // ── Candidate tool calls (the agent's options) ─────────────
+  // ── Candidate tool calls (the agent's options), built from the sources' roles ──
   const areaMetric = AREA_METRICS[area][0];
   const candidates: Candidate[] = [];
   const addCandidate = (c: Candidate) => {
     if (watch.sources.includes(c.source)) candidates.push(c);
   };
-  addCandidate({ key: 'jira_release', tool: 'getJiraRelease', source: 'jira', input: `released ${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}`, tests: ['release_related'], why: 'Was anything released shortly before the change began?', exec: async () => releaseStep(await tb.getJiraRelease(changeWindow), 'jira') });
-  for (const store of ['app_store', 'google_play'] as const) {
-    addCandidate({ key: `${store}_release`, tool: 'getStoreReleases', source: store, input: `${store === 'app_store' ? 'iOS' : 'Android'} releases ${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}`, tests: ['release_related'], why: `Did ${store === 'app_store' ? 'an iOS' : 'an Android'} build ship shortly before the change?`, exec: async () => releaseStep(await tb.getStoreReleases({ ...changeWindow, store }), store) });
+  const metricCandidate = (key: string, metric: string, tests: HypothesisKind[], why: string, noun: string, onData: (m: MetricResult) => Tag[]) => {
+    const source = src.metricSource(metric);
+    if (!source) return;
+    addCandidate({ key, tool: 'getMetric', source, metric, noun, input: metric, tests, why, exec: async () => metricStep(await tb.getMetric({ source, metric, until: at }), source, onData) });
+  };
+  for (const source of src.withRole('changes')) {
+    addCandidate({ key: `changes:${source}`, tool: 'getChanges', source, noun: 'releases', input: `${P(source).short} releases ${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}`, tests: ['release_related'], why: `Was anything released or changed in ${P(source).short} shortly before the change began?`, exec: async () => releaseStep(await tb.getChanges({ ...changeWindow, source }), source) });
   }
   if (area !== 'general') {
-    addCandidate({ key: 'jira_issues', tool: 'getRecentJiraIssues', source: 'jira', input: `${areaLabel} issues created since ${fmtTime(since)}`, tests: ['shared_product_issue', 'external_or_unobserved', 'customer_only'], why: `Are people reporting ${areaLabel} bugs — or a third-party problem?`, exec: async () => issuesStep(await tb.getRecentJiraIssues({ since, until: at, area })) });
-  }
-  if (!customerPrimary && !crashPrimary) {
-    addCandidate({ key: 'traffic', tool: 'getAnalyticsTraffic', source: 'ga4', input: `ga4.sessions until ${fmtTime(at)}`, tests: ['demand_shift'], why: 'Did fewer people arrive, or did the same people convert less?', exec: async () => metricStep(await tb.getAnalyticsTraffic({ until: at }), 'ga4', (m) => [m.reading.status === 'normal' ? 'traffic_stable' : 'traffic_drop']) });
-  }
-  if (area === 'checkout' && primary.key !== 'ga4.purchase_revenue' && !customerPrimary && !crashPrimary) {
-    addCandidate({ key: 'revenue', tool: 'getAnalyticsMetric', source: 'ga4', input: 'ga4.purchase_revenue', tests: ['measurement_artifact'], why: 'Does an independent money measure move too, or only the conversion metric?', exec: async () => metricStep(await tb.getAnalyticsMetric({ metricId: 'ga4.purchase_revenue', until: at }), 'ga4', (m) => { revenueStable = m.reading.status === 'normal'; return [revenueStable ? 'revenue_stable' : 'revenue_drop']; }) });
-  }
-  if ((customerPrimary || crashPrimary) && areaMetric && area !== 'stability') {
-    addCandidate({ key: 'area_metric', tool: 'getAnalyticsMetric', source: 'ga4', input: areaMetric, tests: ['customer_only', 'shared_product_issue'], why: `Is the ${areaLabel} funnel actually affected in analytics?`, exec: async () => metricStep(await tb.getAnalyticsMetric({ metricId: areaMetric, until: at }), 'ga4', (m) => [m.reading.status === 'normal' ? 'area_metric_stable' : 'area_metric_degraded']) });
-  }
-  if (crashPrimary && watch.sources.includes('ga4')) {
-    addCandidate({ key: 'area_metric', tool: 'getAnalyticsMetric', source: 'ga4', input: 'ga4.checkout_conversion', tests: ['shared_product_issue'], why: 'Are crashes hurting the core funnel?', exec: async () => metricStep(await tb.getAnalyticsMetric({ metricId: 'ga4.checkout_conversion', until: at }), 'ga4', (m) => [m.reading.status === 'normal' ? 'area_metric_stable' : 'area_metric_degraded']) });
-  }
-  if (area !== 'search' && area !== 'general') {
-    for (const store of ['app_store', 'google_play'] as const) {
-      if (primary.key === `${store}.crash_free_sessions`) continue;
-      addCandidate({ key: `${store}_crash`, tool: 'getStoreCrashRate', source: store, input: `${store}.crash_free_sessions until ${fmtTime(at)}`, tests: ['shared_product_issue'], why: `Is the ${store === 'app_store' ? 'iOS' : 'Android'} app crashing more than normal?`, exec: async () => metricStep(await tb.getStoreCrashRate({ store, until: at }), store, (m) => [m.reading.status === 'normal' ? 'crash_stable' : 'crash_degraded']) });
+    for (const source of src.withRole('work_items')) {
+      addCandidate({ key: `work_items:${source}`, tool: 'getWorkItems', source, noun: 'issues', input: `${areaLabel} issues created since ${fmtTime(since)}`, tests: ['shared_product_issue', 'external_or_unobserved', 'customer_only'], why: `Are people reporting ${areaLabel} bugs — or a third-party problem?`, exec: async () => issuesStep(await tb.getWorkItems({ since, until: at, area, source }), source) });
     }
   }
-  for (const store of ['app_store', 'google_play'] as const) {
-    if (primary.key === `${store}.reviews`) continue;
-    const tool: ToolName = store === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews';
-    addCandidate({ key: `${store}_reviews`, tool, source: store, input: `1–2★ reviews mentioning ${areaLabel} since ${fmtTime(since)}`, tests: ['shared_product_issue', 'customer_only'], why: `Are ${store === 'app_store' ? 'iOS' : 'Android'} customers complaining about ${areaLabel}?`, exec: async () => reviewsStep(store === 'app_store' ? await tb.getAppStoreReviews({ since, until: at, area }) : await tb.getPlayStoreReviews({ since, until: at, area }), store) });
+  const byPurpose = (purpose: string, inArea?: string) => src.metrics().filter((m) => metricMeta(m.key).purpose === purpose && (!inArea || AREA_METRICS[inArea as keyof typeof AREA_METRICS]?.includes(m.key)));
+  if (!customerPrimary && !crashPrimary) {
+    const traffic = byPurpose('traffic')[0];
+    if (traffic) metricCandidate('traffic', traffic.key, ['demand_shift'], 'Did fewer people arrive, or did the same people convert less?', 'traffic', (m) => [m.reading.status === 'normal' ? 'traffic_stable' : 'traffic_drop']);
+  }
+  const revenue = byPurpose('revenue', area)[0];
+  if (revenue && primaryMetric !== revenue.key && !customerPrimary && !crashPrimary) {
+    metricCandidate('revenue', revenue.key, ['measurement_artifact'], 'Does an independent money measure move too, or only the conversion metric?', 'metric', (m) => {
+      revenueStable = m.reading.status === 'normal';
+      return [revenueStable ? 'revenue_stable' : 'revenue_drop'];
+    });
+  }
+  if ((customerPrimary || crashPrimary) && areaMetric && area !== 'stability') {
+    metricCandidate('area_metric', areaMetric, ['customer_only', 'shared_product_issue'], `Is the ${areaLabel} funnel actually affected in analytics?`, 'metric', (m) => [m.reading.status === 'normal' ? 'area_metric_stable' : 'area_metric_degraded']);
+  }
+  if (crashPrimary) {
+    const core = AREA_METRICS.stability[0];
+    metricCandidate('area_metric', core, ['shared_product_issue'], 'Are crashes hurting the core funnel?', 'metric', (m) => [m.reading.status === 'normal' ? 'area_metric_stable' : 'area_metric_degraded']);
+  }
+  if (area !== 'search' && area !== 'general') {
+    for (const m of byPurpose('stability')) {
+      if (primaryMetric === m.key) continue;
+      metricCandidate(`stability:${m.key}`, m.key, ['shared_product_issue'], `Is ${metricMeta(m.key).label.toLowerCase()} worse than normal?`, 'crash rate', (r) => [r.reading.status === 'normal' ? 'crash_stable' : 'crash_degraded']);
+    }
+  }
+  for (const source of src.withRole('feedback')) {
+    if (primaryMeta.kind === 'feedback' && primary.provider === source) continue;
+    addCandidate({ key: `feedback:${source}`, tool: 'getFeedback', source, noun: 'reviews', input: `1–2★ reviews mentioning ${areaLabel} since ${fmtTime(since)}`, tests: ['shared_product_issue', 'customer_only'], why: `Are ${P(source).short} customers complaining about ${areaLabel}?`, exec: async () => reviewsStep(await tb.getFeedback({ since, until: at, area, source }), source) });
   }
 
   // ── Hypothesis evaluation (recomputed from all evidence so far) ──
   const done = new Set<string>();
   const ran = (k: HypothesisKind) => candidates.some((c) => done.has(c.key) && c.tests.includes(k));
-  const releaseVersion = () => g.releases.filter((r) => Date.parse(r.releasedAt) <= Date.parse(onsetAt) + 15 * 60_000).sort((a, b) => b.releasedAt.localeCompare(a.releasedAt))[0]?.version;
+  const releaseVersion = () => g.changes.filter((r) => Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000).sort((a, b) => b.at.localeCompare(a.at))[0]?.version;
+  // Independent of the analytics source that reported the primary signal.
+  const analyticsSource = primary.provider;
 
   function evaluate(): AgentHypothesis[] {
     const degradedProviders = new Set<ProviderId>();
@@ -390,7 +427,7 @@ export async function runInvestigation(args: {
       const t = tags.get(e.id);
       if (t && (t.has('primary') || t.has('issues') || t.has('crash_degraded') || t.has('reviews') || t.has('area_metric_degraded'))) degradedProviders.add(e.provider);
     }
-    const nonAnalyticsDegraded = [...degradedProviders].some((p) => p !== 'ga4');
+    const nonAnalyticsDegraded = [...degradedProviders].some((p) => p !== analyticsSource);
     const ids = (t: Tag) => withTag(t).map((e) => e.id);
     return kinds.map((kind): AgentHypothesis => {
       const tested = ran(kind) || (kind === 'measurement_artifact' && (ran('shared_product_issue') || has('revenue_stable') || has('revenue_drop')));
@@ -405,7 +442,7 @@ export async function runInvestigation(args: {
           const v = releaseVersion();
           statement = v ? `The change is related to release ${v}` : 'A recent release is involved';
           forIds = ids('release');
-          const tagged = v ? [...g.issues.filter((i) => i.affectsVersion === v || i.labels.includes(v)), ...g.reviews.filter((r) => r.version === v)] : [];
+          const tagged = v ? [...g.workItems.filter((i) => i.versions.includes(v) || i.labels.includes(v)), ...g.feedback.filter((r) => r.version === v)] : [];
           if (tagged.length) forIds.push(...g.evidence.filter((e) => e.refs.some((r) => tagged.some((x) => x.id === r.id))).map((e) => e.id));
           againstIds = ids('no_release');
           const releaseSourceDown = g.gaps.some((x) => !x.noData && candidates.some((c) => c.source === x.provider && c.tests.includes('release_related')));
@@ -423,7 +460,7 @@ export async function runInvestigation(args: {
           againstIds = [...ids('crash_stable'), ...ids('no_issues'), ...ids('no_reviews')];
           const n = degradedProviders.size;
           strength = n >= 3 ? 'strong' : n === 2 ? 'moderate' : n === 1 ? 'weak' : 'none';
-          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${P(c.source).short} ${TOOL_NOUN[c.tool]}`);
+          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${P(c.source).short} ${c.noun}`);
           if (unchecked.length) unknowns.push(`Not checked: ${[...new Set(unchecked)].join(', ')}.`);
           break;
         }
@@ -437,14 +474,14 @@ export async function runInvestigation(args: {
         case 'measurement_artifact':
           statement = 'A tracking or measurement change, not a real change in behaviour';
           forIds = ids('revenue_stable');
-          againstIds = [...ids('revenue_drop'), ...(nonAnalyticsDegraded ? g.evidence.filter((e) => e.direction === 'degraded' && e.provider !== 'ga4').map((e) => e.id) : [])];
+          againstIds = [...ids('revenue_drop'), ...(nonAnalyticsDegraded ? g.evidence.filter((e) => e.direction === 'degraded' && e.provider !== analyticsSource).map((e) => e.id) : [])];
           if (has('revenue_drop') || (nonAnalyticsDegraded && !forIds.length)) statusOverride = 'ruled_out';
           else if (forIds.length) strength = 'moderate';
           else if (tested) strength = 'weak';
           unknowns.push('No server-side data is connected to confirm what analytics reports.');
           break;
         case 'external_or_unobserved':
-          statement = externalIssue ? `A third-party problem reported in ${P('jira').short} (${externalIssue.id})` : 'A cause outside the connected sources (payment provider, backend, marketing change)';
+          statement = externalIssue ? `A third-party problem reported in ${P(externalIssue.source).short} (${externalIssue.id})` : 'A cause outside the connected sources (payment provider, backend, marketing change)';
           forIds = ids('external_issue');
           strength = forIds.length ? 'moderate' : 'weak';
           unknowns.push(area === 'checkout' ? 'Payment-provider and backend status are not connected to Jagr.' : 'Backend and marketing data are not connected to Jagr.');
@@ -496,24 +533,23 @@ export async function runInvestigation(args: {
   // 1. Re-read the primary signal from its source rather than trusting the detector's cached value.
   let toolCalls = 0;
   const confirm = await (async () => {
+    const source = primary.provider as SourceId;
     if (primaryMeta.kind === 'metric') {
-      const p = primary.provider as Exclude<ProviderId, 'email'>;
-      const o = p === 'ga4' ? await tb.getAnalyticsMetric({ metricId: primary.key, until: at }) : await tb.getStoreCrashRate({ store: p as 'app_store' | 'google_play', until: at });
+      const metric = metricKeyOf(primary.key)!;
+      const o = await tb.getMetric({ source, metric, until: at });
       if (o.ok) persisted = o.data.reading.status !== 'normal';
-      return { tool: (p === 'ga4' ? 'getAnalyticsMetric' : 'getStoreCrashRate') as ToolName, input: primary.key, out: metricStep(o, p, () => ['primary']) };
+      return { tool: 'getMetric' as ToolName, input: metric, out: metricStep(o, source, () => ['primary']) };
     }
-    if (primaryMeta.kind === 'issues') {
-      done.add('jira_issues');
-      const out = issuesStep(await tb.getRecentJiraIssues({ since: addMinutes(at, -180), until: at, area }));
-      for (const e of g.evidence) if (e.provider === 'jira' && e.direction === 'degraded') tags.get(e.id)?.add('primary');
-      return { tool: 'getRecentJiraIssues' as ToolName, input: `${areaLabel} issues, last 3h`, out };
+    if (primaryMeta.kind === 'work_items') {
+      done.add(`work_items:${source}`);
+      const out = issuesStep(await tb.getWorkItems({ since: addMinutes(at, -180), until: at, area, source }), source);
+      for (const e of g.evidence) if (e.provider === source && e.direction === 'degraded') tags.get(e.id)?.add('primary');
+      return { tool: 'getWorkItems' as ToolName, input: `${areaLabel} issues, last 3h`, out };
     }
-    const store = primary.provider as 'app_store' | 'google_play';
-    done.add(`${store}_reviews`);
-    const o = store === 'app_store' ? await tb.getAppStoreReviews({ since: addMinutes(at, -360), until: at, area }) : await tb.getPlayStoreReviews({ since: addMinutes(at, -360), until: at, area });
-    const out = reviewsStep(o, store);
-    for (const e of g.evidence) if (e.provider === store && e.direction === 'degraded') tags.get(e.id)?.add('primary');
-    return { tool: (store === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews') as ToolName, input: `${areaLabel} reviews, last 6h`, out };
+    done.add(`feedback:${source}`);
+    const out = reviewsStep(await tb.getFeedback({ since: addMinutes(at, -360), until: at, area, source }), source);
+    for (const e of g.evidence) if (e.provider === source && e.direction === 'degraded') tags.get(e.id)?.add('primary');
+    return { tool: 'getFeedback' as ToolName, input: `${areaLabel} reviews, last 6h`, out };
   })();
   toolCalls++;
   step({ kind: 'tool_call', title: `${P(primary.provider).short} → ${confirm.input}`, tool: confirm.tool, source: primary.provider, input: confirm.input, why: 'Re-read the signal from its source before investigating — do not trust a cached reading.' });
@@ -528,9 +564,9 @@ export async function runInvestigation(args: {
   }
 
   // ── Planning helpers ───────────────────────────────────────
-  const failedSources = new Set<ProviderId>();
+  const failedSources = new Set<SourceId>();
   const attempts: Partial<Record<HypothesisKind, number>> = {};
-  const qualified = (c: Candidate) => (candidates.filter((x) => x.tool === c.tool).length > 1 ? `${c.tool}(${c.tool === 'getAnalyticsMetric' ? c.input : c.source})` : c.tool);
+  const qualified = (c: Candidate) => (candidates.filter((x) => x.tool === c.tool).length > 1 ? `${c.tool}(${c.metric ?? c.source})` : c.tool);
   const hypIds = (ks: HypothesisKind[]) => ks.filter((k) => kinds.includes(k)).map((k) => HYPOTHESIS_ID[k]);
   const kindOf = new Map(kinds.map((k) => [HYPOTHESIS_ID[k], k]));
   const statement = (id: string) => g.evidence.find((e) => e.id === id)?.statement ?? id;
@@ -561,6 +597,8 @@ export async function runInvestigation(args: {
         id: qualified(c),
         tool: c.tool,
         source: c.source,
+        sourceLabel: P(c.source).name,
+        metric: c.metric,
         sourceState: args.connectionState(c.source),
         tests: hypIds(c.tests),
         question: c.why,
@@ -679,10 +717,10 @@ export async function runInvestigation(args: {
     // It cannot change the cause question, but it informs the attention and customer-communication decisions.
     // Business impact (revenue) is scoped the same way: it rarely changes an explanation once
     // measurement is ruled out, but a PM needs the money number.
-    const feedbackChecked = candidates.some((c) => c.key.endsWith('_reviews') && done.has(c.key)) || primaryMeta.kind === 'reviews';
+    const feedbackChecked = candidates.some((c) => c.key.startsWith('feedback:') && done.has(c.key)) || primaryMeta.kind === 'feedback';
     const scope = [
       { c: remaining.find((c) => c.key === 'revenue'), title: 'Scope gap: how much revenue is affected?', why: 'Size the business impact before deciding who to tell and what to prepare.' },
-      { c: feedbackChecked ? undefined : remaining.find((c) => c.key.endsWith('_reviews')), title: 'Scope gap: are customers noticing?', why: 'Scope customer-visible impact before deciding who to tell and what to prepare.' },
+      { c: feedbackChecked ? undefined : remaining.find((c) => c.key.startsWith('feedback:')), title: 'Scope gap: are customers noticing?', why: 'Scope customer-visible impact before deciding who to tell and what to prepare.' },
     ].find((x) => x.c);
     const feedback = scope?.c;
     if (!untested.length && impactSettled && impact!.status !== 'ruled_out' && feedback && toolCalls < BUDGET) {

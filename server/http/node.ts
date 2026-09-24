@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { PlannerHttpRequest, PlannerHttpResponse } from './server.js';
+import type { PlannerHttpRequest, PlannerHttpResponse } from '../../src/product/agent/providers/server.js';
 
 /**
  * Serves the framework-free planner handler over Node's http primitives. Shared by the Vite dev

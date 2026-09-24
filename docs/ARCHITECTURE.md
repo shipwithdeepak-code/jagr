@@ -1,6 +1,6 @@
 # Jagr V1 — Integration & Backend Architecture
 
-Status: **proposed, awaiting approval** · Branch: `jagr-v1-productized` · Supersedes the integration notes in the README's "Architecture" section once implemented.
+Status: **approved; in implementation** — see §12 for what is built · Branch: `jagr-v1-productized`
 
 > **Portable by design, single implementation by default.**
 > Every piece of infrastructure Jagr depends on sits behind a small port owned by the product. Each port has exactly one production implementation (plus an in-memory one where tests need it). Nothing is abstracted that isn't genuinely replaceable.
@@ -438,3 +438,18 @@ Accounts and sessions · shared/multi-device workspaces · every OAuth/App insta
 - Enterprise SSO/SAML, SCIM, billing, org hierarchy, RBAC beyond owner/admin/member + `can_approve`, SOC 2 work, regional data hosting.
 - Public marketplace listings/app reviews (Slack, Atlassian, Intercom); P0 apps are installed by design partners directly *(verify each provider's non-marketplace install limits)*.
 - Real email delivery, telemetry, training on customer data, UI redesign beyond sign-in / connections / metric mapping / export-import, and any change to Demo night.
+
+---
+
+## 12. Implementation status
+
+| Step | Status | Notes |
+|---|---|---|
+| 1 Role-based source refactor | **Done** | Role interfaces + `SourceRegistry` (`src/product/roles/`); role tools replace vendor tools; `SignalKey` is `metric:<key>` / `work_items` / `feedback` / `changes`; action kinds vendor-neutral; native adapters bridged to roles with provenance (`integrations/bridge.ts`); stored workspaces migrate v2 → v3 (`migrations/roles.ts`, tested on a real v2 workspace); every golden/adversarial/planner verdict and investigation conclusion matches the pre-refactor baseline (`evaluation/verdicts.baseline.json`). Brought forward from step 4 so the core compiles alone: `HttpClient` port, `tsconfig.product.json`, architecture test, and the three boundary moves. |
+
+Decisions taken during implementation (smallest reversible choice, per the brief):
+
+- **Source ids stay opaque strings.** The built-in channels keep their ids (`jira`, `ga4`, `app_store`, `google_play`) so stored workspaces, deep links and evaluations are unaffected; the engine never branches on them (enforced by `architecture.test.ts`). New connectors register new ids.
+- **Pure helpers moved into the core.** `lib/time` and `lib/rng` now live in `src/product/lib/` (re-exported from `src/lib/` for the UI and Demo night) so the core imports nothing outside itself except `zod`.
+- **Allowed runtime globals** for the core are declared in `types/core-runtime.d.ts`: timers, `URL`, `AbortSignal.timeout`. Everything else — including `fetch` — comes through ports.
+- **Rollout pre-checks** read every change source that reports rollout state (`ChangeSource.tracksRollout`); they are independent reads, so the verdict lock compares them as a set.

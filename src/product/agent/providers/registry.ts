@@ -22,7 +22,7 @@ export interface ProviderSpec {
   /** Provider-specific environment variables, used when the generic LLM_* ones are not set. */
   keyEnv: string[];
   modelEnv: string[];
-  create(cfg: ProviderConfig, http?: Fetch): ProviderAdapter;
+  create(cfg: ProviderConfig, http: Fetch): ProviderAdapter;
 }
 
 export const PROVIDER_REGISTRY: Record<string, ProviderSpec> = {

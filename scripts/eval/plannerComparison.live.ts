@@ -1,17 +1,17 @@
 import { loadEnv } from 'vite';
 import { test } from 'vitest';
-import type { MonitoringResult, SourceConnection } from '../types';
-import { defaultBriefSchedule, defaultWatches } from '../catalog';
-import { defaultConnections } from '../integrations/adapters';
-import { defaultWorld } from '../integrations/world';
-import { runMonitoring } from '../engine/monitor';
-import { createPlannerManager, type InvestigationPlanner } from '../agent/planner';
-import { readPlannerConfig } from '../agent/providers/config';
-import { llmPlannerProvider, PROVIDER_REGISTRY } from '../agent/providers/registry';
-import { overclaimingSentences } from '../engine/language';
-import { plannerTexts } from '../evaluation/adversarial';
-import { generatedTexts } from '../evaluation/golden';
-import { unauthorisedCalls } from '../evaluation/plannerEval';
+import type { MonitoringResult, SourceConnection } from '../../src/product/types';
+import { defaultBriefSchedule, defaultWatches } from '../../src/product/catalog';
+import { defaultConnections } from '../../src/product/integrations/adapters';
+import { defaultWorld } from '../../src/product/integrations/world';
+import { runMonitoring } from '../../src/product/engine/monitor';
+import { createPlannerManager, type InvestigationPlanner } from '../../src/product/agent/planner';
+import { readPlannerConfig } from '../../src/product/agent/providers/config';
+import { llmPlannerProvider, PROVIDER_REGISTRY } from '../../src/product/agent/providers/registry';
+import { overclaimingSentences } from '../../src/product/engine/language';
+import { plannerTexts } from '../../src/product/evaluation/adversarial';
+import { generatedTexts } from '../../src/product/evaluation/golden';
+import { unauthorisedCalls } from '../../src/product/evaluation/plannerEval';
 
 /**
  * MANUAL live comparison — makes real API calls. Never part of `npm test`.
@@ -36,7 +36,7 @@ function plannerFor(id: string): { planner?: InvestigationPlanner; skip?: string
   const cfg = readPlannerConfig({ ...own, PLANNER_MODE: 'llm', LLM_PROVIDER: id, LLM_FALLBACK_PROVIDER: '' });
   const r = cfg.primary;
   if (!r?.configured || !r.config) return { label: r?.displayName ?? id, skip: r?.problems.join(' ') ?? 'not configured' };
-  const provider = llmPlannerProvider(PROVIDER_REGISTRY[id].create(r.config), { timeoutMs: cfg.timeoutMs });
+  const provider = llmPlannerProvider(PROVIDER_REGISTRY[id].create(r.config, (url, init) => fetch(url, init)), { timeoutMs: cfg.timeoutMs });
   return { planner: createPlannerManager({ primary: provider, timeoutMs: cfg.timeoutMs + 2000 }), label: `${r.displayName} · ${r.model}` };
 }
 

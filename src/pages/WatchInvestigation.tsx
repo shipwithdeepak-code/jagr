@@ -14,6 +14,7 @@ import { confidenceBand } from '@/product/engine/monitor';
 import { cx, EmptyState, Mono } from '@/components/ui';
 import type { TaskDraft } from '@/domain/types';
 import { headlineOf, readingOf } from '@/product/presentation';
+import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
 
 const OWNER_TEAM: Record<string, string> = { checkout: 'payments-eng', signup: 'growth', search: 'product', stability: 'platform', general: 'product' };
 
@@ -34,7 +35,14 @@ function taskDraftFor(inv: WatchInvestigation): TaskDraft {
       confidence: `Investigation confidence ${confidenceBand(inv.confidence)} that the problem is real — cause not established`,
       nextStep: inv.recommendedNextStep,
       // The shared tracker uses the demo's source vocabulary; map what has an equivalent.
-      sources: [...new Set(inv.correlatedProviders.flatMap((p): TaskDraft['description']['sources'] => (p === 'ga4' ? ['analytics'] : p === 'jira' ? ['issue_tracker'] : p === 'app_store' || p === 'google_play' ? ['support'] : [])))],
+      sources: [
+        ...new Set(
+          inv.correlatedProviders.flatMap((p): TaskDraft['description']['sources'] => {
+            const roles = p === 'email' ? [] : BUILTIN_SOURCE_ROLES[p];
+            return roles.includes('feedback') ? ['support'] : roles.includes('work_items') ? ['issue_tracker'] : roles.includes('metrics') ? ['analytics'] : [];
+          }),
+        ),
+      ],
     },
   };
 }
@@ -274,7 +282,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
               <SectionHeader title="Actions" hint="Risk decides autonomy — LOW: Jagr does it · MEDIUM: Jagr recommends · HIGH: prepared, waits for you · CRITICAL: approval required." />
               <div className="overflow-hidden rounded-xl border border-line bg-surface">
                 {actions.map((a) => (
-                  <ActionRow key={a.id} action={a} onDo={a.kind === 'create_jira_task' || a.kind === 'create_jira_incident' ? fileTask : undefined} />
+                  <ActionRow key={a.id} action={a} onDo={a.kind === 'create_work_item' || a.kind === 'create_incident' ? fileTask : undefined} />
                 ))}
               </div>
               {filed && (

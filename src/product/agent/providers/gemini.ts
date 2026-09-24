@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
+import { ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
 
 /**
  * Google Gemini — generateContent REST API. Structured output via responseMimeType
@@ -26,7 +26,7 @@ export function toGeminiSchema(schema: unknown): unknown {
   return upper(stripped);
 }
 
-export function createGeminiAdapter(cfg: ProviderConfig, http: Fetch = defaultFetch): ProviderAdapter {
+export function createGeminiAdapter(cfg: ProviderConfig, http: Fetch): ProviderAdapter {
   const base = (cfg.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
   return {
     id: 'gemini',

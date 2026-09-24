@@ -30,7 +30,7 @@ describe('Jira Cloud connector', () => {
         ? { status: 200, body: { issues: [issue('PAY-513', '2026-09-23T20:05:00.000+0000', { issuetype: { name: 'Incident' }, priority: { name: 'Highest' } })], isLast: true } }
         : { status: 200, body: { issues: [issue('PAY-512', '2026-09-23T19:20:00.000+0000'), issue('PAY-400', '2026-09-23T17:59:00.000+0000')], nextPageToken: 'p2', isLast: false } };
     });
-    const jira = new JiraCloudAdapter({ ...cfg, fetch: f });
+    const jira = new JiraCloudAdapter({ ...cfg, http: f });
     const issues = await jira.getIssues(window);
 
     expect(calls).toHaveLength(2);
@@ -55,7 +55,7 @@ describe('Jira Cloud connector', () => {
         { id: '10000', name: '4.8.0', released: true, releaseDate: '2026-09-10' },
       ],
     }));
-    const jira = new JiraCloudAdapter({ ...cfg, fetch: f });
+    const jira = new JiraCloudAdapter({ ...cfg, http: f });
     const releases = await jira.getReleases(window);
     expect(calls[0].url).toBe('https://acme.atlassian.net/rest/api/3/project/PAY/versions');
     expect(releases).toHaveLength(1);
@@ -70,7 +70,7 @@ describe('Jira Cloud connector', () => {
     [503, 'unavailable'],
   ] as const)('turns HTTP %i into a %s gap, never an empty result', async (status, state) => {
     const { f } = mockFetch(() => ({ status }));
-    const jira = new JiraCloudAdapter({ ...cfg, fetch: f });
+    const jira = new JiraCloudAdapter({ ...cfg, http: f });
     const err = await jira.getIssues(window).catch((e) => e);
     expect(err).toBeInstanceOf(ProviderUnavailableError);
     expect(err.state).toBe(state);
@@ -80,14 +80,14 @@ describe('Jira Cloud connector', () => {
     const f = (async () => {
       throw new TypeError('Failed to fetch');
     }) as unknown as typeof fetch;
-    const err = await new JiraCloudAdapter({ ...cfg, fetch: f }).getReleases(window).catch((e) => e);
+    const err = await new JiraCloudAdapter({ ...cfg, http: f }).getReleases(window).catch((e) => e);
     expect(err).toBeInstanceOf(ProviderUnavailableError);
     expect(err.state).toBe('unavailable');
   });
 
   it('is honest when not configured: no calls, an unavailable connection, real links', async () => {
     const { f, calls } = mockFetch(() => ({ status: 200, body: [] }));
-    const jira = new JiraCloudAdapter({ baseUrl: 'https://acme.atlassian.net', projectKey: 'PAY', fetch: f });
+    const jira = new JiraCloudAdapter({ baseUrl: 'https://acme.atlassian.net', projectKey: 'PAY', http: f });
     expect(jira.connection().state).toBe('unavailable');
     expect(jira.connection().detail).toMatch(/not configured/);
     await expect(jira.getIssues(window)).rejects.toBeInstanceOf(ProviderUnavailableError);

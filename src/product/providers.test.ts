@@ -62,7 +62,7 @@ function mocked(provider: string, respond: (captured: Captured) => { status?: nu
 
 const state = (patch: Partial<PlannerInput> = {}): PlannerInput => ({ ...SAMPLE_PLANNER_STATE, ...patch });
 const proposal = (patch: Record<string, unknown> = {}) =>
-  JSON.stringify({ nextTool: 'getRecentJiraIssues', reason: 'The product-issue hypothesis has no engineering evidence yet.', evidenceGap: 'Recent checkout defects', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Checkout bugs or incidents, or none.', ...patch });
+  JSON.stringify({ nextTool: 'getWorkItems', reason: 'The product-issue hypothesis has no engineering evidence yet.', evidenceGap: 'Recent checkout defects', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Checkout bugs or incidents, or none.', ...patch });
 
 const PROVIDERS = Object.keys(NATIVE);
 
@@ -90,7 +90,7 @@ describe.each(PROVIDERS)('%s adapter', (id) => {
 
   it.each([
     ['malformed', 'Sure — I would look at Jira next.', 'INVALID_JSON'],
-    ['truncated JSON', '{"nextTool": "getRecentJiraIssues", "reason": "Engin', 'INVALID_JSON'],
+    ['truncated JSON', '{"nextTool": "getWorkItems", "reason": "Engin', 'INVALID_JSON'],
     ['empty', '', 'EMPTY_RESPONSE'],
     ['extra field', proposal({ budget: 20 }), 'SCHEMA_VIOLATION'],
   ])('%s response → %s, nothing executes', async (_n, text, code) => {
@@ -106,7 +106,7 @@ describe.each(PROVIDERS)('%s adapter', (id) => {
     ['unknown hypothesis', { hypothesesAffected: ['HYP-99'] }, state(), 'INVALID_HYPOTHESIS'],
     ['causal language', { reason: 'Release 4.8.1 caused the checkout drop.' }, state(), 'CAUSAL_CLAIM'],
     ['unavailable source', {}, state({ options: SAMPLE_PLANNER_STATE.options.map((o) => (o.source === 'jira' ? { ...o, sourceState: 'unavailable' } : o)) }), 'SOURCE_UNAVAILABLE'],
-    ['repeated tool', {}, state({ options: SAMPLE_PLANNER_STATE.options.map((o) => (o.tool === 'getRecentJiraIssues' ? { ...o, alreadyQueried: true } : o)) }), 'ALREADY_QUERIED'],
+    ['repeated tool', {}, state({ options: SAMPLE_PLANNER_STATE.options.map((o) => (o.tool === 'getWorkItems' ? { ...o, alreadyQueried: true } : o)) }), 'ALREADY_QUERIED'],
     ['an action instead of a tool', { nextTool: 'rollback_release' }, state(), 'ACTION_NOT_TOOL'],
   ])('%s → well-formed, but rejected by the same policy (%s)', async (_n, patch, s, code) => {
     const { out } = await planWith(proposal(patch as Record<string, unknown>), s as PlannerInput);

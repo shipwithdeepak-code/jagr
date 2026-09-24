@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig, type StructuredMode } from './types.js';
+import { ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig, type StructuredMode } from './types.js';
 
 /**
  * OpenAI and OpenAI-compatible endpoints — Chat Completions API.
@@ -25,7 +25,7 @@ export function unwrapFence(text: string): string {
   return m ? m[1] : text;
 }
 
-export function createOpenAIAdapter(cfg: ProviderConfig, http: Fetch = defaultFetch, flavour: 'openai' | 'openai-compatible' = 'openai'): ProviderAdapter {
+export function createOpenAIAdapter(cfg: ProviderConfig, http: Fetch, flavour: 'openai' | 'openai-compatible' = 'openai'): ProviderAdapter {
   const base = (cfg.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '');
   const mode: StructuredMode = cfg.structured ?? (flavour === 'openai' ? 'json_schema' : 'json_object');
   return {

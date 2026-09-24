@@ -39,21 +39,18 @@ export interface SourceConnection {
 
 export type Area = 'checkout' | 'signup' | 'search' | 'stability' | 'general';
 
-export type SignalKey =
-  | 'ga4.checkout_conversion'
-  | 'ga4.signup_conversion'
-  | 'ga4.search_usage'
-  | 'ga4.purchase_revenue'
-  | 'app_store.crash_free_sessions'
-  | 'google_play.crash_free_sessions'
-  | 'jira.issues'
-  | 'app_store.reviews'
-  | 'google_play.reviews'
-  | 'releases';
+/**
+ * What a watch looks at, by role — never by vendor.
+ *   metric:<key>  a workspace metric (e.g. metric:checkout_conversion), from whichever source serves it
+ *   work_items    new bugs / incidents, from every work-item source in the watch
+ *   feedback      negative customer feedback, from every feedback source in the watch
+ *   changes       releases, deploys and other changes — context for investigations
+ */
+export type SignalKey = `metric:${string}` | 'work_items' | 'feedback' | 'changes';
 
 export interface WatchSignal {
   key: SignalKey;
-  /** For issue/review signals: which product area to look for. '*' = every area. */
+  /** For work-item / feedback signals: which product area to look for. '*' = every area. */
   area?: Area | '*';
 }
 
@@ -87,7 +84,7 @@ export interface Watch {
   timezone: string;
   severityThreshold: AttentionLevel;
   /**
-   * Optional per-metric detection thresholds, keyed by metric id (e.g. 'ga4.checkout_conversion').
+   * Optional per-metric detection thresholds, keyed by metric key (e.g. 'checkout_conversion').
    * Same unit as the metric's default: % change for relative metrics, points for absolute ones,
    * always compared against the metric's baseline. Missing = the metric's default threshold.
    */
@@ -178,15 +175,8 @@ export interface Hypothesis {
 // Agent investigation (Phase 2)
 // ─────────────────────────────────────────────────────────────
 
-export type ToolName =
-  | 'getAnalyticsMetric'
-  | 'getAnalyticsTraffic'
-  | 'getJiraRelease'
-  | 'getRecentJiraIssues'
-  | 'getStoreReleases'
-  | 'getStoreCrashRate'
-  | 'getAppStoreReviews'
-  | 'getPlayStoreReviews';
+/** The investigator's tools — one per evidence role. Each call names a source id; none names a vendor. */
+export type ToolName = 'getMetric' | 'getMetricBreakdown' | 'getChanges' | 'getWorkItems' | 'getFeedback' | 'getFeedbackVolume';
 
 export type HypothesisKind = 'release_related' | 'shared_product_issue' | 'demand_shift' | 'measurement_artifact' | 'external_or_unobserved' | 'customer_only';
 
@@ -257,7 +247,7 @@ export interface PlannerDecision {
 }
 
 export type ActionRisk = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type ActionKind = 'link_issues' | 'create_jira_task' | 'create_jira_incident' | 'pause_rollout' | 'rollback_release' | 'notify_customers';
+export type ActionKind = 'link_work_items' | 'create_work_item' | 'create_incident' | 'pause_rollout' | 'rollback_release' | 'notify_customers';
 
 export interface ActionOption {
   id: string;

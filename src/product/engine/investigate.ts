@@ -1,8 +1,8 @@
-import { fmtTime, minutesBetween } from '@/lib/time';
+import { fmtTime, minutesBetween } from '../lib/time';
 import type { Area, DetectedSignal, EvidenceItem, Hypothesis, ProviderId, SourceLink } from '../types';
-import { AREA_LABEL } from '../catalog';
+import { AREA_LABEL, signalMeta } from '../catalog';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '../integrations/types';
+import type { ChangeRecord, FeedbackItem, MetricSeries, WorkItem } from '../roles/types';
 import { fmtMagnitude, type MetricReading } from './detect';
 
 /**
@@ -15,9 +15,9 @@ export interface Gathered {
   evidence: EvidenceItem[];
   gaps: { provider: ProviderId; detail: string; noData?: boolean }[];
   notInWatch: ProviderId[];
-  releases: ReleaseRecord[];
-  issues: IssueRecord[];
-  reviews: ReviewRecord[];
+  changes: ChangeRecord[];
+  workItems: WorkItem[];
+  feedback: FeedbackItem[];
   areaMetric?: { series: MetricSeries; reading: MetricReading };
   trafficStable?: boolean;
 }
@@ -31,13 +31,13 @@ function fmtValue(series: MetricSeries, v: number) {
 /** Evidence item for a metric reading — a factual statement, with a deep link to the series. */
 export function metricEvidence(series: MetricSeries, reading: MetricReading, simulated: boolean, labels?: ProviderLabels): EvidenceItem {
   const P = labelOf(labels);
-  const ref = { provider: series.provider, kind: 'metric' as const, id: series.id };
-  const link = makeLink(ref, `Open ${P(series.provider).short}`, simulated);
+  const ref = series.ref;
+  const link = makeLink(ref, `Open ${P(series.source).short}`, simulated);
   const degraded = reading.status !== 'normal';
   const statement = degraded
-    ? `${P(series.provider).short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`
-    : `${P(series.provider).short}: ${series.name} is within its normal range (${fmtMagnitude(series, reading)} vs baseline).`;
-  return { id: `${series.provider}:metric:${series.id}`, provider: series.provider, direction: degraded ? 'degraded' : 'stable', statement, onsetAt: reading.onsetAt, refs: [ref], link };
+    ? `${P(series.source).short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`
+    : `${P(series.source).short}: ${series.name} is within its normal range (${fmtMagnitude(series, reading)} vs baseline).`;
+  return { id: `${series.source}:metric:${series.key}`, provider: series.source, direction: degraded ? 'degraded' : 'stable', statement, onsetAt: reading.onsetAt, refs: [ref], link };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -71,13 +71,14 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   const areaLabel = AREA_LABEL[area].toLowerCase();
 
   // A change (release) is associated only by timing: shipped within 3h before the degradation began.
-  const candidates = g.releases.filter((r) => r.version && Date.parse(r.releasedAt) <= Date.parse(onsetAt) + 15 * 60_000 && minutesBetween(r.releasedAt, onsetAt) <= 180);
+  const candidates = g.changes.filter((r) => r.version && Date.parse(r.at) <= Date.parse(onsetAt) + 15 * 60_000 && minutesBetween(r.at, onsetAt) <= 180);
   // Most recent version shipped before onset; measure from that version's first release.
-  const nearest = candidates.sort((a, b) => b.releasedAt.localeCompare(a.releasedAt))[0];
-  const first = nearest ? candidates.filter((r) => r.version === nearest.version).sort((a, b) => a.releasedAt.localeCompare(b.releasedAt))[0] : undefined;
-  const releaseAssociation = first ? { version: first.version, releasedAt: first.releasedAt, minutesBeforeOnset: Math.max(0, Math.round(minutesBetween(first.releasedAt, onsetAt))) } : undefined;
+  const nearest = candidates.sort((a, b) => b.at.localeCompare(a.at))[0];
+  const first = nearest ? candidates.filter((r) => r.version === nearest.version).sort((a, b) => a.at.localeCompare(b.at))[0] : undefined;
+  const releaseAssociation = first ? { version: first.version!, releasedAt: first.at, minutesBeforeOnset: Math.max(0, Math.round(minutesBetween(first.at, onsetAt))) } : undefined;
 
-  const customerPrimary = primary.key.endsWith('.reviews') || primary.key === 'jira.issues';
+  const primaryMeta = signalMeta(primary.key);
+  const customerPrimary = primaryMeta.kind === 'feedback' || primaryMeta.kind === 'work_items';
   const areaMetricStable = g.areaMetric?.reading.status === 'normal';
   const strength = Math.min(1, primary.ratio / 2);
 
@@ -108,7 +109,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   if (corroborating === 0 && !customerPrimary) inferred.push('Only one source shows this change; it may be a real shift or a measurement issue.');
 
   // "No release found" is only true if someone looked. A skipped or failed lookup is not a negative.
-  const releaseChecked = g.releases.length > 0 || g.evidence.some((e) => e.query?.tool === 'getJiraRelease' || e.query?.tool === 'getStoreReleases');
+  const releaseChecked = g.changes.length > 0 || g.evidence.some((e) => e.query?.tool === 'getChanges');
   const unknowns: string[] = [];
   unknowns.push(
     releaseAssociation
@@ -140,7 +141,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     likelyExplanation = `Only ${P(primary.provider).short} shows this change. There is not enough evidence to explain it.`;
   }
 
-  const staged = g.releases.find((r) => r.rollout && /staged/i.test(r.rollout) && r.version === releaseAssociation?.version);
+  const staged = g.changes.find((r) => r.rollout && /staged/i.test(r.rollout) && r.version === releaseAssociation?.version);
   const uncertainty = [
     'The data does not establish causation.',
     ...g.gaps.map((x) => `${P(x.provider).name} could not be checked.`),
@@ -151,7 +152,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     .filter(Boolean)
     .join(' ');
 
-  const issueKeys = g.issues.slice(0, 2).map((i) => i.id);
+  const issueKeys = g.workItems.slice(0, 2).map((i) => i.id);
   let recommendedNextStep: string;
   if (critical) recommendedNextStep = `Escalate to the ${areaLabel} owner now and review ${releaseAssociation ? `errors and crash reports for ${releaseAssociation.version}` : 'error logs'}${issueKeys.length ? `, starting with ${issueKeys.join(' and ')}` : ''}.`;
   else if (releaseAssociation) recommendedNextStep = `Review ${areaLabel} errors and crash reports associated with ${releaseAssociation.version}${issueKeys.length ? `, and triage ${issueKeys.join(' and ')}` : ''}.`;
@@ -162,7 +163,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   let title: string;
   if (correlatedProviders.length >= 3) title = area === 'stability' ? 'App stability degraded' : `${AREA_LABEL[area]} health degraded`;
   else if (customerPrimary) title = `${AREA_LABEL[area]} complaints rising`;
-  else if (primary.key.endsWith('crash_free_sessions')) title = 'App stability degraded';
+  else if (primaryMeta.purpose === 'stability') title = 'App stability degraded';
   else title = `${primary.label} declined`;
 
   const sourceLinks: SourceLink[] = [];

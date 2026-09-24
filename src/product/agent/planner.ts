@@ -1,6 +1,6 @@
 import type { ToolName } from '../types';
 import { overclaimingSentences } from '../engine/language';
-import { PROVIDERS } from '../integrations/adapters';
+import { TOOL_NAMES } from './tools';
 import type { PlannerFailureCode, PlannerProposal } from './plannerSchema';
 import type { PlannerInput, PlannerOption } from './plannerPrompt';
 
@@ -22,10 +22,10 @@ export { createModelPlanner, createPlannerManager, providerFromClient, createHtt
 // Deterministic policy validator — the hard boundary
 // ─────────────────────────────────────────────────────────────
 
-export const TOOL_NAMES: ToolName[] = ['getAnalyticsMetric', 'getAnalyticsTraffic', 'getJiraRelease', 'getRecentJiraIssues', 'getStoreReleases', 'getStoreCrashRate', 'getAppStoreReviews', 'getPlayStoreReviews'];
+export { TOOL_NAMES };
 
 /** Things a planner might try to "call" that are actions, not investigation tools. */
-const ACTION_NAMES = ['link_issues', 'create_jira_task', 'create_jira_incident', 'pause_rollout', 'rollback_release', 'notify_customers', 'executeAction', 'proposeActions'];
+const ACTION_NAMES = ['link_work_items', 'create_work_item', 'create_incident', 'link_issues', 'create_jira_task', 'create_jira_incident', 'pause_rollout', 'rollback_release', 'notify_customers', 'executeAction', 'proposeActions'];
 const ACTION_VERBS = /^(rollback|roll_back|pause|resume|notify|email|refund|execute|deploy|revert|disable|enable|create|link|file|change|set)/i;
 
 export type ValidationCode =
@@ -72,7 +72,7 @@ export function validatePlan(plan: PlannerProposal, input: PlannerInput): Valida
   const reachable = matching.filter((o) => !unavailable(o));
   if (!reachable.length) {
     const o = matching[0];
-    return { ok: false, code: 'SOURCE_UNAVAILABLE', reason: `${PROVIDERS[o.source].name} is ${o.sourceFailed ? 'not responding (it failed earlier in this pass)' : o.sourceState}. The call was not made.` };
+    return { ok: false, code: 'SOURCE_UNAVAILABLE', reason: `${o.sourceLabel ?? o.source} is ${o.sourceFailed ? 'not responding (it failed earlier in this pass)' : o.sourceState}. The call was not made.` };
   }
   const fresh = reachable.filter((o) => !o.alreadyQueried);
   if (!fresh.length) {

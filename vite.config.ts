@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 import { createPlannerHandler } from './src/product/agent/providers/server.js';
-import { serveNode } from './src/product/agent/providers/node.js';
+import { serveNode } from './server/http/node.js';
 
 /**
  * Dev planner endpoint. Provider credentials stay in this Node process (from the environment or an
@@ -11,7 +11,7 @@ import { serveNode } from './src/product/agent/providers/node.js';
  * runs as a Vercel serverless function (api/planner.ts).
  */
 function plannerEndpoint(env: Record<string, string>): Plugin {
-  const handle = createPlannerHandler(env);
+  const handle = createPlannerHandler(env, (url, init) => fetch(url, init));
   return {
     name: 'jagr-planner-endpoint',
     apply: 'serve',
@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     // The live provider comparison only runs on request (npm run eval:planners) — never in npm test.
-    include: process.env.JAGR_LIVE_EVAL ? ['src/**/*.live.ts'] : ['src/**/*.test.ts'],
+    include: process.env.JAGR_LIVE_EVAL ? ['scripts/eval/**/*.live.ts'] : ['src/**/*.test.ts', 'server/**/*.test.ts'],
     environment: 'node',
   },
 }));

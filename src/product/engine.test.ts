@@ -97,7 +97,7 @@ describe('default workspace night', () => {
       runMonitoring({ world: defaultWorld(), watches: [watchFromTemplate('w-conv', 'conversion', { thresholds })], connections: defaultConnections(), brief: defaultBriefSchedule() });
     expect((await run()).investigations.length).toBeGreaterThan(0);
     // A threshold far above last night's drops means nothing crosses it.
-    expect((await run({ 'ga4.checkout_conversion': 90, 'ga4.signup_conversion': 90 })).investigations).toHaveLength(0);
+    expect((await run({ 'checkout_conversion': 90, 'signup_conversion': 90 })).investigations).toHaveLength(0);
     const series = { ...defaultWorld().metrics[0], threshold: 5 };
     expect(withWatchThreshold(series, { [series.id]: 0 }).threshold).toBe(5);
     expect(withWatchThreshold(series, { [series.id]: Number.NaN }).threshold).toBe(5);

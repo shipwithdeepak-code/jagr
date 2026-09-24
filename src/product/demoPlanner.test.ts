@@ -109,7 +109,7 @@ describe('planner selection in the demo / simulated environment', () => {
   });
 
   it('4 · demo + malformed LLM response → INVALID_JSON, deterministic fallback', async () => {
-    const { r } = await demoRun('llm', googleApi(() => ({ text: '{"nextTool": "getRecentJiraIssues", "reason": "Engin' })));
+    const { r } = await demoRun('llm', googleApi(() => ({ text: '{"nextTool": "getWorkItems", "reason": "Engin' })));
     expect(decisions(r).some((x) => x.failure?.code === 'INVALID_JSON')).toBe(true);
     expect(decisions(r).some((x) => x.type === 'DETERMINISTIC_FALLBACK' && x.validator === 'APPROVED')).toBe(true);
   });

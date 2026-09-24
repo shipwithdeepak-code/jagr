@@ -74,7 +74,8 @@ export interface SourceEvent {
   ref: SourceRef;
 }
 
-export type Capability = 'metrics' | 'issues' | 'releases' | 'reviews' | 'events' | 'changes' | 'send_email';
+/** `rollout`: the source reports staged / phased rollout state for its releases. */
+export type Capability = 'metrics' | 'issues' | 'releases' | 'reviews' | 'events' | 'changes' | 'rollout' | 'send_email';
 
 export class ProviderUnavailableError extends Error {
   constructor(public readonly provider: ProviderId, public readonly state: 'unavailable' | 'error', detail: string) {
@@ -84,6 +85,9 @@ export class ProviderUnavailableError extends Error {
 }
 
 /**
+ * The NATIVE adapter contract: records shaped like the source's own API. The engine never calls it
+ * directly — `roleSourceFromAdapter` (./bridge.ts) turns an adapter into role-based sources.
+ *
  * The adapter contract. Operations a provider doesn't support return an empty list,
  * so the engine can call every operation on every source uniformly.
  * A production connector (Jira REST, GA4 Data API, App Store Connect API, Play Developer
@@ -94,6 +98,8 @@ export interface IntegrationAdapter {
   readonly name: string;
   readonly capabilities: Capability[];
   connection(): SourceConnection;
+  /** Metric series this source can serve (definitions only — no points). */
+  listMetrics?(): Omit<MetricSeries, 'points' | 'baseline'>[];
   getMetrics(ids: string[], window: TimeWindow): Promise<MetricSeries[]>;
   getIssues(window: TimeWindow): Promise<IssueRecord[]>;
   getReleases(window: TimeWindow): Promise<ReleaseRecord[]>;

@@ -73,8 +73,8 @@ The **Workspace | Demo night** switch in the header selects the environment, and
 ```bash
 npm install
 npm run dev              # http://localhost:5173 (includes the planner endpoint)
-npm test                 # 259 tests: engine, golden, adversarial, planner, providers, environments, bring-your-own-data
-npm run typecheck
+npm test                 # engine, golden, adversarial, planner, providers, environments, bring-your-own-data, role contracts, migrations, architecture boundaries, verdict lock
+npm run typecheck        # the app, plus the portable core compiled alone with no DOM or Node types
 npm run build
 npm run eval:planners    # MANUAL: real provider calls for configured providers; never part of npm test
 ```
@@ -102,16 +102,24 @@ No API key is needed: without one, Jagr uses the deterministic planner and says 
 ```
 api/
   planner.ts                Production planner endpoint (Vercel function; same handler as the dev server)
+server/
+  http/node.ts              Node http glue for the planner endpoint (dev server + Vercel)
+scripts/eval/*.live.ts      Manual live-provider comparison (npm run eval:planners) — never part of npm test
 src/
-  product/                  ← the watch product
+  product/                  ← the portable core (no browser, Node, deployment or DB APIs; see docs/ARCHITECTURE.md)
     types.ts                Watch, SourceConnection, WatchInvestigation, EmailNotification, MorningBriefDoc…
-    catalog.ts              Signals, watch templates, default workspace
+    roles/                  Role-based sources: MetricSource, ChangeSource, WorkItemSource, FeedbackSource,
+                            ConversationSource, ContextSource; neutral records with provenance; SourceRegistry
+    ports/                  Infrastructure ports (HttpClient; more in later stages)
+    catalog.ts              Metrics and signals by role, watch templates, default workspace
     scheduler.ts            Deterministic scheduler: monitoring ≠ briefing, frequencies, timezones, cron mapping
-    integrations/           IntegrationAdapter (getMetrics/getIssues/getReleases/getReviews/getEvents/getChanges),
-                            simulated Jira/GA4/App Store/Play adapters, email outbox, fixture worlds, deep links
+    integrations/           Native adapters (simulated Jira/GA4/App Store/Play fixtures, imports), email outbox,
+                            deep links; bridge.ts turns any native adapter into role sources
     integrations/jiraCloud.ts  Real Jira Cloud REST v3 connector (tested with mocked responses; not configured)
-    agent/tools.ts          Explicit tools: getAnalyticsMetric, getAnalyticsTraffic, getJiraRelease,
-                            getRecentJiraIssues, getStoreReleases, getStoreCrashRate, getApp/PlayStoreReviews
+    agent/tools.ts          Role tools: getMetric, getMetricBreakdown, getChanges, getWorkItems, getFeedback,
+                            getFeedbackVolume — each names an opaque source id, never a vendor
+    migrations/             Stored-workspace migrations (v2 vendor-named → v3 role-based)
+    testkit/                The role-source contract every source must pass (test support)
     agent/investigator.ts   The agent loop: planner → policy validator → tool call → hypotheses → stop
     agent/planner.ts        Policy validator (provider-independent) + planner exports
     agent/plannerSchema.ts  PlannerProposalSchema: the normalized proposal every planner must produce
@@ -119,7 +127,6 @@ src/
     agent/plannerManager.ts PlannerManager: timeouts, circuit breaker, plan reuse, explicit provider fallback
     agent/providers/        Server-side only: config, registry, adapters (anthropic, gemini, openai[-compatible]), endpoint
     imports/                Bring your own data: CSV/JSON parsing, row validation, imports → World adapter
-    live/*.live.ts          Manual live-provider comparison (npm run eval:planners) — never part of npm test
     agent/actions.ts        Risk-based autonomy and the approval gate (executeAction refuses without approval)
     agent/decisions.ts      Human approve / reject / modify, applied over results and appended to the trace
     engine/                 detect → investigate/correlate → attention → notify → brief, causality guard, monitor loop
@@ -240,7 +247,9 @@ Notes from live Gemini testing:
 
 **Risk-based autonomy.** LOW (link related issues): Jagr does it. MEDIUM (Jira task or incident): Jagr recommends it, one click. HIGH (pause a staged rollout): prepared, notified, waits for approval. CRITICAL (rollback, customer communication): approval required. `executeAction` throws without an approval, so the gate is in the engine, not only the UI. Jagr doesn't write to a source it knows is down: the Jira actions become drafts.
 
-**Replacing the simulation.** Implement `IntegrationAdapter` for a real API (Jira Cloud REST, GA4 Data API, App Store Connect API, Play Developer Reporting API) and pass it in `createAdapters`. The engine, evaluations and UI don't change. `planJobs` output maps directly onto cron or queue jobs.
+**Evidence by role, not by vendor.** The investigator asks for *metrics*, *changes*, *work items* and *feedback* — never "Jira issues" or "GA4". Each source implements the roles it can serve and returns neutral records carrying their provenance (source, connection, external id, observed and fetched times). A boundary test fails if the engine ever names a vendor.
+
+**Replacing the simulation.** Implement the role interfaces in `src/product/roles/types.ts` for a real API (or implement a native `IntegrationAdapter` and wrap it with `roleSourceFromAdapter`), pass it the injected `HttpClient`, register it in a `SourceRegistry`, and run it through `testkit/roleContract.ts`. The engine, evaluations and UI don't change. `planJobs` output maps directly onto cron or queue jobs.
 
 ## Limitations
 

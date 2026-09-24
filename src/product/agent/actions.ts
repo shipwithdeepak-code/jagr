@@ -1,6 +1,6 @@
 import type { ActionDecision, ActionKind, ActionRisk, AgentHypothesis, AttentionLevel, ProposedAction, WatchInvestigation } from '../types';
 import { AREA_LABEL } from '../catalog';
-import type { IssueRecord, ReleaseRecord } from '../integrations/types';
+import type { ChangeRecord, WorkItem } from '../roles/types';
 import { atLeast } from '../engine/attention';
 
 /**
@@ -23,9 +23,9 @@ export const AUTONOMY: Record<ActionRisk, ProposedAction['autonomy']> = {
 };
 
 export const RISK_OF: Record<ActionKind, ActionRisk> = {
-  link_issues: 'LOW',
-  create_jira_task: 'MEDIUM',
-  create_jira_incident: 'MEDIUM',
+  link_work_items: 'LOW',
+  create_work_item: 'MEDIUM',
+  create_incident: 'MEDIUM',
   pause_rollout: 'HIGH',
   rollback_release: 'CRITICAL',
   notify_customers: 'CRITICAL',
@@ -45,10 +45,10 @@ export function executeAction(action: ProposedAction, decision?: ActionDecision)
   if (action.risk === 'MEDIUM' && decision?.status !== 'approved' && decision?.status !== 'done') throw new ApprovalRequiredError(action);
   const option = action.options?.find((o) => o.id === decision?.optionId);
   switch (action.kind) {
-    case 'link_issues':
-      return `${action.result ?? 'Linked the related Jira issues to this investigation'} (simulated — no Jira write was made).`;
+    case 'link_work_items':
+      return `${action.result ?? 'Linked the related issues to this investigation'} (simulated — nothing was written to an external tracker).`;
     case 'pause_rollout':
-      return `${option?.label ?? action.title} — recorded in the simulated environment. No store rollout was changed.`;
+      return `${option?.label ?? action.title} — recorded in the simulated environment. No rollout was changed.`;
     case 'rollback_release':
       return `${option?.label ?? action.title} — queued in the simulated environment. No production system was changed.`;
     case 'notify_customers':
@@ -79,14 +79,20 @@ export function proposeActions(args: {
   inv: WatchInvestigation;
   hypotheses: AgentHypothesis[];
   attention: AttentionLevel;
-  issues: IssueRecord[];
-  releases: ReleaseRecord[];
+  workItems: WorkItem[];
+  changes: ChangeRecord[];
   at: string;
-  /** 'imported': issues came from the user's file — nothing to link or file in an external tracker. */
-  issueSource?: 'imported';
+  /**
+   * The watch's work-item source — where links and tickets would go. `imported`: the user's file, so
+   * nothing can be linked or filed externally. `down`: it failed in this investigation. Absent: none.
+   */
+  tracker?: { label: string; mode: 'imported' | 'live'; down: boolean };
 }): ProposedAction[] {
-  const { inv, hypotheses, attention, issues, releases, at } = args;
-  const imported = args.issueSource === 'imported';
+  const { inv, hypotheses, attention, at } = args;
+  const issues = args.workItems;
+  const releases = args.changes;
+  const tracker = args.tracker;
+  const imported = tracker?.mode === 'imported';
   if (!atLeast(attention, 'MEDIUM')) return [];
   const out: ProposedAction[] = [];
   const area = AREA_LABEL[inv.area].toLowerCase();
@@ -94,19 +100,20 @@ export function proposeActions(args: {
   const release = hypotheses.find((h) => h.kind === 'release_related');
   const releaseLive = !!release && release.status !== 'ruled_out' && (release.strength === 'moderate' || release.strength === 'strong');
   const version = inv.releaseAssociation?.version;
-  // Never propose writing to a source Jagr knows is down as if it would just work.
-  const jiraDown = imported || inv.evidence.some((e) => e.provider === 'jira' && e.direction === 'gap');
-  const jiraNote = imported
-    ? ' Jira is not connected to this workspace: Jagr prepares it as a draft you can copy into your tracker.'
-    : jiraDown
-      ? ' Jira is unavailable right now: Jagr holds this as a draft and files it once Jira responds.'
+  // Never propose writing to a source Jagr knows is down (or doesn't have) as if it would just work.
+  const trackerName = imported || !tracker ? 'issue tracker' : tracker.label;
+  const draftOnly = imported || !tracker || tracker.down;
+  const trackerNote = imported || !tracker
+    ? ' An issue tracker is not connected to this workspace: Jagr prepares it as a draft you can copy into your tracker.'
+    : tracker.down
+      ? ` ${tracker.label} is unavailable right now: Jagr holds this as a draft and files it once ${tracker.label} responds.`
       : '';
 
   const product = issues.filter((i) => !i.labels.includes('payment-provider'));
   if (product.length) {
     out.push(
-      make(inv, 'link_issues', at, {
-        title: `Link ${product.length} ${imported ? 'imported' : 'Jira'} ${product.length === 1 ? 'issue' : 'issues'} to this investigation`,
+      make(inv, 'link_work_items', at, {
+        title: `Link ${product.length} ${imported ? 'imported' : (tracker?.label ?? 'related')} ${product.length === 1 ? 'issue' : 'issues'} to this investigation`,
         why: 'These issues describe the same problem; linking them saves triage from rediscovering it.',
         evidence: product.slice(0, 4).map((i) => `${i.id}: ${i.title}`),
         whatWillHappen: imported ? `Links ${product.map((i) => i.id).join(', ')} to this investigation inside Jagr. Nothing is written to an external tracker.` : `Adds a comment with the Jagr investigation link to ${product.map((i) => i.id).join(', ')}.`,
@@ -119,30 +126,39 @@ export function proposeActions(args: {
 
   if (atLeast(attention, 'HIGH')) {
     out.push(
-      make(inv, 'create_jira_incident', at, {
-        title: `${jiraDown ? 'Draft' : 'Open'} a Jira incident for the ${area} degradation`,
+      make(inv, 'create_incident', at, {
+        title: `${draftOnly ? 'Draft' : 'Open'} ${draftOnly ? 'an' : `a ${trackerName}`} incident for the ${area} degradation`,
         why: `${inv.attention} attention: a core ${area} degradation corroborated across sources needs an owner now.`,
         evidence: supporting.slice(0, 5),
-        whatWillHappen: `Creates an incident ticket with the evidence, the timeline and a link back to this investigation.${jiraNote}`,
+        whatWillHappen: `Creates an incident ticket with the evidence, the timeline and a link back to this investigation.${trackerNote}`,
         whatCouldGoWrong: 'Starts the incident process for something that might resolve on its own.',
         reversible: true,
       }),
     );
   } else {
     out.push(
-      make(inv, 'create_jira_task', at, {
-        title: `${jiraDown ? 'Draft' : 'Create'} a Jira task to look into the ${area} change`,
+      make(inv, 'create_work_item', at, {
+        title: `${draftOnly ? 'Draft a task' : `Create a ${trackerName} task`} to look into the ${area} change`,
         why: 'Persistent, but not strong enough to interrupt anyone — worth a look during working hours.',
         evidence: supporting.slice(0, 4),
-        whatWillHappen: `Creates a task in the owning team’s backlog with the evidence attached.${jiraNote}`,
+        whatWillHappen: `Creates a task in the owning team’s backlog with the evidence attached.${trackerNote}`,
         whatCouldGoWrong: 'Adds backlog noise if the change turns out to be a measurement artifact.',
         reversible: true,
       }),
     );
   }
 
-  const staged = releases.find((r) => r.version === version && r.rollout && /staged|phased/i.test(r.rollout));
+  const stagedAll = releases.filter((r) => r.version === version && r.rollout && /staged|phased/i.test(r.rollout));
+  const staged = stagedAll[0];
   if (atLeast(attention, 'HIGH') && releaseLive && staged) {
+    const platformName = (p?: string) => (p === 'ios' ? 'iOS' : p === 'android' ? 'Android' : p === 'web' ? 'web' : 'all platforms');
+    // Narrowest option first: the staged (percentage) rollout, then every rollout of the version.
+    const ordered = [...stagedAll].sort((a, b) => Number(/staged/i.test(b.rollout!)) - Number(/staged/i.test(a.rollout!)));
+    const first = ordered[0];
+    const options = [
+      { id: first.platform ?? 'all', label: `Pause the ${platformName(first.platform)} ${first.rollout!.toLowerCase().includes('staged') ? 'staged ' : ''}rollout of ${version}`, description: `Stops the ${first.rollout!.toLowerCase()} from growing.` },
+      ...(ordered.length > 1 ? [{ id: 'both', label: `Pause ${ordered.map((r) => platformName(r.platform)).join(' and ')} rollouts of ${version}`, description: `Also pauses the ${ordered.slice(1).map((r) => r.rollout!.toLowerCase()).join(', ')}.` }] : []),
+    ];
     out.push(
       make(inv, 'pause_rollout', at, {
         title: `Pause the ${version} rollout`,
@@ -151,10 +167,7 @@ export function proposeActions(args: {
         whatWillHappen: `Halts further rollout of ${version}; users who already have it keep it.`,
         whatCouldGoWrong: 'If the release is not the cause, fixes shipped in it are delayed and the degradation continues.',
         reversible: true,
-        options: [
-          { id: 'android', label: `Pause the Android staged rollout of ${version}`, description: 'Stops the 20% Google Play rollout from growing.' },
-          { id: 'both', label: `Pause Android and iOS rollouts of ${version}`, description: 'Also pauses the App Store phased release.' },
-        ],
+        options,
       }),
     );
   }

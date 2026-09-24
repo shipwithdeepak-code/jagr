@@ -1,5 +1,5 @@
 import type { AttentionLevel, DetectedSignal } from '../types';
-import { SIGNALS } from '../catalog';
+import { signalMeta } from '../catalog';
 
 /**
  * Attention model — "only interrupt me when it matters".
@@ -19,6 +19,7 @@ export function atLeast(level: AttentionLevel, min: AttentionLevel) {
 
 export interface AttentionInput {
   signals: DetectedSignal[];
+  /** Signals that persisted, as `${key}@${provider}`. */
   anomalous: Set<string>;
   corroborating: number;
   releaseAssociated: boolean;
@@ -26,16 +27,16 @@ export interface AttentionInput {
 }
 
 export function assessAttention(i: AttentionInput): { level: AttentionLevel; reason: string } {
-  const persistent = i.signals.filter((s) => i.anomalous.has(s.key));
+  const persistent = i.signals.filter((s) => i.anomalous.has(`${s.key}@${s.provider}`));
   if (!persistent.length) return { level: 'LOW', reason: 'A single degraded reading that has not persisted — likely a fluctuation.' };
 
-  const funnel = persistent.filter((s) => SIGNALS[s.key].coreFunnel);
-  const crash = persistent.filter((s) => s.key.endsWith('crash_free_sessions'));
+  const funnel = persistent.filter((s) => signalMeta(s.key).coreFunnel);
+  const crash = persistent.filter((s) => signalMeta(s.key).purpose === 'stability');
 
   const severeFunnel = funnel.find((s) => s.ratio >= 8);
   const severeCrash = crash.find((s) => s.ratio >= 5);
   if (severeFunnel || severeCrash || i.blockerIssues >= 2) {
-    const why = severeFunnel ? `${severeFunnel.label} ${severeFunnel.magnitude}` : severeCrash ? `${severeCrash.label} ${severeCrash.magnitude}` : `${i.blockerIssues} highest-priority Jira issues`;
+    const why = severeFunnel ? `${severeFunnel.label} ${severeFunnel.magnitude}` : severeCrash ? `${severeCrash.label} ${severeCrash.magnitude}` : `${i.blockerIssues} highest-priority issues`;
     return { level: 'CRITICAL', reason: `Severe customer impact: ${why}. Notify immediately.` };
   }
   if (funnel.length && (i.corroborating >= 1 || i.releaseAssociated)) {

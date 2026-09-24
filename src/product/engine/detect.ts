@@ -1,7 +1,18 @@
 import type { Area } from '../types';
-import type { IssueRecord, MetricSeries, ReviewRecord } from '../integrations/types';
-import { classifyText } from '../catalog';
-import { ISSUE_BASELINE_PER_3H, NEGATIVE_REVIEW_BASELINE_PER_6H } from '../integrations/world';
+import type { FeedbackItem, WorkItem } from '../roles/types';
+import { isNegativeFeedback } from '../roles/types';
+import { classifyText, ISSUE_BASELINE_PER_3H, NEGATIVE_REVIEW_BASELINE_PER_6H } from '../catalog';
+
+/** The fields detection needs from any metric series (role records and fixtures alike). */
+interface SeriesLike {
+  key?: string;
+  id?: string;
+  badDirection: 'down' | 'up';
+  mode: 'relative' | 'absolute';
+  threshold: number;
+  baseline: { mean: number; stdDev: number };
+  points: { t: string; value: number }[];
+}
 
 /**
  * Detection rules — pure functions.
@@ -30,18 +41,18 @@ export interface MetricReading {
 
 const WINDOW = 4;
 
-function badOf(series: MetricSeries, value: number): number {
+function badOf(series: SeriesLike, value: number): number {
   const delta = series.mode === 'relative' ? ((value - series.baseline.mean) / series.baseline.mean) * 100 : value - series.baseline.mean;
   return series.badDirection === 'down' ? -delta : delta;
 }
 
 /** Applies a watch's custom threshold for this metric, if it set a valid one. */
-export function withWatchThreshold(series: MetricSeries, thresholds: Partial<Record<string, number>> | undefined): MetricSeries {
-  const th = thresholds?.[series.id];
+export function withWatchThreshold<T extends SeriesLike>(series: T, thresholds: Partial<Record<string, number>> | undefined): T {
+  const th = thresholds?.[series.key ?? series.id ?? ''];
   return th !== undefined && Number.isFinite(th) && th > 0 ? { ...series, threshold: th } : series;
 }
 
-export function readMetric(series: MetricSeries): MetricReading {
+export function readMetric(series: SeriesLike): MetricReading {
   const pts = series.points;
   if (pts.length < WINDOW) return { status: 'normal', bad: 0, ratio: 0, current: series.baseline.mean, currentSinceOnset: series.baseline.mean, badSinceOnset: 0, zScore: 0 };
   const win = pts.slice(-WINDOW);
@@ -69,7 +80,7 @@ export function readMetric(series: MetricSeries): MetricReading {
   return { status, bad, ratio: bad / th, current, currentSinceOnset, badSinceOnset: badOf(series, currentSinceOnset), onsetAt, zScore: z };
 }
 
-export function fmtMagnitude(series: MetricSeries, reading: MetricReading): string {
+export function fmtMagnitude(series: SeriesLike, reading: MetricReading): string {
   const change = series.badDirection === 'down' ? -reading.badSinceOnset : reading.badSinceOnset;
   const sign = change < 0 ? '−' : '+';
   return series.mode === 'relative' ? `${sign}${Math.abs(change).toFixed(Math.abs(change) >= 10 ? 0 : 1)}%` : `${sign}${Math.abs(change).toFixed(2)} pts`;
@@ -93,29 +104,40 @@ function countReading(items: { id: string; createdAt: string }[], baseline: numb
   return { status, count: n, ratio: n / floor, onsetAt: items[0]?.createdAt, ids: items.map((i) => i.id), blockers };
 }
 
-export function issueArea(issue: IssueRecord): Area[] {
+export function issueArea(issue: WorkItem): Area[] {
   const areas = new Set<Area>([issue.area, ...classifyText(`${issue.title} ${issue.labels.join(' ')}`)]);
   return [...areas];
 }
 
-export function readIssues(issues: IssueRecord[], area: Area): CountReading {
-  const matched = issues.filter((i) => i.type !== 'Task' && issueArea(i).includes(area));
-  return countReading(matched, ISSUE_BASELINE_PER_3H[area], matched.filter((i) => i.priority === 'Highest').length);
+/** Work items that report a problem in an area (tasks are planned work, not reports). */
+export function problemItems(items: WorkItem[], area: Area): WorkItem[] {
+  return items.filter((i) => i.type !== 'task' && issueArea(i).includes(area));
 }
 
-export function isNegative(r: ReviewRecord) {
-  return r.rating <= 2;
+export function readIssues(items: WorkItem[], area: Area): CountReading {
+  const matched = problemItems(items, area);
+  return countReading(matched, ISSUE_BASELINE_PER_3H[area], matched.filter((i) => i.priority === 'critical').length);
 }
 
-export function readReviews(reviews: ReviewRecord[], area: Area): CountReading {
-  const matched = reviews.filter((r) => isNegative(r) && classifyText(`${r.title} ${r.body}`).includes(area));
-  return countReading(matched, NEGATIVE_REVIEW_BASELINE_PER_6H[area]);
+export const isNegative = isNegativeFeedback;
+
+export function feedbackAreas(f: FeedbackItem): Area[] {
+  return classifyText(`${f.title} ${f.text} ${f.tags.join(' ')}`);
 }
 
-/** Areas that have any issue or negative review in the list — for watches that cover every area. */
-export function areasPresent(issues: IssueRecord[], reviews: ReviewRecord[]): Area[] {
+/** Negative feedback about an area. */
+export function negativeFeedback(items: FeedbackItem[], area: Area): FeedbackItem[] {
+  return items.filter((r) => isNegative(r) && feedbackAreas(r).includes(area));
+}
+
+export function readReviews(items: FeedbackItem[], area: Area): CountReading {
+  return countReading(negativeFeedback(items, area), NEGATIVE_REVIEW_BASELINE_PER_6H[area]);
+}
+
+/** Areas that have any work item or negative feedback in the list — for watches that cover every area. */
+export function areasPresent(items: WorkItem[], feedback: FeedbackItem[]): Area[] {
   const set = new Set<Area>();
-  issues.forEach((i) => issueArea(i).forEach((a) => set.add(a)));
-  reviews.filter(isNegative).forEach((r) => classifyText(`${r.title} ${r.body}`).forEach((a) => set.add(a)));
+  items.forEach((i) => issueArea(i).forEach((a) => set.add(a)));
+  feedback.filter(isNegative).forEach((r) => feedbackAreas(r).forEach((a) => set.add(a)));
   return [...set];
 }

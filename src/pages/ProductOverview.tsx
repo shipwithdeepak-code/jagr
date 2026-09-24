@@ -1,4 +1,5 @@
-import { SIGNALS } from '@/product/catalog';
+import { signalMeta } from '@/product/catalog';
+import { nativeMetricSignal } from '@/product/integrations/bridge';
 import { ArrowRight, Plus, Radar, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
@@ -26,9 +27,9 @@ export function ProductOverviewPage() {
   const recent = [...(r?.investigations ?? [])].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const waiting = pendingApprovals(r?.investigations ?? [], state.decisions);
   // Signals Jagr actually evaluates: releases are context, and imported data may lack some metrics.
-  const importedMetrics = mode === 'imported' ? new Set(importedWorld?.world?.metrics.map((m) => m.id) ?? []) : undefined;
+  const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
   const signals = new Set(
-    activeWatches.flatMap((w) => w.signals.filter((s) => s.key !== 'releases' && (!importedMetrics || SIGNALS[s.key].kind !== 'metric' || importedMetrics.has(s.key))).map((s) => s.key)),
+    activeWatches.flatMap((w) => w.signals.filter((s) => s.key !== 'changes' && (!importedMetrics || signalMeta(s.key).kind !== 'metric' || importedMetrics.has(s.key))).map((s) => s.key)),
   ).size;
   const hour = new Date(state.clock).getUTCHours();
   const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';

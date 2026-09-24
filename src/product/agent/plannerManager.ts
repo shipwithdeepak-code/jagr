@@ -1,5 +1,6 @@
 import { parseProposal, PLAN_JSON_SCHEMA, type PlannerFailureCode, type PlannerOutcome, type PlannerProposal, type PlannerSource } from './plannerSchema.js';
 import { buildPlannerPrompt, planFingerprint, PLANNER_SYSTEM_PROMPT, type PlannerInput } from './plannerPrompt.js';
+import type { HttpClient } from '../ports/http.js';
 
 /**
  * The provider-agnostic planning runtime.
@@ -146,8 +147,8 @@ const str = (v: unknown, max = 120) => (typeof v === 'string' ? v.slice(0, max) 
  * server picks the configured provider, holds the key and calls the API. The response is re-parsed
  * here with the shared schema — nothing from the network is trusted.
  */
-export function createHttpPlannerProvider(cfg: { role: 'primary' | 'fallback'; id: string; displayName: string; model?: string; endpoint?: string; fetch?: typeof fetch }): LLMPlannerProvider {
-  const http = cfg.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+export function createHttpPlannerProvider(cfg: { role: 'primary' | 'fallback'; id: string; displayName: string; model?: string; endpoint?: string; http: HttpClient }): LLMPlannerProvider {
+  const http = cfg.http;
   return {
     id: cfg.id,
     displayName: cfg.displayName,

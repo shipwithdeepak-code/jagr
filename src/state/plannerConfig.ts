@@ -3,6 +3,9 @@ import type { PlannerFailureCode, PlannerOutcome } from '@/product/agent/planner
 import { PLANNER_DOUBLES, type PlannerDoubleName } from '@/product/evaluation/plannerDoubles';
 import type { PlannerRunInfo } from '@/product/types';
 
+/** The browser's fetch, injected into the core's HTTP client port. */
+const browserHttp = (url: string, init?: RequestInit) => fetch(url, init);
+
 /**
  * Which planner the workspace uses for a monitoring run. The browser never sees a key or a provider
  * API: it reads safe config from /api/planner/health and sends investigation state to
@@ -91,8 +94,8 @@ export async function resolvePlanner(choice: PlannerChoice = 'deterministic', he
     return { planner: unconfigured(p, detail), info: { ...info, reason: `Not configured — ${detail} Deterministic planner used.` } };
   }
   const planner = createPlannerManager({
-    primary: createHttpPlannerProvider({ role: 'primary', id: p.provider, displayName: p.displayName, model: p.model }),
-    fallback: fb ? createHttpPlannerProvider({ role: 'fallback', id: fb.provider, displayName: fb.displayName, model: fb.model }) : undefined,
+    primary: createHttpPlannerProvider({ role: 'primary', id: p.provider, displayName: p.displayName, model: p.model, http: browserHttp }),
+    fallback: fb ? createHttpPlannerProvider({ role: 'fallback', id: fb.provider, displayName: fb.displayName, model: fb.model, http: browserHttp }) : undefined,
     // Server-side adapters time out first; this is the outer bound for the browser round trip.
     timeoutMs: 25_000,
   });

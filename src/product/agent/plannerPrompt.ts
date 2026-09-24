@@ -32,7 +32,12 @@ export interface PlannerOption {
   /** What the planner must put in `nextTool`: the tool name, qualified when the tool has several uses. */
   id: string;
   tool: ToolName;
+  /** Opaque source id the call reads from. */
   source: Exclude<ProviderId, 'email'>;
+  /** The source's display name in this workspace (for messages). */
+  sourceLabel?: string;
+  /** getMetric / getMetricBreakdown: the workspace metric key the call reads. */
+  metric?: string;
   sourceState: string;
   /** Hypothesis ids this call can test. */
   tests: string[];

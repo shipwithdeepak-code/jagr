@@ -12,6 +12,9 @@ import {
   type TimeWindow,
 } from './types';
 import { BUCKET_MIN, type World } from './world';
+import { SourceRegistry } from '../roles/registry';
+import type { SourceId } from '../roles/types';
+import { roleSourceFromAdapter } from './bridge';
 
 /**
  * Simulated adapters for Jira, GA4, App Store Connect and Google Play.
@@ -22,8 +25,8 @@ import { BUCKET_MIN, type World } from './world';
 export const PROVIDERS: Record<ProviderId, { name: string; short: string; capabilities: Capability[]; externalBase: string; realApi: string }> = {
   jira: { name: 'Jira', short: 'Jira', capabilities: ['issues', 'releases', 'events', 'changes'], externalBase: 'https://your-company.atlassian.net', realApi: 'Jira Cloud REST API v3' },
   ga4: { name: 'Google Analytics 4', short: 'Analytics', capabilities: ['metrics'], externalBase: 'https://analytics.google.com/analytics/web', realApi: 'GA4 Data API (runReport)' },
-  app_store: { name: 'App Store Connect', short: 'App Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes'], externalBase: 'https://appstoreconnect.apple.com', realApi: 'App Store Connect API' },
-  google_play: { name: 'Google Play Console', short: 'Play Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes'], externalBase: 'https://play.google.com/console', realApi: 'Play Developer Reporting API' },
+  app_store: { name: 'App Store Connect', short: 'App Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://appstoreconnect.apple.com', realApi: 'App Store Connect API' },
+  google_play: { name: 'Google Play Console', short: 'Play Store', capabilities: ['metrics', 'releases', 'reviews', 'events', 'changes', 'rollout'], externalBase: 'https://play.google.com/console', realApi: 'Play Developer Reporting API' },
   email: { name: 'Email', short: 'Email', capabilities: ['send_email'], externalBase: 'mailto:', realApi: 'SMTP / transactional email provider' },
 };
 
@@ -84,6 +87,13 @@ class SimulatedAdapter implements IntegrationAdapter {
     if (this.conn.state === 'unavailable' || this.conn.state === 'error') {
       throw new ProviderUnavailableError(this.provider, this.conn.state, this.conn.detail);
     }
+  }
+
+  listMetrics() {
+    if (!this.capabilities.includes('metrics')) return [];
+    // A world may declare metrics it has no data for (imports: every metric the user could upload).
+    const defs = this.world.metricCatalog ?? this.world.metrics;
+    return defs.filter((m) => m.provider === this.provider).map((m) => ({ id: m.id, provider: m.provider, name: m.name, unit: m.unit, area: m.area, badDirection: m.badDirection, mode: m.mode, threshold: m.threshold, platform: m.platform }));
   }
 
   async getMetrics(ids: string[], window: TimeWindow): Promise<MetricSeries[]> {
@@ -149,6 +159,13 @@ export class SimulatedEmailChannel implements EmailChannel {
 export interface AdapterRegistry {
   sources: Record<Exclude<ProviderId, 'email'>, IntegrationAdapter>;
   email: SimulatedEmailChannel;
+}
+
+/** The workspace's sources as a role registry. Order = PROVIDERS order, which the engine consults in. */
+export function createRegistry(world: World, connections: SourceConnection[]): { registry: SourceRegistry; email: SimulatedEmailChannel } {
+  const reg = createAdapters(world, connections);
+  const ids = (Object.keys(PROVIDERS) as ProviderId[]).filter((p): p is SourceId => p !== 'email');
+  return { registry: new SourceRegistry(ids.map((id) => roleSourceFromAdapter(reg.sources[id] as IntegrationAdapter & { provider: SourceId }))), email: reg.email };
 }
 
 export function defaultConnections(at = '2026-09-23T17:55:00.000Z'): SourceConnection[] {

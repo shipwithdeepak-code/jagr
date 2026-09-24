@@ -148,7 +148,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
     check: (r) => {
       const inv = byArea(r, 'checkout')[0];
       return [
-        c('Customer signal investigated', !!inv && inv.signals[0].key.endsWith('.reviews'), inv ? inv.signals[0].label : 'None'),
+        c('Customer signal investigated', !!inv && inv.signals[0].key === 'feedback', inv ? inv.signals[0].label : 'None'),
         c('Analytics checked and stable', !!inv && inv.evidence.some((e) => e.provider === 'ga4' && e.direction === 'stable'), 'GA4 evidence present'),
         c('Morning brief, not an email', alerts(r).length === 0 && inv?.attention === 'MEDIUM', `${inv?.attention ?? '—'} · ${alerts(r).length} email(s)`),
       ];

@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && tsc -p tsconfig.product.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p tsconfig.product.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:planners": "JAGR_LIVE_EVAL=1 vitest run --reporter=verbose --silent=false"

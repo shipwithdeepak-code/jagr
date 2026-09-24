@@ -1,3 +1,5 @@
+import type { HttpClient, HttpResponse } from '../../ports/http.js';
+
 /**
  * Provider adapter contract (server-side only).
  *
@@ -48,7 +50,7 @@ export class ProviderHttpError extends Error {
   }
 }
 
-export async function safeErrorType(res: Response): Promise<string | undefined> {
+export async function safeErrorType(res: HttpResponse): Promise<string | undefined> {
   try {
     const body = (await res.json()) as { error?: { type?: string; status?: string; code?: string } | string };
     const e = body.error;
@@ -80,5 +82,5 @@ export class TruncatedOutputError extends Error {
   }
 }
 
-export type Fetch = typeof fetch;
-export const defaultFetch: Fetch = (...a) => fetch(...a);
+/** Outbound HTTP, injected by the host (the platform's fetch in production, a double in tests). */
+export type Fetch = HttpClient;

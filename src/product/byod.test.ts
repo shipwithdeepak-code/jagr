@@ -119,13 +119,13 @@ describe('golden external-user path (public/samples)', () => {
     expect(pause.status).toBe('awaiting_approval');
     expect(() => executeAction(pause)).toThrow(ApprovalRequiredError);
     // Actions never claim an external tracker that isn't connected.
-    expect(inv.actions.find((a) => a.kind === 'link_issues')?.title).toMatch(/imported issues/);
-    const incident = inv.actions.find((a) => a.kind === 'create_jira_incident')!;
+    expect(inv.actions.find((a) => a.kind === 'link_work_items')?.title).toMatch(/imported issues/);
+    const incident = inv.actions.find((a) => a.kind === 'create_incident')!;
     expect(incident.title).toMatch(/^Draft/);
     expect(incident.whatWillHappen).toMatch(/not connected/);
     expect(executeAction(incident, { status: 'done', at: incident.proposedAt })).toMatch(/Not filed in any external tracker/);
         // Trace: the metric call reads the imported value.
-    const call = inv.trace.findIndex((s) => s.kind === 'tool_call' && s.tool === 'getAnalyticsMetric');
+    const call = inv.trace.findIndex((s) => s.kind === 'tool_call' && s.tool === 'getMetric');
     expect(inv.trace[call + 1].title).toContain('2.79%');
   });
 
@@ -148,7 +148,7 @@ describe('golden external-user path (public/samples)', () => {
 describe('BYOD evaluation cases', () => {
   it('1 · imported metric drop opens an investigation from the imported series', async () => {
     const inv = checkout((await run([imp('metrics', 'm.csv', metricsCsv(3.4, 2.79, { revenueAfter: 4000 }))])).r)!;
-    expect(inv.signals[0].key).toBe('ga4.checkout_conversion');
+    expect(inv.signals[0].key).toBe('metric:checkout_conversion');
     expect(inv.evidence.find((e) => e.provider === 'ga4')?.statement).toMatch(/^Metrics: Checkout conversion is 2\.79%/);
   });
 

@@ -28,16 +28,16 @@ const input = (patch: Partial<PlannerInput> = {}): PlannerInput => ({
   ],
   evidence: [],
   options: [
-    option({ id: 'getRecentJiraIssues', tool: 'getRecentJiraIssues', source: 'jira' }),
-    option({ id: 'getJiraRelease', tool: 'getJiraRelease', source: 'jira', tests: ['HYP-01'], informative: false }),
-    option({ id: 'getStoreCrashRate(app_store)', tool: 'getStoreCrashRate', source: 'app_store' }),
-    option({ id: 'getStoreCrashRate(google_play)', tool: 'getStoreCrashRate', source: 'google_play', alreadyQueried: true }),
+    option({ id: 'getWorkItems', tool: 'getWorkItems', source: 'jira' }),
+    option({ id: 'getChanges', tool: 'getChanges', source: 'jira', tests: ['HYP-01'], informative: false }),
+    option({ id: 'getMetric(crash_free_sessions_ios)', tool: 'getMetric', source: 'app_store', metric: 'crash_free_sessions_ios' }),
+    option({ id: 'getMetric(crash_free_sessions_android)', tool: 'getMetric', source: 'google_play', metric: 'crash_free_sessions_android', alreadyQueried: true }),
   ],
   ...patch,
 });
 
 const plan = (patch: Record<string, unknown> = {}) => ({
-  nextTool: 'getRecentJiraIssues',
+  nextTool: 'getWorkItems',
   reason: 'The product-issue hypothesis lacks engineering evidence.',
   evidenceGap: 'Recent checkout defects',
   hypothesesAffected: ['HYP-02'],
@@ -53,7 +53,7 @@ describe('plan parsing (fail closed)', () => {
     ['', 'EMPTY_RESPONSE'],
     ['   ', 'EMPTY_RESPONSE'],
     ['null', 'EMPTY_RESPONSE'],
-    ['{"nextTool": "getRecentJiraIssues", "reason": "Engin', 'INVALID_JSON'],
+    ['{"nextTool": "getWorkItems", "reason": "Engin', 'INVALID_JSON'],
     ['Sure! I suggest calling Jira next.', 'INVALID_JSON'],
     [JSON.stringify(plan({ hypothesesAffected: [] })), 'SCHEMA_VIOLATION'],
     [JSON.stringify(plan({ hypothesesAffected: ['release'] })), 'SCHEMA_VIOLATION'],
@@ -72,9 +72,9 @@ describe('policy validator', () => {
 
   it('approves a valid, informative, available tool and resolves it to Jagr’s own option', () => {
     const r = v({});
-    expect(r.ok && r.option.id).toBe('getRecentJiraIssues');
-    const q = v({ nextTool: 'getStoreCrashRate' });
-    expect(q.ok && q.option.id).toBe('getStoreCrashRate(app_store)');
+    expect(r.ok && r.option.id).toBe('getWorkItems');
+    const q = v({ nextTool: 'getMetric' });
+    expect(q.ok && q.option.id).toBe('getMetric(crash_free_sessions_ios)');
   });
   it.each([
     [{ reason: 'Release 4.8.1 caused the drop, so Jira will confirm it.' }, 'CAUSAL_CLAIM'],
@@ -82,10 +82,10 @@ describe('policy validator', () => {
     [{ nextTool: 'pause_rollout' }, 'ACTION_NOT_TOOL'],
     [{ nextTool: 'notifyCustomers' }, 'ACTION_NOT_TOOL'],
     [{ nextTool: 'getDatadogErrors' }, 'UNKNOWN_TOOL'],
-    [{ nextTool: 'getAppStoreReviews' }, 'NOT_IN_INVESTIGATION'],
-    [{ nextTool: 'getStoreCrashRate(google_play)' }, 'ALREADY_QUERIED'],
+    [{ nextTool: 'getFeedbackVolume' }, 'NOT_IN_INVESTIGATION'],
+    [{ nextTool: 'getMetric(crash_free_sessions_android)' }, 'ALREADY_QUERIED'],
     [{ hypothesesAffected: ['HYP-07'] }, 'INVALID_HYPOTHESIS'],
-    [{ nextTool: 'getJiraRelease', hypothesesAffected: ['HYP-01'] }, 'NO_INFORMATION_VALUE'],
+    [{ nextTool: 'getChanges', hypothesesAffected: ['HYP-01'] }, 'NO_INFORMATION_VALUE'],
   ])('rejects %j as %s', (p, code) => {
     const r = v(p);
     expect(r.ok).toBe(false);
@@ -100,7 +100,7 @@ describe('policy validator', () => {
     expect(!r2.ok && r2.code).toBe('SOURCE_UNAVAILABLE');
   });
   it('blocks tunnel vision: a twice-unchanged probe waits while another explanation is untested', () => {
-    const limited = input({ options: input().options.map((o) => (o.id === 'getRecentJiraIssues' ? { ...o, informative: false, probeLimited: true } : o)) });
+    const limited = input({ options: input().options.map((o) => (o.id === 'getWorkItems' ? { ...o, informative: false, probeLimited: true } : o)) });
     const r = v({}, limited);
     expect(!r.ok && r.code).toBe('REPETITIVE_PROBE');
   });
@@ -144,7 +144,7 @@ describe('Claude planner client (mocked HTTP)', () => {
       requests.push({ url, body: JSON.parse(String(init.body)), headers: init.headers as Record<string, string> });
       return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'propose_next_step', input: plan() }], stop_reason: 'tool_use' }), { status: 200 });
     }) as unknown as typeof fetch;
-    const client = createAnthropicPlannerClient({ apiKey: 'test-key', fetch: f });
+    const client = createAnthropicPlannerClient({ apiKey: 'test-key', http: f });
     const raw = await client.complete({ system: 's', prompt: 'p' });
     expect(parsePlan(raw).status).toBe('ok');
     expect(requests[0].url).toBe('https://api.anthropic.com/v1/messages');
@@ -154,9 +154,9 @@ describe('Claude planner client (mocked HTTP)', () => {
     expect((requests[0].body.tools as { input_schema: unknown }[])[0].input_schema).toEqual(PLAN_JSON_SCHEMA);
   });
   it('surfaces API errors as errors (→ MODEL_UNAVAILABLE), and text-only replies as unparseable', async () => {
-    const err = createAnthropicPlannerClient({ apiKey: 'k', fetch: (async () => new Response('{}', { status: 529 })) as unknown as typeof fetch });
+    const err = createAnthropicPlannerClient({ apiKey: 'k', http: (async () => new Response('{}', { status: 529 })) as unknown as typeof fetch });
     await expect(err.complete({ system: 's', prompt: 'p' })).rejects.toThrow(/529/);
-    const text = createAnthropicPlannerClient({ apiKey: 'k', fetch: (async () => new Response(JSON.stringify({ content: [{ type: 'text', text: 'I would check Jira.' }] }), { status: 200 })) as unknown as typeof fetch });
+    const text = createAnthropicPlannerClient({ apiKey: 'k', http: (async () => new Response(JSON.stringify({ content: [{ type: 'text', text: 'I would check Jira.' }] }), { status: 200 })) as unknown as typeof fetch });
     expect(parsePlan(await text.complete({ system: 's', prompt: 'p' })).status).toBe('failed');
   });
   it('the browser provider only talks to the planner endpoint, never carries a key, and re-validates what comes back', async () => {
@@ -166,7 +166,7 @@ describe('Claude planner client (mocked HTTP)', () => {
       seen = init;
       return new Response(JSON.stringify(reply), { status: 200 });
     }) as unknown as typeof fetch;
-    const c = createHttpPlannerProvider({ role: 'primary', id: 'gemini', displayName: 'Gemini (Google)', fetch: f });
+    const c = createHttpPlannerProvider({ role: 'primary', id: 'gemini', displayName: 'Gemini (Google)', http: f });
     const ok = await c.plan(input());
     expect(ok.status).toBe('ok');
     expect(ok.source?.provider).toBe('gemini');

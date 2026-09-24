@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
+import { ProviderHttpError, safeErrorType, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
 
 /**
  * Anthropic (Claude) — Messages API. Structured output via a forced tool call whose input_schema is
@@ -12,7 +12,7 @@ interface MessagesResponse {
   stop_reason?: string;
 }
 
-export function createAnthropicAdapter(cfg: ProviderConfig, http: Fetch = defaultFetch): ProviderAdapter {
+export function createAnthropicAdapter(cfg: ProviderConfig, http: Fetch): ProviderAdapter {
   const base = (cfg.baseUrl ?? 'https://api.anthropic.com').replace(/\/$/, '');
   return {
     id: 'anthropic',

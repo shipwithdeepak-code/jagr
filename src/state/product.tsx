@@ -11,6 +11,7 @@ import { buildImportedWorld, watchesForImportedData } from '@/product/imports/wo
 import { reduceProgress, startProgress, type RunProgress } from '@/product/progress';
 import type { RunEvent } from '@/product/engine/monitor';
 import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode } from './productContext';
+import { migrateStoredProductState } from './productMigration';
 
 /**
  * Product workspace, persisted in this browser (localStorage). Two data modes:
@@ -19,11 +20,13 @@ import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode 
  * Either way the same engine, planner, validator and approval rules run.
  */
 
-const KEY = 'jagr:product:v2';
+const KEY = 'jagr:product:v3';
+/** Workspaces saved before the role-based refactor. Read once, migrated, then removed. */
+const LEGACY_KEY = 'jagr:product:v2';
 const CLOCK = '2026-09-24T08:05:00.000Z';
 
 function initial(): ProductState {
-  return { version: 2, connections: defaultConnections(), watches: defaultWatches(), brief: defaultBriefSchedule(), stale: false, clock: CLOCK, decisions: {} };
+  return { version: 3, connections: defaultConnections(), watches: defaultWatches(), brief: defaultBriefSchedule(), stale: false, clock: CLOCK, decisions: {} };
 }
 
 function emptyImportedWorkspace(planner: ProductState['planner']): ProductState {
@@ -33,13 +36,9 @@ function emptyImportedWorkspace(planner: ProductState['planner']): ProductState 
 
 function load(): ProductState {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) return initial();
-    const parsed = JSON.parse(raw) as ProductState;
-    if (parsed.version !== 2) return initial();
-    // Workspaces saved before data modes existed were the sample workspace.
-    if (!parsed.workspace && parsed.result) parsed.workspace = { mode: 'sample', createdAt: parsed.clock };
-    return parsed;
+    return migrateStoredProductState(JSON.parse(raw)) ?? initial();
   } catch {
     return initial();
   }
@@ -61,6 +60,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
+      // The migrated copy is saved; the pre-migration copy would only waste the storage quota.
+      localStorage.removeItem(LEGACY_KEY);
       setStorageError(undefined);
     } catch {
       // Never pretend it saved: imported data can exceed the browser's storage quota.

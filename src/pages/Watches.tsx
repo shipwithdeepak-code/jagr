@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { AttentionLevel, MonitoringFrequency, NotificationPolicy, ProviderId, Watch, WatchTemplateId } from '@/product/types';
-import { SIGNALS, WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '@/product/catalog';
+import { metricKeyOf, signalMeta, WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '@/product/catalog';
+import { metricKeyOf as nativeMetricKey, nativeMetricSignal } from '@/product/integrations/bridge';
+import type { SignalKey } from '@/product/types';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { METRIC_DEFS } from '@/product/integrations/world';
 import { FREQUENCY_LABEL, nextRunAt, toCron } from '@/product/scheduler';
@@ -16,14 +18,8 @@ import { useToast } from '@/components/toast';
 export function WatchesPage() {
   const { state, setWatchStatus, mode, importedWorld } = useProduct();
   // Imported data renames channels ("Feedback", not "App Store reviews") and may lack some metrics.
-  const importedMetrics = mode === 'imported' ? new Set(importedWorld?.world?.metrics.map((m) => m.id) ?? []) : undefined;
-  const signalLabel = (key: keyof typeof SIGNALS) => {
-    const meta = SIGNALS[key];
-    if (mode !== 'imported') return meta.label;
-    if (meta.kind === 'issues') return 'Issues';
-    if (meta.kind === 'reviews') return 'Customer feedback';
-    return meta.label;
-  };
+  const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
+  const signalLabel = (key: SignalKey) => signalMeta(key).label;
   const [params, setParams] = useSearchParams();
   const [logFor, setLogFor] = useState<Watch | null>(null);
   const wizardOpen = params.get('new') === '1';
@@ -77,24 +73,25 @@ export function WatchesPage() {
                 <dd>
                   <ul className="space-y-0.5">
                     {w.signals
-                      .filter((s) => s.key !== 'releases')
+                      .filter((s) => s.key !== 'changes')
                       // One line per channel: with imported data both store review signals read "Customer feedback".
                       .filter((s, i, all) => mode !== 'imported' || all.findIndex((x) => signalLabel(x.key) === signalLabel(s.key) && x.area === s.area) === i)
                       .map((s) => {
-                        const missing = importedMetrics && SIGNALS[s.key].kind === 'metric' && !importedMetrics.has(s.key);
+                        const missing = importedMetrics && signalMeta(s.key).kind === 'metric' && !importedMetrics.has(s.key);
                         if (missing) {
                           return (
                             <li key={s.key + (s.area ?? '')} className="text-ink-3">
-                              {SIGNALS[s.key].label} — not in your imported data, skipped
+                              {signalMeta(s.key).label} — not in your imported data, skipped
                             </li>
                           );
                         }
-                        const rule = ruleText(s.key, w.thresholds);
-                        const custom = w.thresholds?.[s.key] !== undefined;
+                        const metric = metricKeyOf(s.key);
+                        const rule = metric ? ruleText(metric, w.thresholds) : null;
+                        const custom = !!metric && w.thresholds?.[metric] !== undefined;
                         return (
                           <li key={s.key + (s.area ?? '')}>
                             {signalLabel(s.key)}
-                            {s.area && SIGNALS[s.key].kind !== 'metric' ? (s.area === '*' ? ' · every area' : ` · ${s.area}`) : ''}
+                            {s.area && signalMeta(s.key).kind !== 'metric' ? (s.area === '*' ? ' · every area' : ` · ${s.area}`) : ''}
                             {rule && (
                               <span className="text-ink-3">
                                 {' '}
@@ -105,7 +102,7 @@ export function WatchesPage() {
                           </li>
                         );
                       })}
-                    {w.signals.some((s) => s.key === 'releases') && <li className="text-ink-3">Recent releases, as context</li>}
+                    {w.signals.some((s) => s.key === 'changes') && <li className="text-ink-3">Recent releases, as context</li>}
                   </ul>
                 </dd>
                 <dt className="text-ink-3">Schedule</dt>
@@ -171,7 +168,7 @@ export function WatchesPage() {
 
 const STEPS = ['What should I watch?', 'What counts as a change?', 'Where should I look?', 'How often should I check?', 'When should I interrupt you?', 'Morning brief?'];
 /** A metric's default detection rule, and how a watch may override it (see Watch.thresholds). */
-const METRIC_RULE = new Map(METRIC_DEFS.map((d) => [d.id, d]));
+const METRIC_RULE = new Map(METRIC_DEFS.map((d) => [nativeMetricKey(d.id, d.provider, d.platform), d]));
 const unitOf = (id: string) => (METRIC_RULE.get(id)?.mode === 'absolute' ? 'pts' : '%');
 const verbOf = (id: string) => (METRIC_RULE.get(id)?.badDirection === 'up' ? 'rises' : 'drops');
 /** Human rule for a watch card, e.g. "drops more than 3% vs baseline". */
@@ -206,8 +203,8 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
   const [briefMin, setBriefMin] = useState<NotificationPolicy['briefMin']>('MEDIUM');
   const [created, setCreated] = useState<Watch | null>(null);
   // With imported data, only metrics that are actually in the upload can be tuned.
-  const importedMetrics = mode === 'imported' ? new Set(importedWorld?.world?.metrics.map((m) => m.id) ?? []) : undefined;
-  const metrics = tpl.signals.filter((s) => SIGNALS[s.key].kind === 'metric' && METRIC_RULE.has(s.key) && (!importedMetrics || importedMetrics.has(s.key))).map((s) => s.key);
+  const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
+  const metrics = tpl.signals.filter((s) => { const m = metricKeyOf(s.key); return !!m && METRIC_RULE.has(m) && (!importedMetrics || importedMetrics.has(s.key)); }).map((s) => metricKeyOf(s.key)!);
   const [thresholds, setThresholds] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -308,7 +305,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                 <div className="mt-4 space-y-2">
                   {metrics.length === 0 ? (
                     <p className="rounded-xl border border-dashed border-line-strong p-4 text-[13px] text-ink-2">
-                      {mode === 'imported' && tpl.signals.some((s) => SIGNALS[s.key].kind === 'metric')
+                      {mode === 'imported' && tpl.signals.some((s) => signalMeta(s.key).kind === 'metric')
                         ? `None of ${tpl.name}’s metrics are in your imported data, so there are no thresholds to set. Issues and feedback are judged against their usual volume.`
                         : `${tpl.name} counts new issues and negative reviews against their usual volume — there are no metric thresholds to set. Jagr opens an investigation when volume is clearly unusual.`}
                     </p>

@@ -1,0 +1,22 @@
+{
+  // The portable core (src/product) compiled on its own, with NO browser (DOM) and NO Node types.
+  // Any use of window, document, localStorage, process, Buffer, node:* or a deployment SDK fails here.
+  // The only runtime globals allowed are declared in src/product/runtime.d.ts.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true
+  },
+  "include": ["src/product/**/*.ts", "types/core-runtime.d.ts"],
+  "exclude": ["src/product/**/*.test.ts", "src/product/testkit/**"]
+}

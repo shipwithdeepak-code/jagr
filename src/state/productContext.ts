@@ -8,7 +8,8 @@ import type { ImportedWorld } from '@/product/imports/world';
 export type WorkspaceMode = 'sample' | 'imported';
 
 export interface ProductState {
-  version: 2;
+  /** 3 = role-based signals, tools and actions. Older stored workspaces are migrated on load. */
+  version: 3;
   connections: SourceConnection[];
   watches: Watch[];
   brief: BriefSchedule;

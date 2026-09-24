@@ -3,6 +3,7 @@ import { classifyText } from '../catalog';
 import { PROVIDERS } from './adapters';
 import { ProviderUnavailableError, type Capability, type IntegrationAdapter, type IssueRecord, type MetricSeries, type ReleaseRecord, type ReviewRecord, type SourceEvent, type TimeWindow } from './types';
 
+import type { HttpClient, HttpRequest, HttpResponse } from '../ports/http';
 /**
  * A real Jira Cloud connector (REST API v3) behind the same IntegrationAdapter contract as the
  * simulated sources.
@@ -27,7 +28,8 @@ export interface JiraCloudConfig {
   projectKey: string;
   /** Pre-built Authorization header value, e.g. `Basic base64(email:token)`. Supplied by the server. */
   authorization?: string;
-  fetch?: typeof fetch;
+  /** Outbound HTTP, injected by the host (the core never uses a global fetch). */
+  http: HttpClient;
   maxPages?: number;
 }
 
@@ -111,10 +113,10 @@ export class JiraCloudAdapter implements IntegrationAdapter {
   readonly provider = 'jira' as const;
   readonly name = 'Jira Cloud';
   readonly capabilities: Capability[] = ['issues', 'releases', 'events', 'changes'];
-  private readonly http: typeof fetch;
+  private readonly http: HttpClient;
 
   constructor(private readonly cfg: JiraCloudConfig) {
-    this.http = cfg.fetch ?? ((...a) => fetch(...a));
+    this.http = cfg.http;
   }
 
   configured(): boolean {
@@ -127,9 +129,9 @@ export class JiraCloudAdapter implements IntegrationAdapter {
       : { provider: 'jira', state: 'unavailable', detail: 'Jira Cloud connector implemented, not configured — needs server-side credentials.', updatedAt: new Date().toISOString() };
   }
 
-  private async call<T>(path: string, init?: RequestInit): Promise<T> {
+  private async call<T>(path: string, init?: HttpRequest): Promise<T> {
     if (!this.configured()) throw new ProviderUnavailableError('jira', 'unavailable', 'Jira Cloud is not configured.');
-    let res: Response;
+    let res: HttpResponse;
     try {
       res = await this.http(`${this.cfg.baseUrl.replace(/\/$/, '')}${path}`, {
         ...init,

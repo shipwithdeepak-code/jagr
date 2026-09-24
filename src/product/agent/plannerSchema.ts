@@ -26,7 +26,7 @@ export const PLAN_JSON_SCHEMA = {
   additionalProperties: false,
   required: ['nextTool', 'reason', 'evidenceGap', 'hypothesesAffected', 'expectedEvidence'],
   properties: {
-    nextTool: { type: 'string', description: 'Exactly one option id from the list of tool options, e.g. "getRecentJiraIssues" or "getStoreCrashRate(app_store)".' },
+    nextTool: { type: 'string', description: 'Exactly one option id from the list of tool options, e.g. "getWorkItems" or "getMetric(purchase_revenue)".' },
     reason: { type: 'string', maxLength: 280, description: 'One or two sentences: why this evidence is the most useful next step. A summary, not step-by-step reasoning. Never claim causation.' },
     evidenceGap: { type: 'string', maxLength: 200, description: 'The evidence gap this call addresses.' },
     hypothesesAffected: { type: 'array', items: { type: 'string', pattern: '^HYP-\\d{2}$' }, minItems: 1, maxItems: 6, description: 'Ids of the hypotheses the result could strengthen or weaken.' },

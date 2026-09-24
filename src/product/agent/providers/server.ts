@@ -43,7 +43,7 @@ function looksLikeState(v: unknown): v is PlannerInput {
 export const SAMPLE_PLANNER_STATE: PlannerInput = {
   investigationId: 'planner-test',
   pass: 1,
-  signal: { key: 'ga4.checkout_conversion', label: 'Checkout conversion', magnitude: '−18%' },
+  signal: { key: 'metric:checkout_conversion', label: 'Checkout conversion', magnitude: '−18%' },
   area: 'checkout',
   budget: { used: 1, max: 9 },
   hypotheses: [
@@ -54,11 +54,11 @@ export const SAMPLE_PLANNER_STATE: PlannerInput = {
   ],
   evidence: [{ source: 'Analytics', direction: 'degraded', statement: 'Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.' }],
   options: [
-    { id: 'getJiraRelease', tool: 'getJiraRelease', source: 'jira', sourceState: 'simulated', tests: ['HYP-01'], question: 'Was anything released shortly before the change began?', alreadyQueried: false, sourceFailed: false, informative: true },
-    { id: 'getRecentJiraIssues', tool: 'getRecentJiraIssues', source: 'jira', sourceState: 'simulated', tests: ['HYP-02'], question: 'Are people reporting checkout bugs?', alreadyQueried: false, sourceFailed: false, informative: true },
-    { id: 'getAnalyticsTraffic', tool: 'getAnalyticsTraffic', source: 'ga4', sourceState: 'simulated', tests: ['HYP-03'], question: 'Did fewer people arrive, or did the same people convert less?', alreadyQueried: false, sourceFailed: false, informative: true },
-    { id: 'getAnalyticsMetric(ga4.purchase_revenue)', tool: 'getAnalyticsMetric', source: 'ga4', sourceState: 'simulated', tests: ['HYP-04'], question: 'Does revenue move too, or only the conversion metric?', alreadyQueried: false, sourceFailed: false, informative: true },
-    { id: 'getStoreCrashRate(app_store)', tool: 'getStoreCrashRate', source: 'app_store', sourceState: 'simulated', tests: ['HYP-02'], question: 'Is the iOS app crashing more than normal?', alreadyQueried: false, sourceFailed: false, informative: true },
+    { id: 'getChanges(jira)', tool: 'getChanges', source: 'jira', sourceState: 'simulated', tests: ['HYP-01'], question: 'Was anything released or changed shortly before the change began?', alreadyQueried: false, sourceFailed: false, informative: true },
+    { id: 'getWorkItems', tool: 'getWorkItems', source: 'jira', sourceState: 'simulated', tests: ['HYP-02'], question: 'Are people reporting checkout bugs?', alreadyQueried: false, sourceFailed: false, informative: true },
+    { id: 'getMetric(sessions)', tool: 'getMetric', source: 'ga4', sourceState: 'simulated', tests: ['HYP-03'], question: 'Did fewer people arrive, or did the same people convert less?', alreadyQueried: false, sourceFailed: false, informative: true },
+    { id: 'getMetric(purchase_revenue)', tool: 'getMetric', source: 'ga4', sourceState: 'simulated', tests: ['HYP-04'], question: 'Does revenue move too, or only the conversion metric?', alreadyQueried: false, sourceFailed: false, informative: true },
+    { id: 'getMetric(crash_free_sessions_ios)', tool: 'getMetric', source: 'app_store', sourceState: 'simulated', tests: ['HYP-02'], question: 'Is the iOS app crashing more than normal?', alreadyQueried: false, sourceFailed: false, informative: true },
   ],
 };
 
@@ -66,6 +66,7 @@ async function planWith(r: ResolvedProvider | undefined, cfg: PlannerConfig, sta
   if (!r) return { status: 200, body: { outcome: { status: 'failed', code: 'NOT_CONFIGURED', detail: 'No provider is configured for this role.' } } };
   const source = { provider: r.provider, displayName: r.displayName, model: r.model };
   if (!r.configured || !r.config) return { status: 200, body: { outcome: { status: 'failed', code: 'NOT_CONFIGURED', detail: r.problems.join(' ') }, source } };
+  if (!http) return { status: 200, body: { outcome: { status: 'failed', code: 'NOT_CONFIGURED', detail: 'The host did not provide an HTTP client.' }, source } };
   const provider = llmPlannerProvider(PROVIDER_REGISTRY[r.provider].create(r.config, http), { timeoutMs: cfg.timeoutMs });
   const started = Date.now();
   let outcome: PlannerOutcome;

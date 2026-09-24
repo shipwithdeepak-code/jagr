@@ -1,6 +1,8 @@
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '../lib/time';
 import type { EmailButton, EmailNotification, Watch, WatchInvestigation } from '../types';
 import { DEMO_RECIPIENT, EMAIL_FROM } from '../catalog';
+import { PROVIDERS } from '../integrations/adapters';
+import type { ProviderId } from '../types';
 import { ATTENTION_RANK, atLeast } from './attention';
 
 /**
@@ -30,8 +32,8 @@ function subjectFor(inv: WatchInvestigation): string {
   const p = inv.signals[0];
   const drop = p.magnitude.startsWith('−');
   let core: string;
-  if (p.key.endsWith('.reviews')) core = `${p.magnitude} mention ${inv.area}`;
-  else if (p.key === 'jira.issues') core = `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
+  if (p.key === 'feedback') core = `${p.magnitude} mention ${inv.area}`;
+  else if (p.key === 'work_items') core = `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
   else if (p.magnitude.endsWith('pts')) core = `${p.label} ${drop ? 'fell' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   else core = `${p.label} ${drop ? 'dropped' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   return `${inv.attention === 'CRITICAL' ? '[Critical] ' : ''}Jagr: ${core}`;
@@ -39,12 +41,12 @@ function subjectFor(inv: WatchInvestigation): string {
 
 export function emailButtons(inv: WatchInvestigation): EmailButton[] {
   const buttons: EmailButton[] = [{ label: 'Open investigation', href: inv.jagrPath, kind: 'jagr', simulated: false }];
-  const order = ['jira', 'ga4', 'app_store', 'google_play'] as const;
-  const labels: Record<(typeof order)[number], string> = { jira: 'Open Jira', ga4: 'Open Analytics', app_store: 'Open App Store', google_play: 'Open Play Store' };
+  // One button per source, in workspace source order.
+  const order = (Object.keys(PROVIDERS) as ProviderId[]).filter((p) => p !== 'email');
   for (const p of order) {
     const link = inv.sourceLinks.find((l) => l.provider === p);
     // The link already carries the source's name in this workspace (e.g. "Open Feedback" for imported data).
-    if (link) buttons.push({ label: /^Open /.test(link.label) ? link.label : labels[p], href: link.href, kind: 'source', provider: p, simulated: link.simulated });
+    if (link) buttons.push({ label: /^Open /.test(link.label) ? link.label : `Open ${PROVIDERS[p].short}`, href: link.href, kind: 'source', provider: p, simulated: link.simulated });
   }
   return buttons;
 }

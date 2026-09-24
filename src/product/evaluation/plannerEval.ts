@@ -110,7 +110,7 @@ export const PLANNER_CASES: PlannerCase[] = [
       const firstTools = inv?.trace.filter((s) => s.pass === 2 && s.kind === 'planner').map((s) => s.planner!.executedTool) ?? [];
       return [
         ck('tool_selection', 'Model plans were approved and executed', modelApproved(r) >= 3, `${modelApproved(r)} approved model plans, ${fallbacks(r)} fallbacks`),
-        ck('tool_selection', 'Order is not the deterministic sequence', firstTools[0] !== 'getJiraRelease', firstTools.slice(0, 4).join(' → ')),
+        ck('tool_selection', 'Order is not the deterministic sequence', firstTools[0] !== 'getChanges(jira)', firstTools.slice(0, 4).join(' → ')),
         ...acceptance(r),
       ];
     },
@@ -125,13 +125,13 @@ export const PLANNER_CASES: PlannerCase[] = [
     connections: down('jira'),
     check: (r) => {
       const inv = checkout(r);
-      const incident = inv?.actions.find((a) => a.kind === 'create_jira_incident');
+      const incident = inv?.actions.find((a) => a.kind === 'create_incident');
       return [
         ck('tool_selection', 'Rejected as SOURCE_UNAVAILABLE', rejections(r, 'SOURCE_UNAVAILABLE') > 0, `${rejections(r, 'SOURCE_UNAVAILABLE')} rejections`),
         ck('tool_selection', 'Jira never called', !steps(r).some((s) => s.kind === 'tool_call' && s.source === 'jira'), 'no Jira tool calls'),
         ck('grounding', 'No Jira evidence claimed', !inv?.evidence.some((e) => e.provider === 'jira' && e.direction !== 'gap'), 'none'),
         ck('uncertainty', 'Jira marked unavailable, not "no issues"', !!inv?.unknowns.some((u) => u.startsWith('Jira is unavailable')) && !inv.evidence.some((e) => /no new .* issues/i.test(e.statement)), inv?.unknowns.find((u) => u.includes('Jira')) ?? 'not stated'),
-        ck('tool_selection', 'Used other sources for release timing', steps(r).some((s) => s.kind === 'tool_call' && s.tool === 'getStoreReleases'), 'store releases queried'),
+        ck('tool_selection', 'Used other sources for release timing', steps(r).some((s) => s.kind === 'tool_call' && s.tool === 'getChanges' && s.source !== 'jira'), 'store releases queried'),
         ck('approval', 'Jira incident is a draft', !!incident?.title.startsWith('Draft'), incident?.title ?? 'none'),
       ];
     },
@@ -157,7 +157,7 @@ export const PLANNER_CASES: PlannerCase[] = [
     world: accept,
     watches: acceptWatches,
     check: (r) => {
-      const perPass = checkout(r)?.trace.reduce((m, s) => (s.kind === 'tool_call' && s.tool === 'getRecentJiraIssues' ? m.set(s.pass, (m.get(s.pass) ?? 0) + 1) : m), new Map<number, number>());
+      const perPass = checkout(r)?.trace.reduce((m, s) => (s.kind === 'tool_call' && s.tool === 'getWorkItems' ? m.set(s.pass, (m.get(s.pass) ?? 0) + 1) : m), new Map<number, number>());
       return [
         ck('tool_selection', 'Repeats rejected as ALREADY_QUERIED', rejections(r, 'ALREADY_QUERIED') > 0, `${rejections(r, 'ALREADY_QUERIED')} rejections`),
         ck('tool_selection', 'At most one Jira issues call per pass', [...(perPass?.values() ?? [])].every((n) => n <= 1), JSON.stringify([...(perPass?.entries() ?? [])])),

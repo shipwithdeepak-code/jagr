@@ -21,11 +21,12 @@ describe('acceptance: checkout conversion −18%', () => {
     const tools = new Set(inv.trace.filter((s) => s.kind === 'tool_call').map((s) => s.tool));
 
     // Signal, sources, tool calls
-    expect(inv.signals[0].key).toBe('ga4.checkout_conversion');
-    expect(tools).toContain('getAnalyticsMetric');
-    expect(tools).toContain('getRecentJiraIssues');
-    expect(tools).toContain('getJiraRelease');
-    expect([...tools].some((t) => t === 'getAppStoreReviews' || t === 'getPlayStoreReviews')).toBe(true);
+    expect(inv.signals[0].key).toBe('metric:checkout_conversion');
+    const calls = new Set(inv.trace.filter((s) => s.kind === 'tool_call').map((s) => `${s.tool}(${s.source})`));
+    expect(tools).toContain('getMetric');
+    expect(tools).toContain('getWorkItems');
+    expect(calls).toContain('getChanges(jira)');
+    expect(tools).toContain('getFeedback');
     expect(inv.toolCalls).toBeGreaterThan(4);
 
     // Every tool call is followed by a result that says what changed.
@@ -53,7 +54,7 @@ describe('acceptance: checkout conversion −18%', () => {
     const pause = inv.actions.find((a) => a.kind === 'pause_rollout')!;
     expect(pause.status).toBe('awaiting_approval');
     expect(() => executeAction(pause)).toThrow(ApprovalRequiredError);
-    expect(inv.actions.find((a) => a.kind === 'link_issues')?.status).toBe('executed');
+    expect(inv.actions.find((a) => a.kind === 'link_work_items')?.status).toBe('executed');
     expect(inv.trace.some((s) => s.kind === 'approval')).toBe(true);
     expect(inv.trace.some((s) => s.kind === 'stop')).toBe(true);
     expect(r.emails).toHaveLength(1);
@@ -78,9 +79,9 @@ describe('acceptance: checkout conversion −18%', () => {
     const inv = r.investigations.find((i) => i.area === 'checkout')!;
     const passes = new Set(inv.trace.map((s) => s.pass));
     for (const p of passes) expect(inv.trace.filter((s) => s.pass === p && s.kind === 'tool_call' && s.source === 'jira').length).toBeLessThanOrEqual(1);
-    expect(inv.trace.some((s) => s.kind === 'tool_call' && s.tool === 'getStoreReleases')).toBe(true);
+    expect(inv.trace.some((s) => s.kind === 'tool_call' && s.tool === 'getChanges' && s.source !== 'jira')).toBe(true);
     expect(inv.releaseAssociation?.version).toBe('4.8.1');
-    const incident = inv.actions.find((a) => a.kind === 'create_jira_incident')!;
+    const incident = inv.actions.find((a) => a.kind === 'create_incident')!;
     expect(incident.title).toMatch(/^Draft/);
     expect(executeAction(incident, { status: 'done', at: incident.proposedAt })).toMatch(/Not filed/);
   });

@@ -31,43 +31,59 @@ function wanted(i: PlannerInput, o: PlannerOption) {
 }
 
 /**
+ * How a scripted planner recognises an option — by role, source and metric, as a model reads them.
+ * The Sample workspace's sources are 'jira' (issues and releases), 'ga4' (analytics) and the two
+ * app stores; the doubles are written against that fixture.
+ */
+type Want = 'stability' | 'work_items' | 'feedback:app_store' | 'feedback:google_play' | 'traffic' | 'metric' | 'changes:jira' | 'changes:stores';
+function want(o: PlannerOption): Want {
+  if (o.tool === 'getChanges') return o.source === 'jira' ? 'changes:jira' : 'changes:stores';
+  if (o.tool === 'getWorkItems') return 'work_items';
+  if (o.tool === 'getFeedback') return o.source === 'app_store' ? 'feedback:app_store' : 'feedback:google_play';
+  if (o.metric?.startsWith('crash_free_sessions')) return 'stability';
+  if (o.metric === 'sessions') return 'traffic';
+  return 'metric';
+}
+const find = (i: PlannerInput, w: Want, fresh = true) => i.options.find((o) => want(o) === w && (!fresh || !o.alreadyQueried));
+
+/**
  * A sensible planner with a different strategy from the deterministic one: establish whether users
  * are really affected (crashes, complaints, bugs) before looking at release timing.
  */
 export function impactFirst(i: PlannerInput): string {
-  const order = ['getStoreCrashRate', 'getRecentJiraIssues', 'getAppStoreReviews', 'getPlayStoreReviews', 'getAnalyticsTraffic', 'getAnalyticsMetric', 'getJiraRelease', 'getStoreReleases'];
+  const order: Want[] = ['stability', 'work_items', 'feedback:app_store', 'feedback:google_play', 'traffic', 'metric', 'changes:jira', 'changes:stores'];
   const opts = reachable(i)
     .filter((o) => wanted(i, o))
-    .sort((a, b) => order.indexOf(a.tool) - order.indexOf(b.tool));
+    .sort((a, b) => order.indexOf(want(a)) - order.indexOf(want(b)));
   const o = opts[0] ?? reachable(i)[0] ?? i.options[0];
   return plan(o);
 }
 
 export const PLANNER_DOUBLES = {
   impactFirst: scripted('impact first', impactFirst),
-  alwaysUnavailableJira: scripted('insists on Jira', (i) => plan(i.options.find((o) => o.tool === 'getJiraRelease') ?? { id: 'getJiraRelease', tests: ['HYP-01'], question: 'Was anything released?' })),
+  alwaysUnavailableJira: scripted('insists on Jira', (i) => plan(find(i, 'changes:jira', false) ?? { id: 'getChanges(jira)', tests: ['HYP-01'], question: 'Was anything released?' })),
   hallucinated: scripted('hallucinates a tool', () => JSON.stringify({ nextTool: 'getDatadogErrors', reason: 'Server errors would show whether checkout requests are failing.', evidenceGap: 'Server-side errors', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Error rate on the checkout endpoint.' })),
-  repeatsJiraIssues: scripted('repeats Jira issues', () => JSON.stringify({ nextTool: 'getRecentJiraIssues', reason: 'Engineering reports would test whether this is a real product issue.', evidenceGap: 'Recent checkout defects', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Checkout bugs or incidents.' })),
+  repeatsJiraIssues: scripted('repeats Jira issues', () => JSON.stringify({ nextTool: 'getWorkItems', reason: 'Engineering reports would test whether this is a real product issue.', evidenceGap: 'Recent checkout defects', hypothesesAffected: ['HYP-02'], expectedEvidence: 'Checkout bugs or incidents.' })),
   /**
    * Release-first, then keeps chasing release corroboration after release-related has hit its
    * ceiling — while real gaps (impact, demand) are still open.
    */
   releaseObsessed: scripted('chases release timing', (i) => {
     const rel = i.hypotheses.find((h) => h.id === 'HYP-01');
-    const opt = (tool: string) => i.options.find((o) => o.tool === tool && !o.alreadyQueried);
-    if (rel?.status === 'untested' && opt('getJiraRelease')) return plan(opt('getJiraRelease')!);
-    if (rel && rel.strength !== rel.ceiling && opt('getRecentJiraIssues')) return plan(opt('getRecentJiraIssues')!);
-    if (rel && rel.strength === rel.ceiling && opt('getStoreReleases')) return plan(opt('getStoreReleases')!);
+    const opt = (w: Want) => find(i, w);
+    if (rel?.status === 'untested' && opt('changes:jira')) return plan(opt('changes:jira')!);
+    if (rel && rel.strength !== rel.ceiling && opt('work_items')) return plan(opt('work_items')!);
+    if (rel && rel.strength === rel.ceiling && opt('changes:stores')) return plan(opt('changes:stores')!);
     return impactFirst(i);
   }),
   proposesRollback: scripted('proposes an action', () => JSON.stringify({ nextTool: 'rollback_release', reason: 'Rolling back 4.8.1 would limit exposure while the team looks into the drop.', evidenceGap: 'None — act now', hypothesesAffected: ['HYP-01'], expectedEvidence: 'Checkout conversion recovers.' })),
-  malformed: scripted('malformed JSON', () => '{"nextTool": "getRecentJiraIssues", "reason": "Engineering evid'),
+  malformed: scripted('malformed JSON', () => '{"nextTool": "getWorkItems", "reason": "Engineering evid'),
   empty: scripted('empty response', () => ''),
   timeout: scripted('never answers', () => new Promise<string>(() => {})),
   causal: scripted('claims causation', (i) => plan(reachable(i).find((o) => wanted(i, o)) ?? i.options[0], { reason: 'Release 4.8.1 caused the checkout drop, so its engineering issues will confirm it.' })),
   invalidHypothesis: scripted('cites unknown hypotheses', (i) => plan(reachable(i).find((o) => wanted(i, o)) ?? i.options[0], { hypothesesAffected: ['HYP-99'] })),
   extendsBudget: scripted('tries to raise the budget', (i) => plan(reachable(i).find((o) => wanted(i, o)) ?? i.options[0], { budget: 20 })),
-  repeatsTraffic: scripted('repeats a queried tool', (i) => (i.options.some((o) => o.tool === 'getAnalyticsTraffic') ? plan(i.options.find((o) => o.tool === 'getAnalyticsTraffic')!) : impactFirst(i))),
+  repeatsTraffic: scripted('repeats a queried tool', (i) => (find(i, 'traffic', false) ? plan(find(i, 'traffic', false)!) : impactFirst(i))),
 };
 
 export type PlannerDoubleName = keyof typeof PLANNER_DOUBLES;

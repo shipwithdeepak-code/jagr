@@ -83,7 +83,7 @@ describe('demo / workspace data boundary', () => {
     const demoStore = readFileSync('src/state/store.tsx', 'utf8');
     expect(demoStore).not.toMatch(/jagr:product|productContext|\/product\/|useProduct/);
     const productStore = readFileSync('src/state/product.tsx', 'utf8');
-    expect(productStore).toMatch(/const KEY = 'jagr:product:v2'/);
+    expect(productStore).toMatch(/const KEY = 'jagr:product:v3'/);
     expect(productStore).not.toMatch(/nightwatch:workspace/);
   });
 

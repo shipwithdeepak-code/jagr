@@ -1,6 +1,6 @@
-import { createRng, hashString } from '@/lib/rng';
-import { addMinutes } from '@/lib/time';
-import type { Area, ProviderId } from '../types';
+import { createRng, hashString } from '../lib/rng';
+import { addMinutes } from '../lib/time';
+import type { ProviderId } from '../types';
 import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from './types';
 
 /**
@@ -29,9 +29,6 @@ export const METRIC_DEFS: MetricDef[] = [
   { id: 'google_play.crash_free_sessions', provider: 'google_play', name: 'Crash-free sessions (Android)', unit: 'percent', area: 'stability', badDirection: 'down', mode: 'absolute', threshold: 0.3, base: 99.6, std: 0.05, platform: 'android' },
 ];
 
-/** Typical volume per 3 hours, from the previous 28 nights — used to judge whether a count is unusual. */
-export const ISSUE_BASELINE_PER_3H: Record<Area, number> = { checkout: 0.2, signup: 0.2, search: 0.1, stability: 0.2, general: 0.6 };
-export const NEGATIVE_REVIEW_BASELINE_PER_6H: Record<Area, number> = { checkout: 0.3, signup: 0.2, search: 0.2, stability: 0.4, general: 0.8 };
 
 export interface MetricEffect {
   from: string; // HH:MM
@@ -58,6 +55,12 @@ export interface World {
   /** Spacing of metric points. Simulated nights use 15 minutes; imported data uses its own cadence. */
   bucketMinutes?: number;
   metrics: MetricSeries[];
+  /**
+   * Metrics the world's sources are configured to serve, including ones with no data yet. Absent →
+   * exactly the metrics present. Imported workspaces declare every importable metric, so a missing
+   * one is a recorded gap ("no purchase revenue data"), not a silently skipped check.
+   */
+  metricCatalog?: Omit<MetricSeries, 'points' | 'baseline'>[];
   issues: IssueRecord[];
   releases: ReleaseRecord[];
   reviews: ReviewRecord[];

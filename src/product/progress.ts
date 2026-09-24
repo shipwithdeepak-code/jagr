@@ -31,11 +31,10 @@ export interface RunProgress {
 }
 
 const TOOL_STAGE: Partial<Record<ToolName, StageId>> = {
-  getJiraRelease: 'releases',
-  getStoreReleases: 'releases',
-  getRecentJiraIssues: 'issues',
-  getAppStoreReviews: 'customer',
-  getPlayStoreReviews: 'customer',
+  getChanges: 'releases',
+  getWorkItems: 'issues',
+  getFeedback: 'customer',
+  getFeedbackVolume: 'customer',
 };
 
 export function stageOf(step: TraceStep, reached: readonly StageId[]): StageId | undefined {

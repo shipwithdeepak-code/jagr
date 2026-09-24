@@ -6,8 +6,8 @@ import type { WatchInvestigation } from './types';
 export function headlineOf(inv: WatchInvestigation): string {
   const p = inv.signals[0];
   const drop = p.magnitude.startsWith('−');
-  if (p.key.endsWith('.reviews')) return `${p.magnitude} about ${inv.area}`;
-  if (p.key === 'jira.issues') return `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
+  if (p.key === 'feedback') return `${p.magnitude} about ${inv.area}`;
+  if (p.key === 'work_items') return `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
   return `${p.label} ${drop ? (p.magnitude.endsWith('pts') ? 'fell' : 'dropped') : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
 }
 
