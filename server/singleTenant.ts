@@ -73,7 +73,7 @@ export const OWNER_CONNECTORS: OwnerConnectorSpec[] = [
       env.JAGR_GITHUB_TOKEN
         ? { kind: 'api_key', fields: { token: env.JAGR_GITHUB_TOKEN } }
         : { kind: 'api_key', fields: { appId: env.JAGR_GITHUB_APP_ID!, privateKey: env.JAGR_GITHUB_APP_PRIVATE_KEY!, installationId: env.JAGR_GITHUB_INSTALLATION_ID! } },
-    config: (env) => ({ repos: list(env.JAGR_GITHUB_REPOS), auth: env.JAGR_GITHUB_TOKEN ? 'token' : 'app' }),
+    config: (env) => ({ repos: list(env.JAGR_GITHUB_REPOS), ...(env.JAGR_GITHUB_ENVIRONMENTS ? { environments: list(env.JAGR_GITHUB_ENVIRONMENTS) } : {}), auth: env.JAGR_GITHUB_TOKEN ? 'token' : 'app' }),
   },
   {
     source: 'jira',

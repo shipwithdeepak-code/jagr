@@ -1,5 +1,5 @@
 import type { ProviderId } from '../../types';
-import type { HttpClient, HttpRequest } from '../../ports/http';
+import type { HttpClient, HttpRequest, HttpResponse } from '../../ports/http';
 import { ProviderUnavailableError } from '../types';
 import { ConnectorAuthError, ConnectorRateLimited } from './errors';
 
@@ -26,11 +26,13 @@ export function restrictHosts(http: HttpClient, hosts: string[], provider: Provi
 
 export interface JsonRequest extends HttpRequest {
   timeoutMs?: number;
+  /** Provider-specific rate-limit signal on a non-429 response (e.g. GitHub's 403 with no remaining quota). */
+  isRateLimited?: (res: HttpResponse) => boolean;
 }
 
 /** Call a provider and parse JSON, turning every failure into a typed, safe ProviderUnavailableError. */
 export async function requestJson<T>(http: HttpClient, provider: ProviderId, label: string, url: string, init: JsonRequest = {}): Promise<T> {
-  const { timeoutMs = 20_000, ...req } = init;
+  const { timeoutMs = 20_000, isRateLimited, ...req } = init;
   let res;
   try {
     res = await http(url, { ...req, signal: req.signal ?? AbortSignal.timeout(timeoutMs) });
@@ -39,11 +41,11 @@ export async function requestJson<T>(http: HttpClient, provider: ProviderId, lab
     const name = (e as Error)?.name;
     throw new ProviderUnavailableError(provider, 'unavailable', name === 'TimeoutError' || name === 'AbortError' ? `${label} did not answer within ${Math.round(timeoutMs / 1000)} s.` : `${label} could not be reached.`);
   }
-  if (res.status === 401 || res.status === 403) throw new ConnectorAuthError(provider, `${label} rejected the credentials (${res.status}). Reconnect ${label}.`);
-  if (res.status === 429) {
+  if (res.status === 429 || isRateLimited?.(res)) {
     const ra = Number(res.headers.get('retry-after'));
-    throw new ConnectorRateLimited(provider, `${label} rate limit reached (429).`, Number.isFinite(ra) && ra > 0 ? ra : undefined);
+    throw new ConnectorRateLimited(provider, `${label} rate limit reached (${res.status}).`, Number.isFinite(ra) && ra > 0 ? ra : undefined);
   }
+  if (res.status === 401 || res.status === 403) throw new ConnectorAuthError(provider, `${label} rejected the credentials (${res.status}). Reconnect ${label}.`);
   if (res.status >= 500) throw new ProviderUnavailableError(provider, 'unavailable', `${label} is having problems (${res.status}).`);
   if (!res.ok) throw new ProviderUnavailableError(provider, 'error', `${label} returned ${res.status}.`);
   try {

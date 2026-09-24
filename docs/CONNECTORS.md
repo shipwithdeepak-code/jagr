@@ -59,6 +59,7 @@ or sent to an AI planner. Names are not removed.
 |---|---|---|
 | (reference, test only) deploy log | changes | Framework reference in `framework.test.ts` |
 | Amplitude | metrics, changes (annotations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live project** (`npm run eval:connectors`) |
+| GitHub | changes (deployments, releases) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live repository** |
 
 ## Amplitude
 
@@ -99,3 +100,23 @@ watch templates pick the metrics up; any other key is added to watches of its ar
 Limitations: the project timezone is a fixed offset (DST not modelled — UTC projects are exact); with hourly buckets a
 sustained drop is detected after about 3 complete hours; one Amplitude project per workspace.
 
+
+## GitHub
+
+REST API (`api.github.com`), read-only, with a **fine-grained personal access token** (Deployments: read,
+Contents: read, Metadata: read) in `JAGR_GITHUB_TOKEN`. Repositories in `JAGR_GITHUB_REPOS`, environments in
+`JAGR_GITHUB_ENVIRONMENTS` (default `production`).
+
+- **Deployments** — `GET /repos/{repo}/deployments?environment=…` (newest first, up to 3 pages, back to 6 h before
+  the window), then `GET …/deployments/{id}/statuses`. The time is the first `success` status: **actual** timing,
+  when the change reached the environment. A failed deployment is recorded at its failure (`failed`). One still
+  running — as of the run time; later statuses are not visible to it — is `in_progress` with `reported` timing at
+  its start. Deep link: the commit.
+- **Releases** — `GET /repos/{repo}/releases`. Published, non-draft only; `reported` timing at publication. GitHub
+  does not know when users received a release, and the record says so.
+- A 403 with `x-ratelimit-remaining: 0` is a rate limit, not a credential problem.
+- A GitHub outage during an investigation is a recorded gap ("GitHub could not be checked"); the release question
+  is never closed by it.
+
+Not built: **GitHub App authentication** (App variables are reported as invalid configuration, never silently
+ignored), GitHub Enterprise Server, workflow runs as deploy evidence.
