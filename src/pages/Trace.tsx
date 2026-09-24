@@ -6,6 +6,83 @@ import { fmtTime } from '@/lib/time';
 import { allEvents, useWorkspace } from '@/state/workspace';
 import { Badge, Card, cx, EmptyState, Mono, PageHeader, Select, Tabs } from '@/components/ui';
 import { RunButtons } from './Overview';
+import { AgentTraceTimeline, AgentWorkingLine, PlannerModeLine } from '@/components/agent';
+import { AttentionBadge, InvestigationStateBadge } from '@/components/product';
+import { traceWithDecisions } from '@/product/agent/decisions';
+import { useProduct } from '@/state/productContext';
+
+type TraceTab = 'investigations' | 'demo';
+
+export function TracePage() {
+  const [tab, setTab] = useState<TraceTab>('investigations');
+  return (
+    <>
+      <div className="mb-4 flex justify-end">
+        <Tabs value={tab} onChange={setTab} items={[{ value: 'investigations', label: 'Workspace investigations' }, { value: 'demo', label: 'Demo night' }]} />
+      </div>
+      {tab === 'investigations' ? <InvestigationTraces /> : <DemoNightTrace />}
+    </>
+  );
+}
+
+/** The agent's own trace for every workspace investigation — the first-class view of what Jagr did. */
+function InvestigationTraces() {
+  const { state, running } = useProduct();
+  const invs = (state.result?.investigations ?? []).filter((i) => i.trace.length > 0).sort((a, b) => (a.attention === b.attention ? b.updatedAt.localeCompare(a.updatedAt) : ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].indexOf(a.attention) - ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].indexOf(b.attention)));
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const inv = invs.find((i) => i.id === selected) ?? invs[0];
+  const calls = invs.reduce((n, i) => n + i.toolCalls, 0);
+
+  if (!inv) {
+    return (
+      <>
+        <PageHeader title="Agent Trace" description="Every step Jagr takes on your watches: plan, tool call, result, what changed, why it stopped, and every human decision." />
+        <EmptyState icon={ScrollText} title={running ? 'Jagr is running monitoring…' : 'No investigations yet'}>
+          When a watch detects something, the investigation — every tool call and why — appears here.
+        </EmptyState>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Agent Trace"
+        description={`${invs.length} investigations · ${calls} tool calls last night. TIME · AGENT STEP · TOOL · INPUT · RESULT · WHY · WHAT CHANGED — recorded as Jagr worked, not summarised afterwards.`}
+      />
+      <div className="mb-3">
+        <PlannerModeLine info={state.result?.planner} />
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {invs.map((i) => (
+          <button
+            key={i.id}
+            onClick={() => setSelected(i.id)}
+            className={cx('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-[12.5px]', i.id === inv.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:bg-subtle')}
+          >
+            <AttentionBadge level={i.attention} />
+            <span className="font-medium">{i.title}</span>
+            <span className="text-ink-3">{i.toolCalls} calls</span>
+          </button>
+        ))}
+      </div>
+      <Card className="mb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <InvestigationStateBadge state={inv.status} />
+          <Link to={`/investigations/w/${inv.id}`} className="text-[13.5px] font-semibold hover:underline">
+            {inv.title}
+          </Link>
+          <Mono className="text-ink-3">{inv.id}</Mono>
+          <span className="ml-auto">
+            <AgentWorkingLine inv={inv} />
+          </span>
+        </div>
+        {inv.stopReason && <p className="mt-2 text-[12.5px] text-ink-2"><span className="font-medium text-ink">Last stop:</span> {inv.stopReason}</p>}
+      </Card>
+      <AgentTraceTimeline key={inv.id} steps={traceWithDecisions(inv, state.decisions)} connections={state.result?.connections ?? state.connections} />
+    </>
+  );
+}
 
 const STAGES: { value: AgentStage | 'all'; label: string }[] = [
   { value: 'all', label: 'All stages' },
@@ -30,7 +107,7 @@ export function StatusIcon({ status, agent }: { status: AgentEvent['status']; ag
   return <CircleDot size={14} className="text-ink-3" />;
 }
 
-export function TracePage() {
+function DemoNightTrace() {
   const { state } = useWorkspace();
   const [tab, setTab] = useState<'trace' | 'audit'>('trace');
   const [stage, setStage] = useState<AgentStage | 'all'>('all');
@@ -40,7 +117,7 @@ export function TracePage() {
   if (!state.run) {
     return (
       <>
-        <PageHeader title="Agent Trace" description="A timestamped record of every step JAGR takes: tool calls, results, decisions and approvals." />
+        <PageHeader title="Demo night trace" description="The scripted demo night replay — deterministic, and separate from your workspace investigations." />
         <EmptyState icon={ScrollText} title="No trace yet" action={<div className="flex gap-2"><RunButtons /></div>}>
           Run the overnight watch and every sweep, query, hypothesis and decision will appear here.
         </EmptyState>
@@ -54,8 +131,8 @@ export function TracePage() {
   return (
     <>
       <PageHeader
-        title="Agent Trace"
-        description={`${state.run.id} · ${events.length} events from ${fmtTime(state.run.startedAt)} to ${fmtTime(state.run.endedAt)}. Nothing here is summarised after the fact — this is what the agent did, in order.`}
+        title="Demo night trace"
+        description={`Scripted replay, separate from your workspace · ${state.run.id} · ${events.length} events from ${fmtTime(state.run.startedAt)} to ${fmtTime(state.run.endedAt)}. Nothing here is summarised after the fact — this is what the agent did, in order.`}
         actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'trace', label: 'Trace' }, { value: 'audit', label: 'Audit log' }]} />}
       />
       {tab === 'trace' ? (

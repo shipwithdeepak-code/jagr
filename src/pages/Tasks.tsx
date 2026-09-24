@@ -7,6 +7,10 @@ import { fmtDate, fmtTime } from '@/lib/time';
 import { teamName, useWorkspace } from '@/state/workspace';
 import { Badge, Card, cx, Mono, PageHeader, RiskBadge, SimulationBadge, Tabs } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
+import { EnvironmentBadge, useEnvironmentScope } from '@/components/product';
+import { inScope, SCOPE_TABS, taskEnvironment } from '@/state/environment';
+import { pendingApprovals } from '@/product/agent/decisions';
+import { useProduct } from '@/state/productContext';
 
 const COLS = 'md:grid-cols-[76px_1fr_92px_160px_100px_84px_130px_112px]';
 
@@ -14,15 +18,20 @@ export function TasksPage() {
   const { state } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const [who, setWho] = useState<'all' | 'nightwatch' | 'human'>('all');
+  const [scope, setScope] = useEnvironmentScope();
+  const product = useProduct();
   const openId = params.get('open');
   const openTask = state.tasks.find((t) => t.id === openId) ?? null;
 
-  const tasks = state.tasks.filter((t) => who === 'all' || t.createdBy === who);
+  // Every task belongs to exactly one environment; the list shows the current one unless "All" is chosen.
+  const tasks = state.tasks.filter((t) => inScope(taskEnvironment(t), scope) && (who === 'all' || t.createdBy === who));
+  const showDemo = inScope('demo', scope);
+  const workspaceApprovals = inScope('workspace', scope) ? pendingApprovals(product.state.result?.investigations ?? [], product.state.decisions) : [];
   const created = tasks.filter((t) => t.createdBy === 'nightwatch' && t.status === 'todo');
   const humanTodo = tasks.filter((t) => t.createdBy === 'human' && t.status === 'todo');
   const inProgress = tasks.filter((t) => t.status === 'in_progress');
   const done = tasks.filter((t) => t.status === 'done');
-  const approvals = state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested');
+  const approvals = showDemo ? state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested') : [];
   const invTitle = (id?: string) => state.run?.investigations.find((i) => i.id === id)?.title;
 
   const open = (id: string) => setParams({ open: id });
@@ -35,12 +44,13 @@ export function TasksPage() {
         actions={
           <>
             <SimulationBadge label="Simulated issue tracker" />
+            <Tabs value={scope} onChange={setScope} items={SCOPE_TABS} />
             <Tabs value={who} onChange={setWho} items={[{ value: 'all', label: 'All' }, { value: 'nightwatch', label: 'JAGR' }, { value: 'human', label: 'Human' }]} />
           </>
         }
       />
 
-      {state.drafts.length > 0 && (
+      {showDemo && state.drafts.length > 0 && (
         <Section title="Drafted — ready to file" hint="Below the auto-file threshold, JAGR prepares the task and you decide.">
           <div className="space-y-3">
             {state.drafts.map((d) => <TaskDraftCard key={d.fingerprint} draft={d} compact />)}
@@ -52,16 +62,34 @@ export function TasksPage() {
         <TaskTable tasks={created} onOpen={open} invTitle={invTitle} empty="Nothing new from JAGR. Run the overnight watch to see it file work." />
       </Section>
 
-      <Section title="Needs approval" count={approvals.length} hint="Consequential actions waiting on a human. JAGR will not proceed on its own.">
-        {approvals.length === 0 ? (
+      <Section title="Needs approval" count={approvals.length + workspaceApprovals.length} hint="Consequential actions waiting on a human. JAGR will not proceed on its own.">
+        {workspaceApprovals.length > 0 && (
+          <Card padded={false} className="mb-3 overflow-hidden">
+            {workspaceApprovals.map((a) => (
+              <Link key={a.id} to={`/approvals#approve-${a.id}`} className={cx('grid grid-cols-1 gap-2 border-b border-line px-4 py-3 last:border-b-0 hover:bg-subtle md:items-center md:gap-3', COLS)}>
+                <Mono className="text-ink-3">{a.kind.toUpperCase()}</Mono>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-[13.5px] font-medium">{a.title} <EnvironmentBadge env="workspace" /></span>
+                </span>
+                <span><Badge tone={a.risk === 'CRITICAL' ? 'crit' : 'high'}>{a.risk} risk</Badge></span>
+                <span className="text-[12.5px] text-ink-2">Risk policy</span>
+                <span><Badge tone="accent">AI-requested</Badge></span>
+                <span className="text-[12.5px] text-ink-2">{a.evidence.length} items</span>
+                <span className="text-[12.5px] text-ink-3">Workspace investigation</span>
+                <span className="flex items-center gap-1.5"><Badge tone="high"><ShieldCheck size={11} /> Awaiting you</Badge></span>
+              </Link>
+            ))}
+          </Card>
+        )}
+        {approvals.length === 0 && workspaceApprovals.length === 0 ? (
           <EmptyRow>No actions waiting for approval.</EmptyRow>
-        ) : (
+        ) : approvals.length === 0 ? null : (
           <Card padded={false} className="overflow-hidden">
             {approvals.map((a) => (
               <Link key={a.id} to={`/approvals#${a.id}`} className={cx('grid grid-cols-1 gap-2 border-b border-line px-4 py-3 last:border-b-0 hover:bg-subtle md:items-center md:gap-3', COLS)}>
                 <Mono className="text-ink-3">{a.id.toUpperCase()}</Mono>
                 <span className="min-w-0">
-                  <span className="block text-[13.5px] font-medium">{a.title}</span>
+                  <span className="flex items-center gap-2 text-[13.5px] font-medium">{a.title} <EnvironmentBadge env="demo" /></span>
                   <span className="block truncate text-[12px] text-ink-3">{invTitle(a.investigationId)}</span>
                 </span>
                 <span><RiskBadge risk={a.risk} /></span>
@@ -133,6 +161,7 @@ function TaskTable({ tasks, onOpen, invTitle, empty }: { tasks: Task[]; onOpen: 
             <span className="flex items-center gap-2 text-[13.5px] font-medium">
               <span className="truncate">{t.title}</span>
               {t.kind === 'incident' && <Badge tone="crit">Incident draft</Badge>}
+              <EnvironmentBadge env={taskEnvironment(t)} />
             </span>
             <span className="block text-[12px] text-ink-3">{fmtDate(t.createdAt)} {fmtTime(t.createdAt)}</span>
           </span>

@@ -67,7 +67,7 @@ function BeforeTheNight() {
       </div>
 
       <Card className="mt-4">
-        <SectionTitle hint="All connectors are simulation adapters in this demo environment.">Sources</SectionTitle>
+        <SectionTitle hint="All connectors in Demo night are simulation adapters.">Sources</SectionTitle>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {INTEGRATIONS.map((i) => (
             <span key={i.kind} className="inline-flex items-center gap-1.5 text-[13px]">
@@ -99,7 +99,7 @@ export function RunButtons() {
         onClick={requestDemo}
         className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-[13.5px] font-medium shadow-card hover:bg-subtle"
       >
-        <Radar size={14} /> Demo Mode
+        <Radar size={14} /> Reset &amp; replay Demo night
       </button>
     </>
   );

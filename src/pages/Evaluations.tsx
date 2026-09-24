@@ -4,6 +4,9 @@ import { defaultSettings } from '@/domain/defaults';
 import { EVALUATION_SCENARIOS, runEvaluationSuite } from '@/evaluation/scenarios';
 import { useWorkspace } from '@/state/workspace';
 import { Badge, Button, Card, cx, PageHeader, SectionTitle, Stat, Tabs } from '@/components/ui';
+import { GoldenEvaluations } from '@/components/GoldenEvaluations';
+import { AdversarialEvaluations } from '@/components/AdversarialEvaluations';
+import { PlannerEvaluations } from '@/components/PlannerEvaluations';
 
 export function EvaluationsPage() {
   const { state, setEvaluation } = useWorkspace();
@@ -29,16 +32,26 @@ export function EvaluationsPage() {
     <>
       <PageHeader
         title="Evaluations"
-        description="An agent that acts without evaluation isn’t something I’d trust. Each scenario replays a simulated night through the real orchestrator and checks behaviour: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
-        actions={
-          <>
+        description="An agent that acts without evaluation isn’t something I’d trust. Every case replays a simulated night through the real engine and checks behaviour, not wording: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
+      />
+
+      <GoldenEvaluations />
+      <AdversarialEvaluations />
+      <PlannerEvaluations />
+
+      <SectionTitle
+        hint="The original demo-night orchestrator: autonomy policy, approval gates and a sabotaged planner."
+        action={
+          <div className="flex flex-wrap gap-2">
             <Tabs value={policy} onChange={setPolicy} items={[{ value: 'default', label: 'Default policy' }, { value: 'workspace', label: 'My settings' }]} />
             <Button variant="primary" icon={running ? Loader2 : Play} onClick={() => run()} disabled={running}>
               {running ? 'Running…' : 'Run evaluation suite'}
             </Button>
-          </>
+          </div>
         }
-      />
+      >
+        Demo night scenarios
+      </SectionTitle>
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line shadow-card sm:grid-cols-3 lg:grid-cols-6">
         {[

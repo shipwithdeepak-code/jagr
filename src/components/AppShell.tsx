@@ -2,11 +2,13 @@ import {
   Activity,
   BookOpen,
   FlaskConical,
+  Binoculars,
   LayoutDashboard,
   ListChecks,
+  Newspaper,
+  RefreshCw,
   Menu,
   Moon,
-  Play,
   Plug,
   Radar,
   ScrollText,
@@ -21,6 +23,9 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { OvernightRun } from '@/domain/types';
 import { useWorkspace } from '@/state/workspace';
+import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decisions';
+import { useProduct } from '@/state/productContext';
+import { ENVIRONMENT, EnvironmentContext, environmentForPath, taskEnvironment, initialEnvironment, readStoredEnvironment, storeEnvironment, type AppEnvironment } from '@/state/environment';
 import { Logo, LogoMark } from './Logo';
 import { RunPlayer } from './RunPlayer';
 import { ShellContext } from './shell';
@@ -29,6 +34,7 @@ import { Button, cx, Modal } from './ui';
 
 interface NavItem {
   to: string;
+  group?: string;
   label: string;
   icon: LucideIcon;
   count?: number;
@@ -54,8 +60,57 @@ function useTheme() {
   return { theme, toggle };
 }
 
+/**
+ * Which planner investigates the simulated data. Small and unobtrusive: the simulation controls the
+ * data, this controls the planner. Deterministic is the default; the LLM option names the real
+ * provider/model from the server (never a key) or explains why it is unavailable.
+ */
+/** WORKSPACE | DEMO NIGHT — the only environment choice in the app. */
+function EnvironmentSwitch({ value, onChange }: { value: AppEnvironment; onChange: (v: AppEnvironment) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Environment" className="inline-flex rounded-lg border border-line bg-subtle p-0.5">
+      {(['workspace', 'demo'] as const).map((e) => (
+        <button
+          key={e}
+          role="radio"
+          aria-checked={value === e}
+          aria-label={ENVIRONMENT[e].label}
+          onClick={() => onChange(e)}
+          title={ENVIRONMENT[e].description}
+          className={cx('h-6 rounded-md px-2 text-[12px] font-medium whitespace-nowrap', value === e ? 'bg-surface text-ink shadow-card' : 'text-ink-3 hover:text-ink')}
+        >
+          {ENVIRONMENT[e].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlannerSwitch() {
+  const { plannerChoice, llmOption, setPlannerChoice, running } = useProduct();
+  const value = plannerChoice === 'llm' && llmOption.available ? 'llm' : 'deterministic';
+  return (
+    <label className="hidden items-center gap-1.5 text-[12px] text-ink-3 md:flex" title={llmOption.available ? 'Choose which planner investigates the simulated data. The policy validator, tools and approvals are the same either way.' : llmOption.reason}>
+      Planner
+      <select
+        aria-label="Planner"
+        value={value}
+        disabled={running}
+        onChange={(e) => setPlannerChoice(e.target.value as 'deterministic' | 'llm')}
+        className="h-7 max-w-[210px] rounded-md border border-line bg-surface px-1.5 text-[12px] text-ink outline-none focus:border-accent"
+      >
+        <option value="deterministic">Deterministic</option>
+        <option value="llm" disabled={!llmOption.available}>
+          {llmOption.available ? llmOption.label : `Configured LLM — ${llmOption.reason ?? 'No LLM provider configured.'}`}
+        </option>
+      </select>
+    </label>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { state, runOvernight, commitRun, reset } = useWorkspace();
+  const product = useProduct();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,22 +121,41 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(false);
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
+  // WORKSPACE vs DEMO NIGHT — derived from where the user is; shared pages keep the previous one.
+  const [env, setEnv] = useState<AppEnvironment>(() => initialEnvironment(location.pathname, readStoredEnvironment()));
+  useEffect(() => setEnv((prev) => environmentForPath(location.pathname, prev)), [location.pathname]);
+  useEffect(() => storeEnvironment(env), [env]);
+  // Badges count the current environment only — never a silent mix of Workspace and Demo night.
+  const pendingApprovals =
+    env === 'workspace'
+      ? pendingAgentApprovals(product.state.result?.investigations ?? [], product.state.decisions).length
+      : state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested').length;
+  const openTasks = state.tasks.filter((t) => t.status !== 'done' && taskEnvironment(t) === env).length;
+  const switchEnv = (next: AppEnvironment) => {
+    setEnv(next);
+    navigate(ENVIRONMENT[next].home);
+  };
 
-  const pendingApprovals = state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested').length;
-  const openInvestigations = state.run?.investigations.filter((i) => i.status !== 'dismissed').length ?? 0;
-  const openTasks = state.tasks.filter((t) => t.status !== 'done').length;
+  const watchFindings = product.state.result?.investigations.filter((i) => i.status !== 'DISMISSED' && i.attention !== 'LOW').length ?? 0;
 
   const primary: NavItem[] = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
-    { to: '/investigations', label: 'Investigations', icon: Telescope, count: openInvestigations || undefined },
-    { to: '/tasks', label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
-    { to: '/signals', label: 'Signals', icon: Activity },
-    { to: '/trace', label: 'Agent Trace', icon: ScrollText },
-    { to: '/approvals', label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
-    { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+    { to: '/investigations', label: 'Investigations', icon: Telescope, count: watchFindings || undefined, alert: watchFindings > 0 },
+    { to: '/watches', label: 'Watches', icon: Binoculars, count: product.state.watches.filter((w) => w.status === 'active').length || undefined },
+    { to: '/sources', label: 'Sources', icon: Plug },
+    { to: '/briefs', label: 'Briefs', icon: Newspaper },
   ];
   const secondary: NavItem[] = [
-    { to: '/integrations', label: 'Integrations', icon: Plug },
+    { to: '/tasks', label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
+    { to: '/approvals', label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
+    { to: '/trace', label: 'Agent Trace', icon: ScrollText },
+    { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+  ];
+  const demo: NavItem[] = [
+    { to: '/demo', label: 'Demo night', icon: Moon },
+    { to: '/signals', label: 'Signals', icon: Activity },
+  ];
+  const footer: NavItem[] = [
     { to: '/settings', label: 'Settings', icon: Settings },
     { to: '/about', label: 'About this build', icon: BookOpen },
   ];
@@ -100,7 +174,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setConfirmDemo(false);
     reset();
     const run = await runOvernight(true);
-    navigate('/');
+    navigate('/demo');
     setPlayer({ run, mode: 'demo' });
   }, [reset, runOvernight, navigate]);
 
@@ -114,12 +188,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     commitRun(player.run);
     const b = player.run.brief;
     setPlayer(null);
-    navigate('/');
+    navigate('/demo');
     toast({ tone: b.counts.critical ? 'warning' : 'success', title: 'Morning brief ready', body: `${b.counts.critical} critical · ${b.counts.attention} need attention · ${b.counts.normal} normal` });
   };
 
   const sidebar = (
-    <nav className="flex h-full flex-col gap-1 px-3 py-4" aria-label="Main">
+    <nav className="flex h-full flex-col gap-1 overflow-y-auto px-3 py-4" aria-label="Main">
       <div className="mb-4 flex items-center justify-between px-2">
         <Logo />
         <button className="rounded-md p-1 text-ink-3 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
@@ -128,13 +202,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <div className="mb-3 rounded-lg border border-line bg-surface px-2.5 py-2">
         <div className="text-[12.5px] font-medium text-ink">Tempo · Product</div>
-        <div className="text-[11.5px] text-ink-3">Demo environment · simulated data</div>
+        <div className="text-[11.5px] text-ink-3">{env === 'demo' ? 'Demo night · simulated replay' : 'Workspace · simulated sources'}</div>
       </div>
       {primary.map((it) => (
         <NavRow key={it.to} item={it} />
       ))}
-      <div className="my-3 h-px bg-line" />
+      <NavGroup label="Agent" />
       {secondary.map((it) => (
+        <NavRow key={it.to} item={it} />
+      ))}
+      <NavGroup label="Demo night replay" />
+      {demo.map((it) => (
+        <NavRow key={it.to} item={it} />
+      ))}
+      <div className="my-2 h-px bg-line" />
+      {footer.map((it) => (
         <NavRow key={it.to} item={it} />
       ))}
       <div className="mt-auto flex flex-col gap-2 pt-4">
@@ -150,8 +232,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Radar size={15} />
           </span>
           <span className="min-w-0">
-            <span className="block text-[13px] font-semibold text-ink">Demo Mode</span>
-            <span className="block truncate text-[11.5px] text-ink-3">Reset &amp; replay the night · ~30s</span>
+            <span className="block text-[13px] font-semibold text-ink">Demo night</span>
+            <span className="block truncate text-[11.5px] text-ink-3">Reset &amp; replay the scripted night · ~30s</span>
           </span>
         </button>
       </div>
@@ -181,28 +263,52 @@ export function AppShell({ children }: { children: ReactNode }) {
               <LogoMark />
             </span>
           </div>
-          <div className="hidden min-w-0 items-center gap-2 text-[12.5px] text-ink-3 sm:flex lg:flex">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-line-strong px-2 py-0.5">
-              <span className="size-1.5 rounded-full bg-ok" />
-              Demo environment
+          <div className="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-3">
+            <EnvironmentSwitch value={env} onChange={switchEnv} />
+            <span
+              className={cx('hidden items-center gap-1.5 rounded-md border border-dashed px-2 py-0.5 sm:inline-flex', env === 'demo' ? 'border-high/50 text-high' : 'border-line-strong')}
+              title={ENVIRONMENT[env].description}
+            >
+              <span className={cx('size-1.5 rounded-full', env === 'demo' ? 'bg-high' : 'bg-info')} />
+              {ENVIRONMENT[env].badge}
             </span>
-            <span className="hidden truncate xl:inline">
-              {state.run ? `Last run ${state.run.id} · watch ${state.settings.schedule.start} → ${state.settings.schedule.end}` : `Next watch ${state.settings.schedule.start} → ${state.settings.schedule.end}`}
-            </span>
+            {env === 'workspace' && (
+              <span className="hidden truncate xl:inline">
+                {product.state.watches.filter((w) => w.status === 'active').length} watches · brief {product.state.brief.time} {product.state.brief.timezone}
+              </span>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden sm:block">
-              <Button variant="secondary" size="sm" icon={Radar} onClick={requestDemo}>
-                Demo Mode
-              </Button>
-            </span>
-            <Button variant="primary" icon={Play} onClick={startRun} disabled={running}>
-              {running ? 'Starting…' : 'Run Overnight'}
-            </Button>
+            {env === 'workspace' ? (
+              <>
+                <PlannerSwitch />
+                <Button
+                  variant="primary"
+                  icon={RefreshCw}
+                  disabled={product.running}
+                  onClick={async () => {
+                    await product.runMonitoring();
+                    navigate('/');
+                    toast({ tone: 'success', title: 'Monitoring complete', body: 'Watches ran 18:00 → 08:00 on simulated sources. Brief generated at 08:00.' });
+                  }}
+                >
+                  {product.running ? 'Running…' : 'Run monitoring'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <span className="hidden text-[12px] text-ink-3 lg:inline">Scripted replay — the planner switch applies to the workspace</span>
+                <Button variant="primary" icon={Radar} onClick={requestDemo}>
+                  Reset &amp; replay
+                </Button>
+              </>
+            )}
           </div>
         </header>
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-          <ShellContext.Provider value={{ startRun: () => void startRun(), requestDemo, running }}>{children}</ShellContext.Provider>
+          <ShellContext.Provider value={{ startRun: () => void startRun(), requestDemo, running }}>
+            <EnvironmentContext.Provider value={{ environment: env }}>{children}</EnvironmentContext.Provider>
+          </ShellContext.Provider>
         </main>
       </div>
 
@@ -211,7 +317,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Modal
         open={confirmDemo}
         onClose={() => setConfirmDemo(false)}
-        title="Reset the workspace for Demo Mode?"
+        title="Reset and replay Demo night?"
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDemo(false)}>
@@ -223,7 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>
         }
       >
-        Demo Mode restores default settings, clears tonight’s run, tasks you created and approval decisions, then replays the night from 6:00 PM. This only affects the simulated demo environment.
+        This clears Demo night’s scripted run, its tasks, approval decisions and settings, then replays the night from 6:00 PM. Your workspace — watches, monitoring runs, investigations, their decisions, tasks filed from them and the planner selection — is not affected.
       </Modal>
     </div>
   );
@@ -249,4 +355,8 @@ function NavRow({ item }: { item: NavItem }) {
       )}
     </NavLink>
   );
+}
+
+function NavGroup({ label }: { label: string }) {
+  return <div className="mt-4 mb-1 px-2.5 text-[10.5px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{label}</div>;
 }

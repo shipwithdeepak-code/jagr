@@ -182,11 +182,11 @@ export function SettingsPage() {
           <p className="mt-3 text-[12px] text-ink-3">The demo night is simulated at a fixed 18:00 → 08:00 window; schedule changes are stored for a real deployment’s scheduler.</p>
         </Panel>
 
-        <Panel title="Workspace">
+        <Panel title="Demo night data">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-[13px] text-ink-2">Restore default settings and the demo backlog, and clear tonight’s run, decisions and evaluation results.</div>
+            <div className="text-[13px] text-ink-2">Restore Demo night’s default settings and backlog, and clear its run, decisions and evaluation results. Your workspace (watches, investigations, their decisions and filed tasks, planner selection) is not affected.</div>
             <Button variant="danger" icon={RotateCcw} onClick={() => setConfirmReset(true)}>
-              Reset workspace
+              Reset Demo night
             </Button>
           </div>
         </Panel>
@@ -195,15 +195,15 @@ export function SettingsPage() {
       <Modal
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        title="Reset the workspace?"
+        title="Reset Demo night?"
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmReset(false)}>Cancel</Button>
-            <Button variant="danger" onClick={() => { reset(); setConfirmReset(false); toast({ tone: 'info', title: 'Workspace reset' }); }}>Reset</Button>
+            <Button variant="danger" onClick={() => { reset(); setConfirmReset(false); toast({ tone: 'info', title: 'Demo night reset' }); }}>Reset</Button>
           </>
         }
       >
-        This clears the simulated workspace stored in this browser. It does not affect any external system.
+        This clears Demo night’s simulated data in this browser. Your workspace and any external system are not affected.
       </Modal>
     </>
   );

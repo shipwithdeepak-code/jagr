@@ -22,7 +22,7 @@ export function IntegrationsPage() {
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
         <div>
-          <span className="font-medium">Demo environment. Replace simulation adapters with production connectors.</span>{' '}
+          <span className="font-medium">Demo night uses simulation adapters. Production connectors would replace them.</span>{' '}
           <span className="text-ink-2">No external system is connected. The orchestrator, evaluation suite and UI don’t change when a real connector implements the same interface.</span>
         </div>
       </div>

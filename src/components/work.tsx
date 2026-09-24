@@ -355,7 +355,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
           <>
             {approval.potentialImpact} <br />
             <br />
-            In this demo environment approval updates the <strong>simulated</strong> state only. The decision is recorded in the audit log.
+            In Demo night, approval updates the <strong>simulated</strong> state only. The decision is recorded in the audit log.
           </>
         ) : (
           'JAGR will not perform this action for this finding. The rejection is recorded in the audit log and shown in the brief.'

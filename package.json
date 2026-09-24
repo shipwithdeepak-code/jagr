@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:planners": "JAGR_LIVE_EVAL=1 vitest run --reporter=verbose --silent=false"
   },
   "dependencies": {
     "clsx": "^2.1.1",

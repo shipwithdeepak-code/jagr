@@ -8,6 +8,7 @@ import { checkoutRegressionScenario } from '@/simulation/scenarios';
 import type { EvaluationReport } from '@/evaluation/scenarios';
 import { addMinutes } from '@/lib/time';
 import { WorkspaceContext, type WorkspaceApi, type WorkspaceState } from './workspace';
+import { taskEnvironment } from './environment';
 
 /**
  * Workspace state. The UI reads from here and never from the simulation directly —
@@ -73,9 +74,26 @@ function reducer(state: WorkspaceState, msg: Msg): WorkspaceState {
     case 'evaluation':
       return { ...state, evaluation: msg.report };
     case 'reset':
-      return initialState();
+      return resetDemoState(state);
   }
 }
+
+/** Tasks filed from workspace investigations live here too (the shared simulated tracker) — tagged `watch:`. */
+export const isWorkspaceTask = (t: Task) => taskEnvironment(t) === 'workspace';
+
+/**
+ * Demo night reset: clears the scripted replay's run, tasks, approvals and settings — but keeps
+ * tasks the user filed from WORKSPACE investigations. A demo replay must never silently delete
+ * workspace work. (Workspace watches, investigations, decisions and planner choice live in a
+ * separate store and are not touched at all.)
+ */
+export function resetDemoState(state: WorkspaceState): WorkspaceState {
+  const fresh = initialState();
+  const kept = state.tasks.filter(isWorkspaceTask);
+  return { ...fresh, tasks: [...fresh.tasks.filter((t) => !kept.some((k) => k.id === t.id)), ...kept] };
+}
+
+export { reducer as demoReducer, initialState as initialDemoState };
 
 function load(): WorkspaceState {
   try {
@@ -113,7 +131,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return createSimulationAdapters(checkoutRegressionScenario(), { availability: s.settings.integrations, seedIssues: s.tasks, teams: TEAMS });
   }, []);
 
-  /** `fresh` runs against a clean workspace (Demo Mode) regardless of pending state updates. */
+  /** `fresh` runs Demo night against a clean demo store regardless of pending state updates. */
   const runOvernight = useCallback(async (fresh = false) => {
     const s = fresh ? initialState() : stateRef.current;
     return runScenario('checkout-regression', s.settings, { runId: `run-${String(HISTORICAL_STATS.runs + s.runCount + 1).padStart(3, '0')}`, seedTasks: s.tasks });

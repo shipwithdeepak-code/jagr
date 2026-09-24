@@ -30,30 +30,64 @@ import {
 } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
 import { RunButtons } from './Overview';
+import { useProduct } from '@/state/productContext';
+import { confidenceBand } from '@/product/engine/monitor';
+import { AttentionBadge, InvestigationStateBadge } from '@/components/product';
 import { AuditTable } from './Trace';
 
 export function InvestigationsPage() {
   const { state } = useWorkspace();
+  const product = useProduct();
   const [tab, setTab] = useState<'open' | 'dismissed' | 'all'>('open');
   const run = state.run;
-  if (!run) {
-    return (
-      <>
-        <PageHeader title="Investigations" description="Every anomaly JAGR looks into, with the evidence, hypotheses and work it produced." />
-        <EmptyState icon={Telescope} title="No investigations yet" action={<div className="flex gap-2"><RunButtons /></div>}>
-          Investigations open automatically when a signal crosses its threshold and persists. Run the overnight watch to see one.
-        </EmptyState>
-      </>
-    );
-  }
-  const list = run.investigations.filter((i) => (tab === 'open' ? i.status !== 'dismissed' : tab === 'dismissed' ? i.status === 'dismissed' : true));
+  const watchInvs = (product.state.result?.investigations ?? []).filter((i) => (tab === 'open' ? i.status !== 'DISMISSED' : tab === 'dismissed' ? i.status === 'DISMISSED' : true));
+  const list = run?.investigations.filter((i) => (tab === 'open' ? i.status !== 'dismissed' : tab === 'dismissed' ? i.status === 'dismissed' : true)) ?? [];
+  const watchName = (id: string) => product.state.watches.find((w) => w.id === id)?.name ?? id;
   return (
     <>
       <PageHeader
         title="Investigations"
-        description="Every anomaly JAGR looked into overnight, with the evidence, hypotheses and work it produced."
+        description="One investigation per real problem — signals from every source are correlated into it instead of arriving as separate alerts."
         actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'dismissed', label: 'Dismissed' }, { value: 'all', label: 'All' }]} />}
       />
+
+      <SectionTitle hint="From the watches you configured, on simulated Jira, GA4, App Store and Google Play data.">From your watches</SectionTitle>
+      <Card padded={false} className="mb-10 overflow-hidden">
+        <div className="hidden grid-cols-[96px_1fr_130px_150px_100px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
+          <span>Attention</span>
+          <span>Finding</span>
+          <span>Status</span>
+          <span>Watch</span>
+          <span>Opened</span>
+          <span />
+        </div>
+        {watchInvs.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-ink-3">{product.running ? 'Running monitoring…' : 'Nothing here.'}</div>}
+        {watchInvs.map((inv) => (
+          <Link key={inv.id} to={inv.jagrPath} className="grid grid-cols-1 gap-2 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-subtle md:grid-cols-[96px_1fr_130px_150px_100px_24px] md:items-center md:gap-4">
+            <span>
+              <AttentionBadge level={inv.attention} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13.5px] font-medium">{inv.title}</span>
+              <span className="block truncate text-[12.5px] text-ink-2">{inv.summary}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <InvestigationStateBadge state={inv.status} />
+              {inv.status !== 'DISMISSED' && <span className="text-[12px] text-ink-3" title="Investigation confidence that the problem is real — not that any explanation is the cause">{confidenceBand(inv.confidence)} confidence</span>}
+            </span>
+            <span className="truncate text-[12.5px] text-ink-2">{inv.watchIds.map(watchName).join(' + ')}</span>
+            <span className="tabular text-[12.5px] text-ink-3">{fmtTime(inv.startedAt)}</span>
+            <ChevronRight size={14} className="hidden text-ink-3 md:block" />
+          </Link>
+        ))}
+      </Card>
+
+      <SectionTitle hint="The scripted Klarna regression night from the original demo.">Demo night replay</SectionTitle>
+      {!run ? (
+        <EmptyState icon={Telescope} title="Demo night not run" action={<div className="flex gap-2"><RunButtons /></div>}>
+          Run the demo night to see its investigations, evidence graph and approvals.
+        </EmptyState>
+      ) : (
       <Card padded={false} className="overflow-hidden">
         <div className="hidden grid-cols-[110px_1fr_160px_150px_110px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
           <span>Severity</span>
@@ -83,6 +117,7 @@ export function InvestigationsPage() {
           );
         })}
       </Card>
+      )}
     </>
   );
 }
