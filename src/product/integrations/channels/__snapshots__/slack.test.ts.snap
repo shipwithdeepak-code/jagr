@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Slack rendering (Block Kit) > renders the domain message — snapshot 1`] = `
+{
+  "blocks": [
+    {
+      "text": {
+        "emoji": true,
+        "text": "Checkout conversion declined <script>&",
+        "type": "plain_text",
+      },
+      "type": "header",
+    },
+    {
+      "elements": [
+        {
+          "text": "Approval requested · Attention: 🟠 HIGH",
+          "type": "mrkdwn",
+        },
+      ],
+      "type": "context",
+    },
+    {
+      "text": {
+        "text": "Checkout conversion −25% since 02:00, 15 min after deploy v2.3.0. Customer [email removed] wrote in.",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "text": {
+        "text": "*Observed*
+• Amplitude: Checkout conversion is 22.5% vs 30% baseline (−25%) since 02:00.
+• GitHub: deploy v2.3.0 at 01:45 (actual time).",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "text": {
+        "text": "*Inferred — not proven*
+• The degradation began 15 minutes after deploy v2.3.0 — a temporal association.",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "text": {
+        "text": "*Unknown*
+• Whether deploy v2.3.0 is responsible — timing is not causation.",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "text": {
+        "text": "*Approval needed (HIGH risk):* Pause the staged rollout of v2.3.0
+Decide in Jagr — nothing is approved from Slack.",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "elements": [
+        {
+          "action_id": "open_0",
+          "text": {
+            "text": "Open investigation in Jagr",
+            "type": "plain_text",
+          },
+          "type": "button",
+          "url": "https://jagr.acme.test/investigations/w/wi-1",
+        },
+      ],
+      "type": "actions",
+    },
+    {
+      "elements": [
+        {
+          "text": "Sent by Jagr. Correlation is not causation: Jagr reports what the connected sources show.",
+          "type": "mrkdwn",
+        },
+      ],
+      "type": "context",
+    },
+  ],
+  "text": "Approval requested: Checkout conversion declined <script>&",
+}
+`;

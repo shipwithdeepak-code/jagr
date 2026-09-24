@@ -5,6 +5,8 @@ import type { IdentityProvider } from '../src/product/ports/identity';
 import type { JobQueue } from '../src/product/ports/jobs';
 import type { Connector, MonitoringDeps } from '../src/product/app/monitoring';
 import { CONNECTORS, connectorsFrom } from '../src/product/integrations/connectors/index';
+import { CHANNELS } from '../src/product/integrations/channels/index';
+import type { ChannelFactory } from '../src/product/app/notifications';
 import { createPlannerManager, type InvestigationPlanner } from '../src/product/agent/planner';
 import { readPlannerConfig } from '../src/product/agent/providers/config';
 import { llmPlannerProvider, PROVIDER_REGISTRY } from '../src/product/agent/providers/registry';
@@ -66,7 +68,7 @@ function serverPlanner(env: Env, http: HttpClient): InvestigationPlanner | undef
   return createPlannerManager({ primary: make(cfg.primary), fallback: cfg.fallback?.configured && cfg.fallback.config ? make(cfg.fallback) : undefined, timeoutMs: cfg.timeoutMs + 2000 });
 }
 
-export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: HttpClient; clock?: Clock; identity?: Record<string, IdentityProvider>; connectors?: Record<string, Connector> }): Promise<Runtime> {
+export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: HttpClient; clock?: Clock; identity?: Record<string, IdentityProvider>; connectors?: Record<string, Connector>; channels?: Record<string, ChannelFactory> }): Promise<Runtime> {
   const config = readRuntimeConfig(env);
   const http: HttpClient = deps.http ?? ((url, init) => fetch(url, init));
   const clock = deps.clock ?? systemClock;
@@ -90,6 +92,7 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     secrets,
     identity,
     connectors: deps.connectors ?? connectorsFrom(CONNECTORS),
+    channels: deps.channels ?? CHANNELS,
     planner: serverPlanner(env, http),
     appBaseUrl: config.appBaseUrl,
     config,

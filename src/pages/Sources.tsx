@@ -58,7 +58,7 @@ function SampleSources() {
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
         <div className="text-ink-2">
-          <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. A real Jira Cloud connector exists behind the same interface (see Jira). OAuth and credentials are not implemented yet; the adapters are shaped so real connectors drop in without changing the engine. You can simulate an outage to see how Jagr reports gaps instead of guessing.
+          <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. Live connectors (Amplitude, GitHub, Jira Cloud, Intercom, and Slack for outbound alerts) run on a Jagr server in single-tenant mode, with credentials held server-side — never in this browser app. Connecting them from this page (OAuth) is not built yet. You can simulate an outage to see how Jagr reports gaps instead of guessing.
         </div>
       </div>
       <SourceCoverage connections={state.connections} />
@@ -90,7 +90,7 @@ function SampleSources() {
               </div>
               {c.provider === 'jira' && (
                 <div className="mt-3 rounded-lg border border-line bg-subtle/60 px-3 py-2 text-[12px] text-ink-2">
-                  <span className="font-medium text-ink">Real connector: implemented, not configured.</span> <Mono>JiraCloudAdapter</Mono> (REST v3 <Mono>search/jql</Mono> + project versions) is built and tested against mocked Jira responses. It needs server-side credentials — an API token can’t safely live in a browser app — so this build uses simulated Jira data. Jira release dates are day-precision; minute-level release timing comes from the stores.
+                  <span className="font-medium text-ink">Real connector: implemented, not configured.</span> <Mono>JiraCloudAdapter</Mono> (REST v3 <Mono>search/jql</Mono> + project versions) is built and tested against mocked Jira responses. It needs server-side credentials — an API token can’t safely live in a browser app — so this browser build uses simulated Jira data; a Jagr server in single-tenant mode reads the real project. Jira release dates are day-precision; minute-level release timing comes from the stores.
                 </div>
               )}
               <div className="mt-2 text-[12px] text-ink-3">

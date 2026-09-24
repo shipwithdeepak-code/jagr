@@ -10,6 +10,7 @@ import { createPlannerManager } from '../../agent/planner';
 import { llmPlannerProvider } from '../../agent/providers/registry';
 import { scriptedHttp, type Reply } from '../../testkit/connectorContract';
 import { CONNECTORS, connectorsFrom } from './index';
+import { CHANNELS } from '../channels/index';
 
 /**
  * A connected workspace with every P0 connector (Amplitude, GitHub, Jira, Intercom), run end to end by
@@ -28,8 +29,16 @@ const local = (ms: number) => {
 const unix = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const PII = /maria|@example\.org|555 0132|4242 4242|svc-jagr@/i;
 
+const slackPosts: { channel: string; text: string; blocks: unknown[] }[] = [];
+
 function route(u: URL, init?: HttpRequest): Reply | undefined {
   switch (u.hostname) {
+    case 'slack.com':
+      if (u.pathname === '/api/chat.postMessage') {
+        slackPosts.push(JSON.parse(String(init?.body)));
+        return { body: { ok: true, ts: `${slackPosts.length}.0001` } };
+      }
+      return undefined;
     case 'amplitude.com': {
       if (u.pathname === '/api/2/annotations') return { body: { data: [] } };
       const e = JSON.parse(u.searchParams.get('e')!).event_type as string;
@@ -78,9 +87,10 @@ const CONNS: [Connection, SecretPayload][] = [
   [conn('github', ['changes'], { repos: ['acme/web'] }), { kind: 'api_key', fields: { token: 'github_pat_e2e_000000000' } }],
   [conn('jira', ['work_items', 'changes'], { site: 'https://acme.atlassian.net', project: 'SHOP' }), { kind: 'api_key', fields: { email: 'svc-jagr@acme.test', apiToken: 'ATATT_e2e_0000000' } }],
   [conn('intercom', ['feedback'], { region: 'us' }), { kind: 'api_key', fields: { token: 'intercom_e2e_0000000' } }],
+  [conn('slack', [], { channel: 'C0123456789' }), { kind: 'api_key', fields: { botToken: 'xoxb-e2e-000000000000' } }],
 ];
 
-async function run(opts: { aiEgressAllowed: boolean }) {
+async function run(opts: { aiEgressAllowed: boolean; confirmRun?: boolean }) {
   const { repos, tx } = createMemoryPersistence();
   const secrets = createMemorySecretStore();
   const clock = manualClock(NOW);
@@ -89,11 +99,17 @@ async function run(opts: { aiEgressAllowed: boolean }) {
   // A stand-in AI provider that records every prompt it is sent (and answers nothing usable, so Jagr falls back).
   const prompts: string[] = [];
   const planner = createPlannerManager({ primary: llmPlannerProvider({ id: 'spy', displayName: 'Spy', model: 'spy-1', generate: async (req) => (prompts.push(req.prompt, req.system), '{}') }), timeoutMs: 2000 });
-  const deps = { repos, tx, secrets, clock, http: scriptedHttp(route).http, connectors: connectorsFrom(CONNECTORS), planner };
+  const deps = { repos, tx, secrets, clock, http: scriptedHttp(route).http, connectors: connectorsFrom(CONNECTORS), channels: CHANNELS, planner, appBaseUrl: 'https://jagr.acme.test' };
   const sources = await sourcesForRun(deps, (await repos.workspaces.get('ws-1'))!, NOW);
   await repos.watches.save('ws-1', watchFromTemplate('w-checkout', 'checkout_health', { sources: ['amplitude', 'github', 'jira', 'intercom'], metricKeys: sources.registry.metrics().map((m) => m.def.key) }, NOW));
   await runWatchJob(deps, { workspaceId: 'ws-1', payload: { watchId: 'w-checkout', dueAt: NOW } });
-  return { investigations: await repos.investigations.list('ws-1'), prompts, sources };
+  if (opts.confirmRun) {
+    // HIGH attention interrupts only once the next scheduled run confirms it.
+    const next = new Date(Date.parse(NOW) + 30 * 60_000).toISOString();
+    clock.set(next);
+    await runWatchJob(deps, { workspaceId: 'ws-1', payload: { watchId: 'w-checkout', dueAt: next } });
+  }
+  return { investigations: await repos.investigations.list('ws-1'), prompts, sources, notifications: await repos.notifications.list('ws-1') };
 }
 
 describe('connected workspace, every P0 connector (end to end)', () => {
@@ -125,5 +141,23 @@ describe('connected workspace, every P0 connector (end to end)', () => {
     for (const p of allowed.prompts) expect(p).not.toMatch(PII);
     const denied = await run({ aiEgressAllowed: false });
     expect(denied.prompts).toEqual([]);
+  });
+
+  it('alerts go to Slack once, outbound only, linking back to Jagr, with no personal data', async () => {
+    slackPosts.length = 0;
+    await run({ aiEgressAllowed: false });
+    // First run: detected, not yet confirmed — nothing interrupts anyone.
+    expect(slackPosts).toHaveLength(0);
+    const { notifications, investigations } = await run({ aiEgressAllowed: false, confirmRun: true });
+    expect(slackPosts.length).toBeGreaterThan(0);
+    expect(slackPosts).toHaveLength(1);
+    const post = slackPosts[0];
+    expect(post.channel).toBe('C0123456789');
+    expect(post.text).toContain(investigations[0].title);
+    const json = JSON.stringify(slackPosts);
+    expect(json).toContain('https://jagr.acme.test/investigations/');
+    expect(json).not.toMatch(PII);
+    expect(json).not.toContain('xoxb-');
+    expect(notifications.filter((n) => n.channel === 'slack').every((n) => n.status === 'delivered')).toBe(true);
   });
 });

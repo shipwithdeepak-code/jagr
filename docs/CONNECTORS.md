@@ -66,6 +66,7 @@ planner runs instead).
 | GitHub | changes (deployments, releases) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live repository** |
 | Jira Cloud | work items, changes (released versions) | Implemented on the existing Jira Cloud client; contract-tested on fixtures in the documented API shape; **not yet verified against a live site** |
 | Intercom | feedback (support conversations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live workspace** |
+| Slack (outbound channel) | notifications only | Implemented; rendering snapshot-tested, delivery tested on the documented API shape; **not yet verified against a live workspace** |
 
 ## Amplitude
 
@@ -157,3 +158,21 @@ REST API (version 2.11), read-only, with an **access token** (read conversations
   id are never read into a record. Names written inside a message are not detected.
 - Deep link into the inbox when `JAGR_INTERCOM_APP_ID` is set.
 - `check()` calls `/me` and keeps only the workspace name (never the admin's email).
+
+## Slack (outbound only)
+
+Not a source: Jagr never reads Slack. `integrations/channels/slack.ts` implements the `NotificationChannel` port.
+
+- Bot token with `chat:write` (`JAGR_SLACK_BOT_TOKEN`), one channel id (`JAGR_SLACK_CHANNEL`, e.g. `C0123456789`;
+  invite the bot to it). Host: `slack.com` only.
+- What is sent is decided by the engine, not by the channel: **alerts** by each watch's notification policy (CRITICAL
+  immediately; otherwise once a later run confirms it and it reaches the watch's interrupt level) and the **morning
+  brief**. Only connected workspaces deliver — sample and imported data never reach Slack.
+- Rendering: Block Kit — title, kind and attention, summary, *Observed*, *Inferred — not proven*, *Unknown*, an
+  approval request when an action awaits approval, and https link buttons back to Jagr. mrkdwn is escaped; text is
+  redacted of personal data; links carry no tokens (opening one requires signing in).
+- **Nothing is decided in Slack.** There are no interactive actions and no Slack interactivity endpoint; an approval
+  request says "Decide in Jagr".
+- Delivery is idempotent per (channel connection, message); each attempt is logged (`GET /api/workspaces/:id/notifications`).
+  A failure (`channel_not_found`, rate limit, outage) is logged and never fails the monitoring run; the same message is
+  tried again the next time it is delivered. There is no separate retry queue.

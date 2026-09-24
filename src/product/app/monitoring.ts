@@ -16,6 +16,7 @@ import { buildImportedWorld, watchesForImportedData } from '../imports/world';
 import { runMonitoring } from '../engine/monitor';
 import { composeBrief } from '../engine/brief';
 import type { InvestigationPlanner } from '../agent/planner';
+import { alertMessage, briefMessage, deliver, type ChannelFactory } from './notifications';
 
 /**
  * Server-side monitoring — the same engine the browser runs, driven by the job queue and persisted
@@ -41,6 +42,8 @@ export interface MonitoringDeps {
   connectors: Record<string, Connector>;
   planner?: InvestigationPlanner;
   appBaseUrl?: string;
+  /** Outbound notification channels, per provider (e.g. a chat tool). Connected workspaces only. */
+  channels?: Record<string, ChannelFactory>;
 }
 
 const toSourceConnection = (c: Connection): SourceConnection => ({ provider: c.source, state: c.state, detail: c.detail, updatedAt: c.updatedAt, label: c.label, freshAsOf: c.freshAsOf });
@@ -132,7 +135,11 @@ export async function runWatchJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'wo
   const { registry, world, connections } = await sourcesForRun(deps, ws, at);
   const scheduled: ScheduledJob = { id: `run:${watchId}:${at}`, type: 'watch_run', at, watchId };
   const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
-  return persistRun(deps, ws, r, 'monitor.watch', at);
+  const summary = await persistRun(deps, ws, r, 'monitor.watch', at);
+  // Alerts the engine decided to send go to the workspace's outbound channels (after the run is saved).
+  const alerts = r.emails.filter((e) => e.kind === 'alert').map((e) => alertMessage(ws.id, e, r.investigations.find((i) => i.id === e.investigationId), deps.appBaseUrl));
+  if (ws.mode === 'connected') await deliver(deps, ws, alerts);
+  return summary;
 }
 
 /**
@@ -159,6 +166,8 @@ export async function composeBriefJob(deps: MonitoringDeps, job: Pick<LeasedJob,
   const since = new Date(Date.parse(at) - 24 * 3_600_000).toISOString();
   const brief = composeBrief({ at, since, watches: await deps.repos.watches.list(ws.id), investigations: await deps.repos.investigations.list(ws.id), emails: [], log: [] });
   await deps.repos.notifications.add(ws.id, { id: brief.id, channel: 'in_app', dedupeKey: `brief:${at}`, deliveredAt: at, status: 'delivered', detail: `${brief.headline} (${brief.items.length} item(s))` });
+  // Sample and imported data are never sent to outbound channels.
+  if (ws.mode === 'connected') await deliver(deps, ws, [briefMessage(ws.id, brief, deps.appBaseUrl)]);
 }
 
 /** Work through due jobs until the budget runs out. Failures retry with backoff, then dead-letter. */
@@ -191,6 +200,9 @@ export async function checkConnection(deps: MonitoringDeps, workspaceId: string,
   const c = await deps.repos.connections.get(workspaceId, connectionId);
   if (!c) throw new Error(`Connection ${connectionId} not found.`);
   const connector = Object.prototype.hasOwnProperty.call(deps.connectors, c.provider) ? deps.connectors[c.provider] : undefined;
+  // Outbound channels are verified by delivering: their outcome is in the delivery log.
+  if (!connector && !c.roles.length && deps.channels && Object.prototype.hasOwnProperty.call(deps.channels, c.provider))
+    return { state: c.state === 'connected' ? 'connected' : 'error', detail: 'Outbound channel — each delivery is recorded in the delivery log (GET …/notifications).' };
   if (!connector) return { state: 'error', detail: `No connector for “${c.provider}” in this deployment.` };
   let result: ConnectorCheck;
   try {

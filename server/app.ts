@@ -170,6 +170,8 @@ export function createApp(rt: Runtime) {
       await audit(id, p, 'workspace.exported', doc.exportId);
       return json(200, doc, { headers: { 'content-disposition': `attachment; filename="jagr-workspace-${doc.exportedAt.slice(0, 10)}.json"` } });
     }
+    // Delivery log: what was sent where, and whether it arrived. Never message addresses or tokens.
+    if (section === 'notifications' && req.method === 'GET') return json(200, { notifications: (await rt.repos.notifications.list(id)).map(({ email: _e, ...n }) => (void _e, n)) });
     if (section === 'audit' && req.method === 'GET') return json(200, { entries: await rt.repos.audit.list(id) });
     return json(404, { error: 'Not found.' });
   }

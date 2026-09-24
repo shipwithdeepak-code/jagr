@@ -204,4 +204,15 @@ describe('single-tenant bootstrap', () => {
     expect(amp.detail).toMatch(/configuration is invalid/);
     expect(run.registry.sources().map((s) => s.id)).not.toContain('amplitude');
   });
+
+  it('Slack is outbound only: a delivery log to read, and no endpoint that could approve anything from Slack', async () => {
+    const { app } = await boot();
+    const { session } = await signIn(app, 'code-owner');
+    const log = await app(req('GET', `/api/workspaces/${OWNER_WORKSPACE_ID}/notifications`, session));
+    expect(log.status).toBe(200);
+    expect(log.body).toEqual({ notifications: [] });
+    for (const path of ['/api/slack/interactions', '/api/slack/events', '/api/slack/commands']) expect((await app(req('POST', path, session, {}))).status).toBe(404);
+    const check = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-slack/check`, session));
+    expect((check.body as { check: { state: string; detail: string } }).check).toMatchObject({ state: 'connected', detail: expect.stringMatching(/delivery log/) });
+  });
 });
