@@ -3,7 +3,8 @@ import { classifyText } from '../catalog';
 import { PROVIDERS } from './adapters';
 import { ProviderUnavailableError, type Capability, type IntegrationAdapter, type IssueRecord, type MetricSeries, type ReleaseRecord, type ReviewRecord, type SourceEvent, type TimeWindow } from './types';
 
-import type { HttpClient, HttpRequest, HttpResponse } from '../ports/http';
+import type { HttpClient, HttpRequest } from '../ports/http';
+import { requestJson } from './connectors/http';
 /**
  * A real Jira Cloud connector (REST API v3) behind the same IntegrationAdapter contract as the
  * simulated sources.
@@ -133,19 +134,11 @@ export class JiraCloudAdapter implements IntegrationAdapter {
 
   private async call<T>(path: string, init?: HttpRequest): Promise<T> {
     if (!this.configured()) throw new ProviderUnavailableError('jira', 'unavailable', 'Jira Cloud is not configured.');
-    let res: HttpResponse;
-    try {
-      res = await this.http(`${this.cfg.baseUrl.replace(/\/$/, '')}${path}`, {
-        ...init,
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.cfg.authorization!, ...(init?.headers ?? {}) },
-      });
-    } catch (e) {
-      throw new ProviderUnavailableError('jira', 'unavailable', `Jira could not be reached: ${(e as Error).message}`);
-    }
-    if (res.status === 401 || res.status === 403) throw new ProviderUnavailableError('jira', 'error', `Jira rejected the credentials (${res.status}).`);
-    if (res.status === 429) throw new ProviderUnavailableError('jira', 'unavailable', 'Jira rate limit reached (429).');
-    if (!res.ok) throw new ProviderUnavailableError('jira', res.status >= 500 ? 'unavailable' : 'error', `Jira returned ${res.status}.`);
-    return (await res.json()) as T;
+    // Shared connector HTTP: typed failures, and messages that never echo URLs, headers or bodies.
+    return requestJson<T>(this.http, 'jira', 'Jira', `${this.cfg.baseUrl.replace(/\/$/, '')}${path}`, {
+      ...init,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.cfg.authorization!, ...(init?.headers ?? {}) },
+    });
   }
 
   async getIssues(window: TimeWindow): Promise<IssueRecord[]> {
@@ -154,6 +147,7 @@ export class JiraCloudAdapter implements IntegrationAdapter {
     let nextPageToken: string | undefined;
     for (let page = 0; page < (this.cfg.maxPages ?? 5); page++) {
       const body = await this.call<JiraSearchResponse>('/rest/api/3/search/jql', { method: 'POST', body: JSON.stringify({ jql, fields: FIELDS, maxResults: 100, ...(nextPageToken ? { nextPageToken } : {}) }) });
+      if (!Array.isArray(body?.issues)) throw new ProviderUnavailableError('jira', 'error', 'Jira returned a search result Jagr could not read.');
       out.push(...body.issues.map(mapJiraIssue));
       nextPageToken = body.nextPageToken;
       if (body.isLast !== false || !nextPageToken) break;
@@ -164,6 +158,7 @@ export class JiraCloudAdapter implements IntegrationAdapter {
 
   async getReleases(window: TimeWindow): Promise<ReleaseRecord[]> {
     const versions = await this.call<JiraVersion[]>(`/rest/api/3/project/${encodeURIComponent(this.cfg.projectKey)}/versions`);
+    if (!Array.isArray(versions)) throw new ProviderUnavailableError('jira', 'error', 'Jira returned versions Jagr could not read.');
     const startDay = window.start.slice(0, 10);
     const endDay = window.end.slice(0, 10);
     // Day precision: include any version released on a day the window touches.

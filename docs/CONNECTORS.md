@@ -60,6 +60,7 @@ or sent to an AI planner. Names are not removed.
 | (reference, test only) deploy log | changes | Framework reference in `framework.test.ts` |
 | Amplitude | metrics, changes (annotations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live project** (`npm run eval:connectors`) |
 | GitHub | changes (deployments, releases) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live repository** |
+| Jira Cloud | work items, changes (released versions) | Implemented on the existing Jira Cloud client; contract-tested on fixtures in the documented API shape; **not yet verified against a live site** |
 
 ## Amplitude
 
@@ -120,3 +121,20 @@ Contents: read, Metadata: read) in `JAGR_GITHUB_TOKEN`. Repositories in `JAGR_GI
 
 Not built: **GitHub App authentication** (App variables are reported as invalid configuration, never silently
 ignored), GitHub Enterprise Server, workflow runs as deploy evidence.
+
+## Jira Cloud
+
+Built on the existing Jira Cloud client (`integrations/jiraCloud.ts`, REST v3), now over the shared connector
+HTTP (typed failures, safe messages). Basic auth with an Atlassian account **email + API token**; the email is part
+of the credential and is stored only in the SecretStore. Site (`https://<name>.atlassian.net` only) and project key
+are configuration.
+
+- **Work items** — `POST /rest/api/3/search/jql`, issues created in the window (token-paginated, up to 5 pages).
+  Type and priority are mapped (Highest → critical); area from summary, components and labels. Reporter identity is
+  not kept; customer contact details in summaries are redacted. Deep link: `/browse/<KEY>`.
+- **Changes** — `GET /rest/api/3/project/{key}/versions`, released versions. A version's release date is
+  bookkeeping with **day precision** → `planned` timing: shown as evidence, never used to claim a timing association.
+- `check()` confirms the project is visible to the account.
+
+Limitations: Jira Cloud only (no Data Center); JQL dates use the API user's timezone — use a service account set to
+UTC; one project per workspace.
