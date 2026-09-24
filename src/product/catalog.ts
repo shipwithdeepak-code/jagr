@@ -117,12 +117,16 @@ export const BUILTIN_METRIC_SOURCE: Record<string, SourceId> = {
   crash_free_sessions_android: 'google_play',
 };
 
-/** Keep only the signals a set of built-in sources can answer ('changes' is context and always kept). */
-export function signalsForSources(signals: WatchSignal[], sources: readonly ProviderId[]): WatchSignal[] {
+/**
+ * Keep only the signals a set of sources can answer ('changes' is context and always kept).
+ * `metricKeys`: the metrics those sources actually serve (connected workspaces configure their own);
+ * without it, the built-in channels' metrics are assumed.
+ */
+export function signalsForSources(signals: WatchSignal[], sources: readonly ProviderId[], metricKeys?: readonly string[]): WatchSignal[] {
   return signals.filter((sig) => {
     if (sig.key === 'changes') return true;
     const metric = metricKeyOf(sig.key);
-    if (metric) return sources.includes(BUILTIN_METRIC_SOURCE[metric]);
+    if (metric) return metricKeys ? metricKeys.includes(metric) : sources.includes(BUILTIN_METRIC_SOURCE[metric]);
     const role: Role = sig.key === 'work_items' ? 'work_items' : 'feedback';
     return sources.some((p) => isSourceId(p) && BUILTIN_SOURCE_ROLES[p].includes(role));
   });
@@ -221,7 +225,7 @@ export const WIZARD_TEMPLATES: WatchTemplateId[] = ['checkout_health', 'app_stab
 export function watchFromTemplate(
   id: string,
   templateId: WatchTemplateId,
-  overrides: Partial<Pick<Watch, 'name' | 'sources' | 'schedule' | 'notificationPolicy' | 'timezone' | 'severityThreshold' | 'thresholds'>> = {},
+  overrides: Partial<Pick<Watch, 'name' | 'sources' | 'schedule' | 'notificationPolicy' | 'timezone' | 'severityThreshold' | 'thresholds'>> & { metricKeys?: readonly string[] } = {},
   now = '2026-09-23T17:00:00.000Z',
 ): Watch {
   const tpl = WATCH_TEMPLATES.find((x) => x.id === templateId)!;
@@ -233,7 +237,7 @@ export function watchFromTemplate(
     template: tpl.id,
     area: tpl.area,
     sources,
-    signals: signalsForSources(tpl.signals, sources),
+    signals: signalsForSources(tpl.signals, sources, overrides.metricKeys),
     schedule: overrides.schedule ?? { frequency: '30m', dailyAt: '07:00' },
     timezone: overrides.timezone ?? 'UTC',
     severityThreshold: overrides.severityThreshold ?? 'LOW',

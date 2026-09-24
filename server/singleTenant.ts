@@ -37,6 +37,14 @@ interface OwnerConnectorSpec {
   config(env: Env): Record<string, unknown>;
 }
 
+const parseJson = (v: string | undefined): unknown => {
+  if (!v) return undefined;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+};
 const list = (v: string | undefined) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const pick = (env: Env, names: string[]) => Object.fromEntries(names.filter((n) => env[n]).map((n) => [n, env[n]!]));
 
@@ -47,7 +55,13 @@ export const OWNER_CONNECTORS: OwnerConnectorSpec[] = [
     roles: ['metrics', 'changes'],
     required: ['JAGR_AMPLITUDE_API_KEY', 'JAGR_AMPLITUDE_SECRET_KEY'],
     secret: (env) => ({ kind: 'api_key', fields: { apiKey: env.JAGR_AMPLITUDE_API_KEY!, secretKey: env.JAGR_AMPLITUDE_SECRET_KEY! } }),
-    config: (env) => ({ region: env.JAGR_AMPLITUDE_REGION === 'eu' ? 'eu' : 'us', metrics: env.JAGR_AMPLITUDE_METRICS ?? '' }),
+    // Metric bindings are JSON; an unparseable value is kept as-is so the connector reports it as invalid configuration.
+    config: (env) => ({
+      region: env.JAGR_AMPLITUDE_REGION === 'eu' ? 'eu' : 'us',
+      metrics: parseJson(env.JAGR_AMPLITUDE_METRICS) ?? [],
+      ...(env.JAGR_AMPLITUDE_APP_URL ? { appUrl: env.JAGR_AMPLITUDE_APP_URL } : {}),
+      ...(env.JAGR_AMPLITUDE_UTC_OFFSET_MINUTES ? { utcOffsetMinutes: Number(env.JAGR_AMPLITUDE_UTC_OFFSET_MINUTES) } : {}),
+    }),
   },
   {
     source: 'github',
@@ -89,7 +103,7 @@ export const OWNER_CONNECTORS: OwnerConnectorSpec[] = [
 ];
 
 /** Which credential set the environment provides, or undefined when it is incomplete. */
-function configuredVars(spec: OwnerConnectorSpec, env: Env): string[] | undefined {
+export function configuredVars(spec: OwnerConnectorSpec, env: Env): string[] | undefined {
   if (!spec.required.every((n) => env[n])) return undefined;
   if (!spec.alternatives) return spec.required;
   const alt = spec.alternatives.find((set) => set.every((n) => env[n]));

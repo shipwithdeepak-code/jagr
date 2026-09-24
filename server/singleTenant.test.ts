@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.setConfig({ testTimeout: 30_000 });
 import type { IdentityProvider, VerifiedIdentity } from '../src/product/ports/identity';
 import { manualClock } from '../src/product/ports/clock';
-import { sourcesForRun } from '../src/product/app/monitoring';
+import { sourcesForRun, type Connector } from '../src/product/app/monitoring';
 import { freshPglite } from './postgres/pglite';
 import type { SqlClient } from './postgres/sql';
 import { createRuntime } from './runtime';
@@ -53,12 +53,12 @@ function baseEnv(sessionSecret: string, secretKey: string, extra: Record<string,
   };
 }
 
-async function boot(extra: Record<string, string | undefined> = {}, reuse?: { sql: SqlClient; sessionSecret: string; secretKey: string }) {
+async function boot(extra: Record<string, string | undefined> = {}, reuse?: { sql: SqlClient; sessionSecret: string; secretKey: string }, connectors?: Record<string, Connector>) {
   const sql = reuse?.sql ?? (await freshPglite());
   const sessionSecret = reuse?.sessionSecret ?? randomBytes(32).toString('hex');
   const secretKey = reuse?.secretKey ?? randomBytes(32).toString('base64');
   const clock = manualClock('2026-09-25T10:00:00.000Z');
-  const rt = await createRuntime(baseEnv(sessionSecret, secretKey, extra), { sql, clock, identity: { fake: fakeIdp } });
+  const rt = await createRuntime(baseEnv(sessionSecret, secretKey, extra), { sql, clock, identity: { fake: fakeIdp }, connectors });
   return { rt, app: createApp(rt), sql, sessionSecret, secretKey, clock };
 }
 
@@ -163,7 +163,7 @@ describe('single-tenant bootstrap', () => {
   });
 
   it('without a registered connector, a configured source is an honest gap — never sample data', async () => {
-    const { rt } = await boot();
+    const { rt } = await boot({}, undefined, {});
     const ws = (await rt.repos.workspaces.get(OWNER_WORKSPACE_ID))!;
     const run = await sourcesForRun(rt, ws, '2026-09-25T10:00:00.000Z');
     expect(run.registry.sources().length).toBe(0);
@@ -187,11 +187,21 @@ describe('single-tenant bootstrap', () => {
   });
 
   it('checking a connection without a live connector reports it honestly', async () => {
-    const { app } = await boot();
+    const { app } = await boot({}, undefined, {});
     const { session } = await signIn(app, 'code-owner');
     const r = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-intercom/check`, session));
     expect(r.status).toBe(200);
     expect((r.body as { check: { state: string; detail: string } }).check).toMatchObject({ state: 'error', detail: expect.stringMatching(/No connector/) });
     expect((await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/nope/check`, session))).status).toBe(404);
+  });
+
+  it('a registered connector with unusable configuration is an error gap, not data', async () => {
+    const { rt } = await boot({ JAGR_AMPLITUDE_METRICS: '{not json' });
+    const ws = (await rt.repos.workspaces.get(OWNER_WORKSPACE_ID))!;
+    const run = await sourcesForRun(rt, ws, '2026-09-25T10:00:00.000Z');
+    const amp = run.connections.find((c) => c.provider === 'amplitude')!;
+    expect(amp.state).toBe('error');
+    expect(amp.detail).toMatch(/configuration is invalid/);
+    expect(run.registry.sources().map((s) => s.id)).not.toContain('amplitude');
   });
 });

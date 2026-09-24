@@ -58,3 +58,44 @@ or sent to an AI planner. Names are not removed.
 | Connector | Roles | Status |
 |---|---|---|
 | (reference, test only) deploy log | changes | Framework reference in `framework.test.ts` |
+| Amplitude | metrics, changes (annotations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live project** (`npm run eval:connectors`) |
+
+## Amplitude
+
+Dashboard REST API, Basic auth with the project **API key + secret key** (read-only use). Hosts: `amplitude.com`
+(US) or `analytics.eu.amplitude.com` (EU).
+
+- **Metrics** — `GET /api/2/events/segmentation`, hourly (`i=-3600000`). Each metric is a *binding*:
+  - `count`: one event, `totals` or `uniques`
+  - `ratio`: numerator uniques / denominator uniques × 100 (a conversion rate, in percent)
+- Each read covers the run's window plus the previous 7 days. The **baseline** is the median of the same hours
+  of day on those 7 days (standard deviation floored at 1 % of the mean), so a daily rhythm is not a drop. With
+  less history the baseline falls back to the median of earlier readings, and says so.
+- Only **complete** hours are returned; the current hour is dropped.
+- **Breakdowns** by the configured dimensions (`platform → platform`, `app_version → version`, `country → country`
+  by default), via `g=<property>`.
+- **Changes** — `GET /api/2/annotations`. An annotation with a time is `reported` timing (can support a temporal
+  association); a date-only annotation has day precision and is `planned`-strength (shown, never used to claim
+  timing). Labels and details are redacted of personal data.
+
+Configuration (`JAGR_AMPLITUDE_METRICS` in single-tenant mode, JSON):
+
+```json
+[
+  { "kind": "ratio", "key": "checkout_conversion", "name": "Checkout conversion", "area": "checkout",
+    "numerator": { "event_type": "Order Completed" }, "denominator": { "event_type": "Checkout Started" },
+    "badDirection": "down", "threshold": 10 },
+  { "kind": "count", "key": "signups", "name": "Sign-ups", "area": "signup",
+    "event": { "event_type": "Sign Up", "filters": [{ "subprop_type": "event", "subprop_key": "platform", "subprop_op": "is", "subprop_value": ["iOS"] }] },
+    "measure": "uniques", "badDirection": "down", "threshold": 20, "platform": "ios" }
+]
+```
+
+Other settings: `JAGR_AMPLITUDE_REGION` (`us` | `eu`), `JAGR_AMPLITUDE_APP_URL` (evidence link target, e.g.
+`https://app.amplitude.com/analytics/<org>`), `JAGR_AMPLITUDE_UTC_OFFSET_MINUTES` (the project's timezone offset).
+Using the built-in keys (`checkout_conversion`, `signup_conversion`, `purchase_revenue`, `search_usage`) lets the
+watch templates pick the metrics up; any other key is added to watches of its area.
+
+Limitations: the project timezone is a fixed offset (DST not modelled — UTC projects are exact); with hourly buckets a
+sustained drop is detected after about 3 complete hours; one Amplitude project per workspace.
+
