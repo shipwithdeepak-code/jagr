@@ -27,6 +27,16 @@ export const PROVIDERS: Record<ProviderId, { name: string; short: string; capabi
   email: { name: 'Email', short: 'Email', capabilities: ['send_email'], externalBase: 'mailto:', realApi: 'SMTP / transactional email provider' },
 };
 
+/** Display name for a source channel. Imported data renames the channel (e.g. "Feedback", not "App Store"). */
+export type ProviderLabel = { name: string; short: string };
+export type ProviderLabels = Partial<Record<ProviderId, ProviderLabel>>;
+export const labelOf =
+  (labels?: ProviderLabels) =>
+  (p: ProviderId): ProviderLabel =>
+    labels?.[p] ?? PROVIDERS[p];
+export const labelsFrom = (connections: SourceConnection[]): ProviderLabels =>
+  Object.fromEntries(connections.filter((c) => c.label).map((c) => [c.provider, c.label!]));
+
 export function sourceHref(ref: SourceRef): string {
   return `/sources/${ref.provider}/${ref.kind}/${encodeURIComponent(ref.id)}`;
 }
@@ -70,6 +80,7 @@ class SimulatedAdapter implements IntegrationAdapter {
   }
 
   private guard() {
+    if (this.conn.state === 'not_configured') throw new ProviderUnavailableError(this.provider, 'unavailable', 'not configured');
     if (this.conn.state === 'unavailable' || this.conn.state === 'error') {
       throw new ProviderUnavailableError(this.provider, this.conn.state, this.conn.detail);
     }
@@ -83,7 +94,7 @@ class SimulatedAdapter implements IntegrationAdapter {
       .map((m) => ({
         ...m,
         // Only buckets that have completed by the end of the window.
-        points: m.points.filter((p) => p.t >= window.start && Date.parse(p.t) + BUCKET_MIN * 60_000 <= Date.parse(window.end)),
+        points: m.points.filter((p) => p.t >= window.start && Date.parse(p.t) + (this.world.bucketMinutes ?? BUCKET_MIN) * 60_000 <= Date.parse(window.end)),
       }));
   }
 

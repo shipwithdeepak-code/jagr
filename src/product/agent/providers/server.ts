@@ -1,8 +1,8 @@
-import type { PlannerOutcome } from '../plannerSchema';
-import type { PlannerInput } from '../plannerPrompt';
-import { publicPlannerConfig, readPlannerConfig, type PlannerConfig, type ResolvedProvider } from './config';
-import { llmPlannerProvider, PROVIDER_REGISTRY } from './registry';
-import type { Fetch } from './types';
+import type { PlannerOutcome } from '../plannerSchema.js';
+import type { PlannerInput } from '../plannerPrompt.js';
+import { publicPlannerConfig, readPlannerConfig, type PlannerConfig, type ResolvedProvider } from './config.js';
+import { llmPlannerProvider, PROVIDER_REGISTRY } from './registry.js';
+import type { Fetch } from './types.js';
 
 /**
  * The server-side planner endpoint. Framework-free: the Vite dev server mounts it today; a

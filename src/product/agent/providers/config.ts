@@ -1,5 +1,5 @@
-import { PROVIDER_REGISTRY } from './registry';
-import type { ProviderConfig, StructuredMode } from './types';
+import { PROVIDER_REGISTRY } from './registry.js';
+import type { ProviderConfig, StructuredMode } from './types.js';
 
 /**
  * The single configuration layer for planning. Server-side only — the only code that reads

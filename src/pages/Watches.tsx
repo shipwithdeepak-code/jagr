@@ -9,7 +9,7 @@ import { FREQUENCY_LABEL, nextRunAt, toCron } from '@/product/scheduler';
 import { useProduct } from '@/state/productContext';
 import { fmtTime } from '@/lib/time';
 import { AttentionBadge, ConnectionBadge, ProviderName } from '@/components/product';
-import { Badge, Button, Card, cx, Drawer, Eyebrow, Mono, PageHeader, Toggle } from '@/components/ui';
+import { Badge, Button, Card, cx, Drawer, Eyebrow, Mono, PageHeader, Toggle , EmptyState } from '@/components/ui';
 import { useToast } from '@/components/toast';
 
 export function WatchesPage() {
@@ -30,6 +30,11 @@ export function WatchesPage() {
           </Button>
         }
       />
+      {state.watches.length === 0 && (
+        <EmptyState icon={Plus} title="Create your first watch." action={<Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>Create watch</Button>}>
+          A watch is a standing question — e.g. “Is checkout healthy?” Jagr answers it over your data and opens an investigation when something meaningful changes.
+        </EmptyState>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         {state.watches.map((w) => {
           const invs = r?.investigations.filter((i) => i.watchIds.includes(w.id) && i.status !== 'DISMISSED') ?? [];
@@ -130,13 +135,15 @@ const INTERRUPT: { value: NotificationPolicy['interruptAt']; label: string; hint
 ];
 
 function CreateWatchWizard({ onClose }: { onClose: () => void }) {
-  const { state, createWatch, runMonitoring, running } = useProduct();
+  const { state, createWatch, runMonitoring, running, mode } = useProduct();
   const toast = useToast();
   const [step, setStep] = useState(0);
   const [template, setTemplate] = useState<WatchTemplateId>('checkout_health');
   const tpl = WATCH_TEMPLATES.find((t) => t.id === template)!;
   const [name, setName] = useState(tpl.name);
-  const [sources, setSources] = useState<ProviderId[]>(tpl.sources);
+  // In a "my data" workspace, only sources that have data start ticked.
+  const usable = (list: ProviderId[]) => (mode === 'imported' ? list.filter((p) => state.connections.find((c) => c.provider === p)?.state !== 'not_configured') : list);
+  const [sources, setSources] = useState<ProviderId[]>(() => usable(tpl.sources));
   const [frequency, setFrequency] = useState<MonitoringFrequency>('30m');
   const [dailyAt, setDailyAt] = useState('07:00');
   const [interruptAt, setInterruptAt] = useState<NotificationPolicy['interruptAt']>('HIGH');
@@ -146,7 +153,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     setName(tpl.name);
-    setSources(tpl.sources);
+    setSources(usable(tpl.sources));
   }, [tpl]);
 
   useEffect(() => {
@@ -194,7 +201,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               </div>
               <div className="mt-3 text-[18px] font-semibold">Watch created.</div>
               <p className="mt-1 text-[13.5px] text-ink-2">
-                <span className="font-medium text-ink">{created.name}</span> checks {created.sources.map((p) => PROVIDERS[p].short).join(', ')} {FREQUENCY_LABEL[created.schedule.frequency].toLowerCase()}, interrupts you at {created.notificationPolicy.interruptAt === 'CRITICAL' ? 'CRITICAL only' : `${created.notificationPolicy.interruptAt}+`}, and {created.notificationPolicy.morningBrief ? 'reports in the morning brief' : 'stays out of the brief'}.
+                <span className="font-medium text-ink">{created.name}</span> checks {created.sources.map((p) => state.connections.find((c) => c.provider === p)?.label?.short ?? PROVIDERS[p].short).join(', ')} {FREQUENCY_LABEL[created.schedule.frequency].toLowerCase()}, interrupts you at {created.notificationPolicy.interruptAt === 'CRITICAL' ? 'CRITICAL only' : `${created.notificationPolicy.interruptAt}+`}, and {created.notificationPolicy.morningBrief ? 'reports in the morning brief' : 'stays out of the brief'}.
               </p>
               <p className="mt-2 text-[12.5px] text-ink-3">Cron equivalent: <Mono>{toCron(created)}</Mono> ({created.timezone})</p>
             </div>
@@ -230,14 +237,14 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                         <input type="checkbox" checked={on} onChange={(e) => setSources(e.target.checked ? [...sources, p] : sources.filter((x) => x !== p))} className="size-4 accent-[var(--ink)]" />
                         <ProviderName provider={p} className="text-[13.5px] font-medium" />
                         <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-3">
-                          {c.state !== 'simulated' && c.state !== 'connected' && 'Will be recorded as a gap'}
+                          {c.state === 'not_configured' ? 'Nothing imported — left out' : c.state !== 'simulated' && c.state !== 'connected' && c.state !== 'imported' && 'Will be recorded as a gap'}
                           <ConnectionBadge state={c.state} />
                         </span>
                       </label>
                     );
                   })}
                   <p className="pt-1 text-[12px] text-ink-3">
-                    Sources come from <Link to="/sources" className="text-accent hover:underline">Sources</Link>. In this demo every source is simulated — Jagr never presents fixture data as live.
+                    Sources come from <Link to="/sources" className="text-accent hover:underline">Sources</Link>. {mode === 'imported' ? 'Sources you have not imported are left out of the run — never reported as “nothing found”.' : 'In the sample workspace every source is simulated — Jagr never presents fixture data as live.'}
                   </p>
                 </div>
               )}

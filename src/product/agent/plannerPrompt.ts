@@ -1,5 +1,5 @@
-import type { EvidenceStrength, HypothesisKind, ProviderId, ToolName } from '../types';
-import { PLANNER_TOOL_NAME } from './plannerSchema';
+import type { EvidenceStrength, HypothesisKind, ProviderId, ToolName } from '../types.js';
+import { PLANNER_TOOL_NAME } from './plannerSchema.js';
 
 /**
  * The investigation state a planner sees, and how it is rendered into a prompt. Provider-neutral:

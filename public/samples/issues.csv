@@ -1,0 +1,6 @@
+id,title,status,created_at,labels,priority,version
+PAY-512,Checkout spinner never completes on iOS,open,2026-09-24T19:20:00Z,checkout;ios,High,4.8.1
+PAY-513,Payment sheet crashes after selecting annual plan,open,2026-09-24T20:05:00Z,checkout;android,High,4.8.1
+PAY-514,Card payment declined with generic error,open,2026-09-24T21:10:00Z,checkout;payments,High,4.8.1
+PAY-516,Promo code field clears card details at checkout,open,2026-09-24T22:40:00Z,checkout,Medium,4.8.1
+APP-731,Update help-centre links in settings,open,2026-09-24T15:20:00Z,docs,Low,

@@ -1,0 +1,7 @@
+id,text,rating,created_at,version
+REV-095,"Love the new widgets, super handy.",5,2026-09-24T16:10:00Z,4.8.0
+REV-101,"Payment failed twice, then it charged me anyway.",1,2026-09-24T20:12:00Z,4.8.1
+REV-102,Checkout keeps spinning after I tap pay.,1,2026-09-24T20:48:00Z,4.8.1
+REV-103,"Can't pay for the annual plan, the payment screen closes.",2,2026-09-24T21:30:00Z,4.8.1
+REV-104,Promo code at checkout wipes my card details.,2,2026-09-24T23:05:00Z,4.8.1
+REV-105,Would like dark mode everywhere.,4,2026-09-25T00:20:00Z,4.8.1

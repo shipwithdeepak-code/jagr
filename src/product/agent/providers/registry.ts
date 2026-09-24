@@ -1,10 +1,10 @@
-import type { LLMPlannerProvider } from '../plannerManager';
-import { buildPlannerPrompt, PLANNER_SYSTEM_PROMPT } from '../plannerPrompt';
-import { parseProposal, PLAN_JSON_SCHEMA, PLANNER_TOOL_NAME } from '../plannerSchema';
-import { ANTHROPIC_DEFAULT_MODEL, createAnthropicAdapter } from './anthropic';
-import { createGeminiAdapter } from './gemini';
-import { createOpenAIAdapter } from './openai';
-import { TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types';
+import type { LLMPlannerProvider } from '../plannerManager.js';
+import { buildPlannerPrompt, PLANNER_SYSTEM_PROMPT } from '../plannerPrompt.js';
+import { parseProposal, PLAN_JSON_SCHEMA, PLANNER_TOOL_NAME } from '../plannerSchema.js';
+import { ANTHROPIC_DEFAULT_MODEL, createAnthropicAdapter } from './anthropic.js';
+import { createGeminiAdapter } from './gemini.js';
+import { createOpenAIAdapter } from './openai.js';
+import { TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
 
 /**
  * Supported LLM providers. Adding one = an adapter file + an entry here + its tests.

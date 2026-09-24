@@ -17,7 +17,7 @@ export interface TimeRange {
 
 export type ToolOutcome<T> =
   | { ok: true; data: T }
-  | { ok: false; state: 'unavailable' | 'error' | 'not_in_watch'; detail: string };
+  | { ok: false; state: 'unavailable' | 'error' | 'not_in_watch' | 'no_data'; detail: string };
 
 export interface MetricResult {
   series: MetricSeries;
@@ -46,6 +46,12 @@ export const TOOL_SOURCE: Record<ToolName, ProviderId | 'store'> = {
   getPlayStoreReviews: 'google_play',
 };
 
+class NoDataError extends Error {
+  constructor(readonly metricId: string) {
+    super(`no ${metricId.replace(/^[a-z_]+\./, '').replace(/_/g, ' ')} data`);
+  }
+}
+
 export function createToolbox(reg: AdapterRegistry, watch: Watch, worldStart: string): Toolbox {
   async function call<T>(provider: Exclude<ProviderId, 'email'>, fn: () => Promise<T>): Promise<ToolOutcome<T>> {
     if (!watch.sources.includes(provider)) return { ok: false, state: 'not_in_watch', detail: `${PROVIDERS[provider].name} is not part of this watch` };
@@ -53,6 +59,8 @@ export function createToolbox(reg: AdapterRegistry, watch: Watch, worldStart: st
       return { ok: true, data: await fn() };
     } catch (err) {
       if (err instanceof ProviderUnavailableError) return { ok: false, state: err.state, detail: err.message };
+      // The source works; this particular metric simply is not in the data (common with imported data).
+      if (err instanceof NoDataError) return { ok: false, state: 'no_data', detail: err.message };
       throw err;
     }
   }
@@ -60,7 +68,7 @@ export function createToolbox(reg: AdapterRegistry, watch: Watch, worldStart: st
   const metric = (provider: Exclude<ProviderId, 'email'>, id: string, until: string) =>
     call(provider, async () => {
       const [series] = await reg.sources[provider].getMetrics([id], { start: worldStart, end: until });
-      if (!series) throw new ProviderUnavailableError(provider, 'error', `metric ${id} not found`);
+      if (!series) throw new NoDataError(id);
       return { series, reading: readMetric(series) };
     });
 

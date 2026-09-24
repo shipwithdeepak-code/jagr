@@ -1,5 +1,5 @@
-import { parseProposal, PLAN_JSON_SCHEMA, type PlannerFailureCode, type PlannerOutcome, type PlannerProposal, type PlannerSource } from './plannerSchema';
-import { buildPlannerPrompt, planFingerprint, PLANNER_SYSTEM_PROMPT, type PlannerInput } from './plannerPrompt';
+import { parseProposal, PLAN_JSON_SCHEMA, type PlannerFailureCode, type PlannerOutcome, type PlannerProposal, type PlannerSource } from './plannerSchema.js';
+import { buildPlannerPrompt, planFingerprint, PLANNER_SYSTEM_PROMPT, type PlannerInput } from './plannerPrompt.js';
 
 /**
  * The provider-agnostic planning runtime.

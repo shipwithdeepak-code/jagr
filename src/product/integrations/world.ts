@@ -55,6 +55,8 @@ export interface World {
   name: string;
   start: string;
   end: string;
+  /** Spacing of metric points. Simulated nights use 15 minutes; imported data uses its own cadence. */
+  bucketMinutes?: number;
   metrics: MetricSeries[];
   issues: IssueRecord[];
   releases: ReleaseRecord[];

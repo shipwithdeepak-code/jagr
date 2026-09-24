@@ -1,7 +1,7 @@
 import { fmtTime, minutesBetween } from '@/lib/time';
 import type { Area, DetectedSignal, EvidenceItem, Hypothesis, ProviderId, SourceLink } from '../types';
 import { AREA_LABEL } from '../catalog';
-import { makeLink, PROVIDERS } from '../integrations/adapters';
+import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
 import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '../integrations/types';
 import { fmtMagnitude, type MetricReading } from './detect';
 
@@ -13,7 +13,7 @@ import { fmtMagnitude, type MetricReading } from './detect';
 
 export interface Gathered {
   evidence: EvidenceItem[];
-  gaps: { provider: ProviderId; detail: string }[];
+  gaps: { provider: ProviderId; detail: string; noData?: boolean }[];
   notInWatch: ProviderId[];
   releases: ReleaseRecord[];
   issues: IssueRecord[];
@@ -29,13 +29,14 @@ function fmtValue(series: MetricSeries, v: number) {
 }
 
 /** Evidence item for a metric reading — a factual statement, with a deep link to the series. */
-export function metricEvidence(series: MetricSeries, reading: MetricReading, simulated: boolean): EvidenceItem {
+export function metricEvidence(series: MetricSeries, reading: MetricReading, simulated: boolean, labels?: ProviderLabels): EvidenceItem {
+  const P = labelOf(labels);
   const ref = { provider: series.provider, kind: 'metric' as const, id: series.id };
-  const link = makeLink(ref, `Open ${PROVIDERS[series.provider].short}`, simulated);
+  const link = makeLink(ref, `Open ${P(series.provider).short}`, simulated);
   const degraded = reading.status !== 'normal';
   const statement = degraded
-    ? `${PROVIDERS[series.provider].short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`
-    : `${PROVIDERS[series.provider].short}: ${series.name} is within its normal range (${fmtMagnitude(series, reading)} vs baseline).`;
+    ? `${P(series.provider).short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`
+    : `${P(series.provider).short}: ${series.name} is within its normal range (${fmtMagnitude(series, reading)} vs baseline).`;
   return { id: `${series.provider}:metric:${series.id}`, provider: series.provider, direction: degraded ? 'degraded' : 'stable', statement, onsetAt: reading.onsetAt, refs: [ref], link };
 }
 
@@ -62,7 +63,8 @@ export interface Reasoning {
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 
-export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Gathered, area: Area, onsetAt: string, critical: boolean, persistent = true): Reasoning {
+export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Gathered, area: Area, onsetAt: string, critical: boolean, persistent = true, labels?: ProviderLabels): Reasoning {
+  const P = labelOf(labels);
   const degraded = g.evidence.filter((e) => e.direction === 'degraded');
   const correlatedProviders = [...new Set([primary.provider, ...degraded.map((e) => e.provider)])];
   const corroborating = correlatedProviders.filter((p) => p !== primary.provider).length;
@@ -116,32 +118,32 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
         : 'Whether a release or change is involved — release history was not checked in this investigation.',
   );
   for (const gap of g.gaps) unknowns.push(gap.detail);
-  for (const p of g.notInWatch) unknowns.push(`${PROVIDERS[p].name} is not part of this watch, so it was not checked.`);
+  for (const p of g.notInWatch) unknowns.push(`${P(p).name} is not part of this watch, so it was not checked.`);
   if (area === 'checkout') unknowns.push('Payment-provider and server error data are not connected to Jagr.');
   else unknowns.push('Server-side error data is not connected to Jagr.');
 
   const hypotheses: Hypothesis[] = [];
   if (releaseAssociation) hypotheses.push({ statement: `${AREA_LABEL[area]} degradation temporally associated with release ${releaseAssociation.version}`, basis: 'temporal_correlation', role: 'leading' });
-  else if (corroborating >= 1) hypotheses.push({ statement: `A shared ${areaLabel} problem visible across ${correlatedProviders.map((p) => PROVIDERS[p].short).join(', ')}`, basis: 'cross_source', role: 'leading' });
+  else if (corroborating >= 1) hypotheses.push({ statement: `A shared ${areaLabel} problem visible across ${correlatedProviders.map((p) => P(p).short).join(', ')}`, basis: 'cross_source', role: 'leading' });
   else if (customerPrimary) hypotheses.push({ statement: `A customer-reported ${areaLabel} problem not yet visible in analytics`, basis: 'customer_reports', role: 'leading' });
   else hypotheses.push({ statement: `${primary.label} decline without corroborating signals`, basis: 'single_source', role: 'leading' });
   hypotheses.push({ statement: 'An unrelated factor outside the connected sources (payment provider, backend, marketing change)', basis: 'outside_sources', role: 'alternative' });
 
   let likelyExplanation: string;
   if (releaseAssociation) {
-    likelyExplanation = `${primary.label} ${customerPrimary ? 'rose' : 'declined'} shortly after release ${releaseAssociation.version}${corroborating ? ` and ${correlatedProviders.filter((p) => p !== primary.provider).map((p) => PROVIDERS[p].short).join(', ')} also ${corroborating > 1 ? 'show' : 'shows'} ${areaLabel} problems` : ''}. The available evidence supports a temporal correlation, but does not establish causation.`;
+    likelyExplanation = `${primary.label} ${customerPrimary ? 'rose' : 'declined'} shortly after release ${releaseAssociation.version}${corroborating ? ` and ${correlatedProviders.filter((p) => p !== primary.provider).map((p) => P(p).short).join(', ')} also ${corroborating > 1 ? 'show' : 'shows'} ${areaLabel} problems` : ''}. The available evidence supports a temporal correlation, but does not establish causation.`;
   } else if (corroborating >= 1) {
     likelyExplanation = `${correlatedProviders.length} sources show ${areaLabel} degrading at the same time, which suggests a shared underlying problem.${releaseChecked ? ' No release or change in the window lines up with it.' : ' Release history was not checked.'}`;
   } else if (customerPrimary) {
     likelyExplanation = `Customers are reporting ${areaLabel} problems, but analytics does not show a measurable impact yet.`;
   } else {
-    likelyExplanation = `Only ${PROVIDERS[primary.provider].short} shows this change. There is not enough evidence to explain it.`;
+    likelyExplanation = `Only ${P(primary.provider).short} shows this change. There is not enough evidence to explain it.`;
   }
 
   const staged = g.releases.find((r) => r.rollout && /staged/i.test(r.rollout) && r.version === releaseAssociation?.version);
   const uncertainty = [
     'The data does not establish causation.',
-    ...g.gaps.map((x) => `${PROVIDERS[x.provider].name} could not be checked.`),
+    ...g.gaps.map((x) => `${P(x.provider).name} could not be checked.`),
     corroborating === 0 ? 'No second source confirms the change.' : '',
     area === 'checkout' ? 'Payment-provider data is not connected, so a third-party payment problem cannot be ruled out.' : '',
     staged ? `${staged.platform === 'android' ? 'Android' : 'iOS'} ${staged.version} is on a ${staged.rollout!.toLowerCase()}, so impact there may still grow.` : '',
@@ -172,7 +174,7 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     }
   }
   for (const s of signals) for (const r of s.refs) {
-    const l = makeLink(r, `Open ${PROVIDERS[r.provider].short}`, true);
+    const l = makeLink(r, `Open ${P(r.provider).short}`, true);
     if (!seen.has(l.href)) {
       seen.add(l.href);
       sourceLinks.push(l);

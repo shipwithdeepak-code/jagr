@@ -1,0 +1,4 @@
+id,name,date,status,rollout
+REL-480,Release 4.8.0,2026-09-21T10:00:00Z,deployed,
+REL-481,Release 4.8.1,2026-09-24T18:30:00Z,deployed,20% staged rollout
+REL-482,Release 4.8.2,2026-09-28T10:00:00Z,planned,

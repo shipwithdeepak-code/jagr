@@ -18,7 +18,7 @@ import type {
   WatchInvestigation,
 } from '../types';
 import { AREA_LABEL, DEMO_RECIPIENT, SIGNALS } from '../catalog';
-import { createAdapters, PROVIDERS, type AdapterRegistry } from '../integrations/adapters';
+import { createAdapters, labelOf, labelsFrom, type AdapterRegistry, type ProviderLabel } from '../integrations/adapters';
 import { ProviderUnavailableError } from '../integrations/types';
 import type { World } from '../integrations/world';
 import { planJobs } from '../scheduler';
@@ -66,7 +66,7 @@ function hhmm(iso: string) {
   return fmtTime(iso).replace(':', '');
 }
 
-async function observe(reg: AdapterRegistry, watch: Watch, at: string, worldStart: string): Promise<{ findings: Finding[]; gaps: ProviderId[] }> {
+async function observe(reg: AdapterRegistry, watch: Watch, at: string, worldStart: string, P: (p: ProviderId) => ProviderLabel): Promise<{ findings: Finding[]; gaps: ProviderId[] }> {
   const findings: Finding[] = [];
   const gaps = new Set<ProviderId>();
   for (const sig of watch.signals) {
@@ -95,7 +95,7 @@ async function observe(reg: AdapterRegistry, watch: Watch, at: string, worldStar
           findings.push({
             status: r.status,
             blockers: r.blockers,
-            signal: { key: 'jira.issues', provider: 'jira', area, label: `${AREA_LABEL[area]} issues in Jira`, magnitude: `${r.count} new issues`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => ({ provider: 'jira', kind: 'issue', id })) },
+            signal: { key: 'jira.issues', provider: 'jira', area, label: `${AREA_LABEL[area]} issues in ${P('jira').short}`, magnitude: `${r.count} new issues`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => ({ provider: 'jira', kind: 'issue', id })) },
           });
         }
       } else if (meta.kind === 'reviews') {
@@ -107,7 +107,7 @@ async function observe(reg: AdapterRegistry, watch: Watch, at: string, worldStar
           findings.push({
             status: r.status,
             blockers: 0,
-            signal: { key: sig.key, provider, area, label: `${PROVIDERS[provider].short} reviews about ${AREA_LABEL[area].toLowerCase()}`, magnitude: `${r.count} negative reviews`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => ({ provider, kind: 'review', id })) },
+            signal: { key: sig.key, provider, area, label: `${P(provider).short} reviews about ${AREA_LABEL[area].toLowerCase()}`, magnitude: `${r.count} negative reviews`, ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: r.ids.map((id) => ({ provider, kind: 'review', id })) },
           });
         }
       }
@@ -137,12 +137,12 @@ function group(findings: Finding[], watch: Watch): Finding[][] {
   return groups;
 }
 
-function summarise(inv: WatchInvestigation): string {
+function summarise(inv: WatchInvestigation, P: (p: ProviderId) => ProviderLabel): string {
   const p = inv.signals[0];
-  const others = inv.correlatedProviders.filter((x) => x !== p.provider).map((x) => PROVIDERS[x].short);
+  const others = inv.correlatedProviders.filter((x) => x !== p.provider).map((x) => P(x).short);
   const parts = [`${p.label} ${p.magnitude} since ${fmtTime(p.onsetAt)}`];
   if (others.length) parts.push(`corroborated by ${others.join(', ')}`);
-  else parts.push(`only ${PROVIDERS[p.provider].short} shows it`);
+  else parts.push(`only ${P(p.provider).short} shows it`);
   if (inv.releaseAssociation) parts.push(`began ${inv.releaseAssociation.minutesBeforeOnset} min after release ${inv.releaseAssociation.version}`);
   return `${parts.join('; ')}. Investigation confidence ${confidenceBand(inv.confidence)} that the ${AREA_LABEL[inv.area].toLowerCase()} problem is real; cause not established.`;
 }
@@ -157,6 +157,8 @@ function setStatus(inv: WatchInvestigation, state: InvestigationState, at: strin
 export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult> {
   const window = o.window ?? { start: o.world.start, end: addMinutes(o.world.end, 5) };
   const reg = createAdapters(o.world, o.connections);
+  const labels = labelsFrom(o.connections);
+  const P = labelOf(labels);
   const base = o.appBaseUrl ?? 'https://jagr.vercel.app';
   const recipient = o.recipient ?? DEMO_RECIPIENT;
   const investigations: WatchInvestigation[] = [];
@@ -176,7 +178,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
 
     const watch = o.watches.find((w) => w.id === job.watchId)!;
     const at = job.at;
-    const { findings, gaps } = await observe(reg, watch, at, o.world.start);
+    const { findings, gaps } = await observe(reg, watch, at, o.world.start, P);
     const touched = new Set<string>();
     const sent: string[] = [];
 
@@ -212,7 +214,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         const owner = o.watches.find((x) => x.id === inv!.watchId);
         const extra = owner ? watch.sources.filter((s) => !owner.sources.includes(s)) : watch.sources;
         if (!owner || owner.status !== 'active' || (extra.length && watch.sources.length > owner.sources.length)) {
-          inv.trace.push({ id: `${inv.id}-handover-${at}-${watch.id}`, at, pass: maxPass(inv), kind: 'signal', title: `Handed over to ${watch.name}`, detail: `${watch.name} can see ${extra.map((p) => PROVIDERS[p].short).join(', ') || 'the same sources'}${owner ? `, which ${owner.name} cannot` : ''}. It investigates from here so no source is left out.` });
+          inv.trace.push({ id: `${inv.id}-handover-${at}-${watch.id}`, at, pass: maxPass(inv), kind: 'signal', title: `Handed over to ${watch.name}`, detail: `${watch.name} can see ${extra.map((p) => P(p).short).join(', ') || 'the same sources'}${owner ? `, which ${owner.name} cannot` : ''}. It investigates from here so no source is left out.` });
           inv.watchId = watch.id;
         }
       }
@@ -307,11 +309,12 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         connectionDetail: (p) => (p === 'email' ? reg.email.connection().detail : reg.sources[p].connection().detail),
         planner: o.planner,
         investigationId: inv.id,
+        labels,
       });
-      const r = reason(lead, inv.signals, out.gathered, inv.area, onset, false, persistent);
+      const r = reason(lead, inv.signals, out.gathered, inv.area, onset, false, persistent, labels);
       const attention = assessAttention({ signals: inv.signals, anomalous, corroborating: r.corroborating, releaseAssociated: !!r.releaseAssociation, blockerIssues: grp.reduce((a, f) => a + f.blockers, 0) });
       const critical = attention.level === 'CRITICAL';
-      const final = critical ? reason(lead, inv.signals, out.gathered, inv.area, onset, true, persistent) : r;
+      const final = critical ? reason(lead, inv.signals, out.gathered, inv.area, onset, true, persistent, labels) : r;
 
       const prevAttention = inv.attention;
       if (ATTENTION_RANK[attention.level] >= ATTENTION_RANK[prevAttention]) {
@@ -349,7 +352,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         agentHypotheses: out.hypotheses,
       });
       applyCompetingExplanations(inv, out.hypotheses, out.externalIssue);
-      inv.summary = summarise(inv);
+      inv.summary = summarise(inv, P);
       // LIFECYCLE
       const lastOwnerRun = [...inv.runs].reverse().find((x) => x.watchId === watch.id);
       if (anomalous.size > 0) {
@@ -368,6 +371,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       const releases = [...out.gathered.releases];
       if (ATTENTION_RANK[inv.attention] >= ATTENTION_RANK.HIGH && releaseLive && inv.releaseAssociation && !inv.actions.some((a) => a.kind === 'pause_rollout') && !releases.some((r) => r.rollout)) {
         const check = await checkRolloutBeforeAction({
+          labels,
           toolbox: createToolbox(reg, watch, o.world.start),
           watch,
           version: inv.releaseAssociation.version,
@@ -382,7 +386,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       }
 
       // ACT — propose actions by risk; only LOW-risk ones run on their own.
-      const proposed = proposeActions({ inv, hypotheses: out.hypotheses, attention: inv.attention, issues: out.gathered.issues, releases, at });
+      const proposed = proposeActions({ inv, hypotheses: out.hypotheses, attention: inv.attention, issues: out.gathered.issues, releases, at, issueSource: o.connections.find((c) => c.provider === 'jira')?.state === 'imported' ? 'imported' : undefined });
       const newActions = proposed.filter((p) => !inv.actions.some((a) => a.id === p.id));
       inv.actions.push(...newActions);
 
@@ -392,7 +396,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       if (firstPass || reopened || newSignal || newActions.length || before !== after) {
         inv.toolCalls += out.toolCalls;
         inv.stopReason = out.stopReason;
-        inv.trace.push(...out.trace, ...closingSteps(inv, out.trace, newActions, prevAttention !== inv.attention || firstPass));
+        inv.trace.push(...out.trace, ...closingSteps(inv, out.trace, newActions, prevAttention !== inv.attention || firstPass, P));
       } else {
         const t0 = out.trace[0]?.at ?? at;
         inv.trace.push({ id: `${inv.id}-recheck-${at}`, at: t0, pass: maxPass(inv), kind: 'recheck', title: `Re-checked: ${lead.label} still ${lead.magnitude}`, detail: `${out.toolCalls} tool calls · no material change to evidence, explanations or attention.` });
@@ -418,7 +422,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
     for (const inv of investigations.filter((i) => i.watchId === watch.id && OPEN.includes(i.status) && !touched.has(i.id))) {
       const leadProvider = inv.signals[0]?.provider;
       if (leadProvider && gaps.includes(leadProvider)) {
-        inv.runs.push({ at, watchId: watch.id, anomalous: false, note: `${PROVIDERS[leadProvider].name} unavailable — could not re-check; status unchanged.` });
+        inv.runs.push({ at, watchId: watch.id, anomalous: false, note: `${P(leadProvider).name} unavailable — could not re-check; status unchanged.` });
         continue;
       }
       inv.runs.push({ at, watchId: watch.id, anomalous: false, note: 'Back within normal range.' });
@@ -444,7 +448,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       scheduledAt: at,
       outcome: [
         findings.length ? `${findings.length} signal${findings.length === 1 ? '' : 's'} outside normal range` : 'All signals within normal range',
-        gaps.length ? `${gaps.map((g) => PROVIDERS[g].name).join(', ')} unavailable` : '',
+        gaps.length ? `${gaps.map((g) => P(g).name).join(', ')} unavailable` : '',
         sent.length ? `${sent.length} email sent` : '',
       ]
         .filter(Boolean)
@@ -490,7 +494,7 @@ const AUTONOMY_LABEL: Record<ProposedAction['autonomy'], string> = {
   approval_required: 'Consequential — waiting for your approval',
 };
 
-function closingSteps(inv: WatchInvestigation, pass: TraceStep[], newActions: ProposedAction[], attentionChanged: boolean): TraceStep[] {
+function closingSteps(inv: WatchInvestigation, pass: TraceStep[], newActions: ProposedAction[], attentionChanged: boolean, P: (p: ProviderId) => ProviderLabel): TraceStep[] {
   const p = pass[0]?.pass ?? maxPass(inv);
   let t = pass.at(-1)?.at ?? inv.updatedAt;
   const out: TraceStep[] = [];
@@ -498,7 +502,7 @@ function closingSteps(inv: WatchInvestigation, pass: TraceStep[], newActions: Pr
     t = addSeconds(t, 1);
     out.push({ id: `${inv.id}-${p}-close-${out.length}`, at: t, pass: p, ...s });
   };
-  const sources = inv.correlatedProviders.map((x) => PROVIDERS[x].short);
+  const sources = inv.correlatedProviders.map((x) => P(x).short);
   push({
     kind: 'assessment',
     title: sources.length > 1 ? `Evidence lines up across ${sources.join(', ')}` : `Only ${sources[0] ?? 'one source'} shows the change`,

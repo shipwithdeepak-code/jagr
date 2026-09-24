@@ -6,11 +6,15 @@ import { defaultBriefSchedule, defaultWatches } from '@/product/catalog';
 import { defaultConnections } from '@/product/integrations/adapters';
 import { defaultWorld } from '@/product/integrations/world';
 import { runMonitoring as runEngine } from '@/product/engine/monitor';
-import { ProductContext, type ProductApi, type ProductState } from './productContext';
+import { importFile, type ImportedDataset, type ImportKind } from '@/product/imports/schemas';
+import { buildImportedWorld, watchesForImportedData } from '@/product/imports/world';
+import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode } from './productContext';
 
 /**
- * Product workspace: sources, watches, the brief schedule and the latest monitoring run.
- * Persisted per browser. Monitoring runs the real engine over the deterministic fixture night.
+ * Product workspace, persisted in this browser (localStorage). Two data modes:
+ *   sample   — the simulated sample night (clearly labelled SIMULATED)
+ *   imported — the user's own CSV / JSON evidence (labelled USER IMPORT)
+ * Either way the same engine, planner, validator and approval rules run.
  */
 
 const KEY = 'jagr:product:v2';
@@ -20,20 +24,31 @@ function initial(): ProductState {
   return { version: 2, connections: defaultConnections(), watches: defaultWatches(), brief: defaultBriefSchedule(), stale: false, clock: CLOCK, decisions: {} };
 }
 
+function emptyImportedWorkspace(planner: ProductState['planner']): ProductState {
+  const now = new Date().toISOString();
+  return { ...initial(), workspace: { mode: 'imported', createdAt: now }, watches: [], imports: [], connections: buildImportedWorld([], now).connections, clock: now, planner };
+}
+
 function load(): ProductState {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return initial();
     const parsed = JSON.parse(raw) as ProductState;
-    return parsed.version === 2 ? parsed : initial();
+    if (parsed.version !== 2) return initial();
+    // Workspaces saved before data modes existed were the sample workspace.
+    if (!parsed.workspace && parsed.result) parsed.workspace = { mode: 'sample', createdAt: parsed.clock };
+    return parsed;
   } catch {
     return initial();
   }
 }
 
+const hhmmUtc = (iso: string) => iso.slice(11, 16);
+
 export function ProductProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ProductState>(load);
   const [running, setRunning] = useState(false);
+  const [storageError, setStorageError] = useState<string | undefined>();
   const [health, setHealth] = useState<PlannerHealth | undefined>();
   useEffect(() => {
     void fetchPlannerHealth().then(setHealth);
@@ -44,26 +59,35 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
+      setStorageError(undefined);
     } catch {
-      /* storage unavailable — still works for this session */
+      // Never pretend it saved: imported data can exceed the browser's storage quota.
+      setStorageError('This browser could not save the workspace (storage full or blocked). It works for this session, but will be lost when the tab closes. Remove some imports to free space.');
     }
   }, [state]);
+
+  const mode: WorkspaceMode | undefined = state.workspace?.mode;
+  const importedWorld = useMemo(() => (mode === 'imported' ? buildImportedWorld(state.imports ?? [], state.clock) : undefined), [mode, state.imports, state.clock]);
 
   const execute = useCallback(async (s: ProductState) => {
     setRunning(true);
     try {
+      const imported = s.workspace?.mode === 'imported';
+      const iw = imported ? buildImportedWorld(s.imports ?? [], s.clock) : undefined;
+      if (imported && !iw?.world) {
+        setState((prev) => ({ ...prev, result: undefined, stale: false }));
+        return undefined;
+      }
+      const world = iw?.world ?? defaultWorld();
+      const connections = iw?.connections ?? s.connections;
+      const watches = iw ? watchesForImportedData(s.watches, connections) : s.watches;
+      // Imported data has its own time range: compose the brief at the end of it.
+      const brief = iw ? { ...s.brief, time: hhmmUtc(world.end), timezone: 'UTC' } : s.brief;
       const { planner, info } = await resolvePlanner(s.planner ?? 'deterministic');
-      const result = await runEngine({
-        planner,
-        world: defaultWorld(),
-        watches: s.watches,
-        connections: s.connections,
-        brief: s.brief,
-        appBaseUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
-      });
-      const states = s.connections.filter((c) => c.provider !== 'email').map((c) => c.state);
-      const data = states.every((x) => x !== 'connected') ? 'simulated' : states.every((x) => x === 'connected') ? 'live' : 'mixed';
-      setState((prev) => ({ ...prev, result: { ...result, planner: { ...info, data } }, stale: false, clock: CLOCK }));
+      const result = await runEngine({ planner, world, watches, connections, brief, appBaseUrl: typeof window !== 'undefined' ? window.location.origin : undefined });
+      const states = connections.filter((c) => c.provider !== 'email' && c.state !== 'not_configured').map((c) => c.state);
+      const data = imported ? 'imported' : states.every((x) => x !== 'connected') ? 'simulated' : states.every((x) => x === 'connected') ? 'live' : 'mixed';
+      setState((prev) => ({ ...prev, result: { ...result, planner: { ...info, data } }, stale: false, clock: imported ? world.end : CLOCK }));
       return result;
     } finally {
       setRunning(false);
@@ -71,38 +95,92 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, []);
   const runMonitoring = useCallback(() => execute(ref.current), [execute]);
 
-  // First visit: run last night's monitoring so there is something real to look at.
+  // Sample workspace, first visit: run the sample night so there is something real to look at.
+  // A brand-new visitor (no workspace yet) sees the welcome instead.
   useEffect(() => {
-    if (!ref.current.result) void runMonitoring();
+    if (ref.current.workspace?.mode === 'sample' && !ref.current.result) void runMonitoring();
   }, [runMonitoring]);
+
+  const createWorkspace = useCallback(
+    (m: WorkspaceMode) => {
+      const next = m === 'imported' ? emptyImportedWorkspace(ref.current.planner) : { ...initial(), workspace: { mode: 'sample' as const, createdAt: new Date().toISOString() }, planner: ref.current.planner };
+      setState(next);
+      if (m === 'sample') void execute(next);
+    },
+    [execute],
+  );
+
+  const addImport = useCallback((kind: ImportKind, filename: string, text: string): ImportedDataset => {
+    const importedAt = new Date().toISOString();
+    const ds = importFile(kind, filename, text, importedAt, `imp-${kind}-${Date.parse(importedAt)}-${Math.random().toString(36).slice(2, 7)}`);
+    // A file that could not be read at all is reported, not stored.
+    if (!ds.error) {
+      setState((s) => {
+        const imports = [...(s.imports ?? []), ds];
+        return { ...s, imports, connections: buildImportedWorld(imports, s.clock).connections, stale: true };
+      });
+    }
+    return ds;
+  }, []);
+
+  const removeImport = useCallback(
+    (id: string) =>
+      setState((s) => {
+        const imports = (s.imports ?? []).filter((d) => d.id !== id);
+        return { ...s, imports, connections: buildImportedWorld(imports, s.clock).connections, stale: true };
+      }),
+    [],
+  );
 
   const createWatch = useCallback((watch: Watch) => setState((s) => ({ ...s, watches: [...s.watches, watch], stale: true })), []);
   const setWatchStatus = useCallback(
-    (id: string, status: Watch['status']) => setState((s) => ({ ...s, watches: s.watches.map((w) => (w.id === id ? { ...w, status, updatedAt: CLOCK } : w)), stale: true })),
+    (id: string, status: Watch['status']) => setState((s) => ({ ...s, watches: s.watches.map((w) => (w.id === id ? { ...w, status, updatedAt: s.clock } : w)), stale: true })),
     [],
   );
   const setConnection = useCallback(
     (provider: ProviderId, state: ConnectionState, detail: string) =>
-      setState((s) => ({ ...s, connections: s.connections.map((c) => (c.provider === provider ? { ...c, state, detail, updatedAt: CLOCK } : c)), stale: true })),
+      setState((s) => (s.workspace?.mode === 'imported' ? s : { ...s, connections: s.connections.map((c) => (c.provider === provider ? { ...c, state, detail, updatedAt: CLOCK } : c)), stale: true })),
     [],
   );
   const setBrief = useCallback((brief: BriefSchedule) => setState((s) => ({ ...s, brief, stale: true })), []);
   const decide = useCallback((action: ProposedAction, input: { status: ActionDecision['status']; optionId?: string; note?: string }) => {
-    const decision = decideAction(action, { ...input, at: CLOCK });
+    const decision = decideAction(action, { ...input, at: ref.current.clock });
     setState((s) => ({ ...s, decisions: { ...s.decisions, [action.id]: decision } }));
     return decision;
   }, []);
   const setPlannerChoice = useCallback((planner: 'deterministic' | 'llm') => setState((s) => ({ ...s, planner, stale: true })), []);
+  /** Back to the first-run welcome. Deletes this browser's workspace (imports included); the planner choice stays. */
+  const clearWorkspace = useCallback(() => setState({ ...initial(), planner: ref.current.planner }), []);
   const reset = useCallback(() => {
     // Reset restores the simulated workspace; the planner selection is a preference and survives it.
     const fresh = { ...initial(), planner: ref.current.planner };
-    setState(fresh);
+    setState({ ...fresh, workspace: { mode: 'sample', createdAt: new Date().toISOString() } });
     void execute(fresh);
   }, [execute]);
 
   const api = useMemo<ProductApi>(
-    () => ({ state, running, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, plannerChoice: state.planner ?? 'deterministic', llmOption: llmAvailability(health), setPlannerChoice }),
-    [state, running, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice],
+    () => ({
+      state,
+      running,
+      runMonitoring,
+      createWatch,
+      setWatchStatus,
+      setConnection,
+      setBrief,
+      decide,
+      reset,
+      plannerChoice: state.planner ?? 'deterministic',
+      llmOption: llmAvailability(health),
+      setPlannerChoice,
+      mode,
+      createWorkspace,
+      addImport,
+      removeImport,
+      importedWorld,
+      storageError,
+      clearWorkspace,
+    }),
+    [state, running, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice, mode, createWorkspace, addImport, removeImport, importedWorld, storageError, clearWorkspace],
   );
   return <ProductContext.Provider value={api}>{children}</ProductContext.Provider>;
 }

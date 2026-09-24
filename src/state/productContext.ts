@@ -1,5 +1,10 @@
 import { createContext, useContext } from 'react';
 import type { ActionDecision, BriefSchedule, ConnectionState, MonitoringResult, ProposedAction, ProviderId, SourceConnection, Watch } from '@/product/types';
+import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
+import type { ImportedWorld } from '@/product/imports/world';
+
+/** sample = the simulated sample night · imported = the user's own CSV / JSON evidence. */
+export type WorkspaceMode = 'sample' | 'imported';
 
 export interface ProductState {
   version: 2;
@@ -13,8 +18,12 @@ export interface ProductState {
   clock: string;
   /** Human decisions on proposed actions, keyed by stable action id. Survive re-runs. */
   decisions: Record<string, ActionDecision>;
-  /** Which planner investigates the (simulated) data. Default: deterministic. */
+  /** Which planner investigates the data. Default: deterministic. */
   planner?: 'deterministic' | 'llm';
+  /** Absent until the user chooses (first-run welcome). */
+  workspace?: { mode: WorkspaceMode; createdAt: string };
+  /** User-imported evidence (imported workspaces). Stored in this browser only. */
+  imports?: ImportedDataset[];
 }
 
 export interface PlannerOptionInfo {
@@ -26,7 +35,8 @@ export interface PlannerOptionInfo {
 export interface ProductApi {
   state: ProductState;
   running: boolean;
-  runMonitoring(): Promise<MonitoringResult>;
+  /** Undefined when an imported workspace has nothing to investigate yet. */
+  runMonitoring(): Promise<MonitoringResult | undefined>;
   createWatch(watch: Watch): void;
   setWatchStatus(id: string, status: Watch['status']): void;
   setConnection(provider: ProviderId, state: ConnectionState, detail: string): void;
@@ -37,6 +47,15 @@ export interface ProductApi {
   plannerChoice: 'deterministic' | 'llm';
   llmOption: PlannerOptionInfo;
   setPlannerChoice(choice: 'deterministic' | 'llm'): void;
+  mode?: WorkspaceMode;
+  createWorkspace(mode: WorkspaceMode): void;
+  /** Parse, validate and store an uploaded file. Returns the result (including rejected rows) for display. */
+  addImport(kind: ImportKind, filename: string, text: string): ImportedDataset;
+  removeImport(id: string): void;
+  importedWorld?: ImportedWorld;
+  /** Set when the browser refused to save the workspace. */
+  storageError?: string;
+  clearWorkspace(): void;
   reset(): void;
 }
 

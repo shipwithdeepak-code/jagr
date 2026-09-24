@@ -5,10 +5,12 @@ import { useShellActions } from '@/components/shell';
 import { FREQUENCY_LABEL, nextBriefAt, nextRunAt } from '@/product/scheduler';
 import { fmtDate, fmtRelativeMinutes, fmtTime, minutesBetween } from '@/lib/time';
 import { AttentionBadge, attentionRoute, ConnectionBadge, PROVIDER_ICON } from '@/components/product';
+import { PROVIDERS } from '@/product/integrations/adapters';
 import { Button, Card, cx, Eyebrow, SectionTitle } from '@/components/ui';
+import { GettingStarted, TryYourOwnData, Welcome, WorkspaceDataBadge } from '@/components/onboarding';
 
 export function ProductOverviewPage() {
-  const { state, runMonitoring, running } = useProduct();
+  const { state, runMonitoring, running, mode, storageError, clearWorkspace } = useProduct();
   const { requestDemo } = useShellActions();
   const r = state.result;
   const brief = r?.briefs.at(-1);
@@ -19,24 +21,42 @@ export function ProductOverviewPage() {
     .filter((x): x is { w: (typeof activeWatches)[number]; at: string } => !!x.at)
     .sort((a, b) => a.at.localeCompare(b.at));
   const briefNext = nextBriefAt(state.brief, state.clock);
+  const needs = r?.investigations.filter((i) => i.status !== 'DISMISSED' && i.attention !== 'LOW').length ?? 0;
+
+  if (!mode) return <Welcome />;
 
   return (
     <div className="animate-fade-up">
+      {storageError && <div className="mb-4 rounded-xl border border-crit/40 bg-crit-soft/60 px-4 py-3 text-[13px] text-ink">{storageError}</div>}
+      {mode === 'imported' && <GettingStarted />}
       <div className="mb-6">
         <Eyebrow>
-          {fmtDate(state.clock)} · {fmtTime(state.clock)} · workspace · simulated sources
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {fmtDate(state.clock)} · {fmtTime(state.clock)} <WorkspaceDataBadge />
+            <button
+              className="text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+              onClick={() => {
+                if (window.confirm('Start over? This deletes this browser’s workspace, including any imported data.')) clearWorkspace();
+              }}
+            >
+              Start over
+            </button>
+          </span>
         </Eyebrow>
-        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em] sm:text-[34px]">{brief ? brief.headline : running ? 'Checking last night…' : 'Jagr is ready.'}</h1>
+        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em] sm:text-[34px]">
+          {brief ? brief.headline : running ? 'Investigating…' : r ? (needs ? `${needs} ${needs === 1 ? 'thing needs' : 'things need'} your attention.` : 'Nothing needs your attention.') : mode === 'imported' ? 'Jagr needs evidence to investigate.' : 'Jagr is ready.'}
+        </h1>
         <p className="mt-2 max-w-2xl text-[15px] text-ink-2">
-          Jagr watches the tools you already use, investigates what changed across them, and tells you what actually needs attention.
+          An investigator that connects product evidence before deciding whether to interrupt you — not another dashboard.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring()} disabled={running}>
-            {running ? 'Running…' : 'Run monitoring overnight'}
+          <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring()} disabled={running || (mode === 'imported' && !state.watches.length)}>
+            {running ? 'Running…' : 'Run monitoring'}
           </Button>
           <Link to="/watches?new=1" className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium shadow-card hover:bg-subtle">
             <Plus size={14} /> Create watch
           </Link>
+          {mode === 'sample' && <TryYourOwnData />}
         </div>
       </div>
 
@@ -159,9 +179,9 @@ export function ProductOverviewPage() {
                       const Icon = PROVIDER_ICON[p];
                       const st = conn(p).state;
                       return (
-                        <span key={p} className="inline-flex items-center gap-1 text-[11.5px] text-ink-2" title={`${p}: ${st}`}>
+                        <span key={p} className="inline-flex items-center gap-1 text-[11.5px] text-ink-2" title={`${conn(p).label?.short ?? PROVIDERS[p].short}: ${st.replace('_', ' ')}`}>
                           <Icon size={12} />
-                          <span className={cx('size-1.5 rounded-full', st === 'simulated' ? 'bg-info' : st === 'connected' ? 'bg-ok' : st === 'error' ? 'bg-crit' : 'bg-high')} />
+                          <span className={cx('size-1.5 rounded-full', st === 'simulated' ? 'bg-info' : st === 'connected' ? 'bg-ok' : st === 'imported' ? 'bg-accent' : st === 'not_configured' ? 'bg-line-strong' : st === 'error' ? 'bg-crit' : 'bg-high')} />
                         </span>
                       );
                     })}
@@ -175,7 +195,7 @@ export function ProductOverviewPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
             Sources: {state.connections.filter((c) => c.provider !== 'email').map((c) => (
               <span key={c.provider} className="inline-flex items-center gap-1">
-                {c.provider.replace('_', ' ')} <ConnectionBadge state={c.state} />
+                {c.label?.short ?? PROVIDERS[c.provider].short} <ConnectionBadge state={c.state} />
               </span>
             ))}
             <Link to="/sources" className="ml-auto font-medium text-accent hover:underline">Manage sources</Link>

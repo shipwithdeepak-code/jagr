@@ -8,7 +8,7 @@ import { useProduct } from '@/state/productContext';
 import { useWorkspace } from '@/state/workspace';
 import { fmtTime } from '@/lib/time';
 import { AttentionBadge, EmailPreview, InvestigationStateBadge, ProviderName, SourceLinkButton } from '@/components/product';
-import { ActionRow, AgentApprovalCard, AgentTraceTimeline, AgentWorkingLine, AttentionDecision, HypothesisCards, PlannerModeLine } from '@/components/agent';
+import { ActionRow, AgentApprovalCard, AgentTraceTimeline, AgentWorkingLine, AttentionDecision, HypothesisCards, PlannerModeLine, SourceStateTag } from '@/components/agent';
 import { effectiveActions, traceWithDecisions } from '@/product/agent/decisions';
 import { confidenceBand } from '@/product/engine/monitor';
 import { Card, cx, EmptyState, Eyebrow, Mono, PageHeader, SectionTitle } from '@/components/ui';
@@ -134,6 +134,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
+          <InvestigationSummary inv={inv} />
           {/* Observed / Inferred / Unknown */}
           <section>
             <SectionTitle hint="Jagr keeps what it saw, what it concluded from that, and what it doesn't know strictly apart.">Observed · Inferred · Unknown</SectionTitle>
@@ -204,7 +205,13 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                   />
                   <span className="min-w-0 flex-1 text-[13px]">
                     {e.statement}
-                    <span className="ml-2 text-[11.5px] text-ink-3">{e.direction === 'gap' ? 'source gap' : e.direction === 'change' ? 'change' : e.direction}</span>
+                    {/* Source trust: which source, how it got here, when. */}
+                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-3">
+                      <ProviderName provider={e.provider} short />
+                      <SourceStateTag state={(state.result?.connections ?? state.connections).find((c) => c.provider === e.provider)?.state} />
+                      {e.onsetAt && <span className="font-mono">{fmtTime(e.onsetAt)} UTC</span>}
+                      <span>· {e.direction === 'gap' ? 'source gap' : e.direction === 'change' ? 'change' : e.direction}</span>
+                    </span>
                   </span>
                   {e.link && <SourceLinkButton link={e.link} compact />}
                 </div>
@@ -298,5 +305,43 @@ function Column({ icon: Icon, title, items, hint, tone }: { icon: typeof Eye; ti
         ))}
       </ul>
     </Card>
+  );
+}
+
+/** The three questions a PM asks first — answered from the investigation, not a generated summary. */
+function InvestigationSummary({ inv }: { inv: WatchInvestigation }) {
+  const lead = inv.signals[0];
+  const calls = inv.trace.filter((s) => s.kind === 'tool_call');
+  const checked = [...new Set(calls.map((s) => s.source).filter((p): p is NonNullable<typeof p> => !!p))];
+  const gaps = inv.evidence.filter((e) => e.direction === 'gap');
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      <Card>
+        <Eyebrow className="mb-1">What changed</Eyebrow>
+        <p className="text-[14px] font-semibold">
+          {lead.label} {lead.magnitude}
+        </p>
+        <p className="mt-1 text-[12.5px] text-ink-2">since {fmtTime(lead.onsetAt)} UTC{inv.signals.length > 1 ? ` · ${inv.signals.length - 1} related signal${inv.signals.length > 2 ? 's' : ''}` : ''}</p>
+      </Card>
+      <Card>
+        <Eyebrow className="mb-1">Why it matters</Eyebrow>
+        <p className="text-[14px] font-semibold">
+          <AttentionBadge level={inv.attention} />
+        </p>
+        <p className="mt-1 text-[12.5px] text-ink-2">{inv.attentionReason}</p>
+      </Card>
+      <Card>
+        <Eyebrow className="mb-1">What Jagr checked</Eyebrow>
+        <p className="text-[14px] font-semibold">
+          {calls.length} tool calls · {checked.length} source{checked.length === 1 ? '' : 's'}
+        </p>
+        <p className="mt-1 flex flex-wrap gap-x-2 text-[12.5px] text-ink-2">
+          {checked.map((p) => (
+            <ProviderName key={p} provider={p} short />
+          ))}
+          {gaps.length > 0 && <span className="text-high">· {gaps.length} gap{gaps.length === 1 ? '' : 's'} stated</span>}
+        </p>
+      </Card>
+    </div>
   );
 }

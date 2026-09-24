@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types';
+import { defaultFetch, ProviderHttpError, safeErrorType, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
 
 /**
  * Anthropic (Claude) — Messages API. Structured output via a forced tool call whose input_schema is

@@ -31,7 +31,7 @@ function subjectFor(inv: WatchInvestigation): string {
   const drop = p.magnitude.startsWith('−');
   let core: string;
   if (p.key.endsWith('.reviews')) core = `${p.magnitude} mention ${inv.area}`;
-  else if (p.key === 'jira.issues') core = `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} in Jira`;
+  else if (p.key === 'jira.issues') core = `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
   else if (p.magnitude.endsWith('pts')) core = `${p.label} ${drop ? 'fell' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   else core = `${p.label} ${drop ? 'dropped' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   return `${inv.attention === 'CRITICAL' ? '[Critical] ' : ''}Jagr: ${core}`;
@@ -43,7 +43,8 @@ export function emailButtons(inv: WatchInvestigation): EmailButton[] {
   const labels: Record<(typeof order)[number], string> = { jira: 'Open Jira', ga4: 'Open Analytics', app_store: 'Open App Store', google_play: 'Open Play Store' };
   for (const p of order) {
     const link = inv.sourceLinks.find((l) => l.provider === p);
-    if (link) buttons.push({ label: labels[p], href: link.href, kind: 'source', provider: p, simulated: link.simulated });
+    // The link already carries the source's name in this workspace (e.g. "Open Feedback" for imported data).
+    if (link) buttons.push({ label: /^Open /.test(link.label) ? link.label : labels[p], href: link.href, kind: 'source', provider: p, simulated: link.simulated });
   }
   return buttons;
 }

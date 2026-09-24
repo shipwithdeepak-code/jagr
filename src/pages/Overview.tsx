@@ -8,6 +8,7 @@ import { fmtDate, fmtDuration, fmtTime } from '@/lib/time';
 import { Badge, Card, ConfidenceMeter, cx, Eyebrow, SectionTitle, SeverityBadge, SourceChip, Stat } from '@/components/ui';
 import { GATE_LABELS } from '@/agents/policy';
 import { useShellActions } from '@/components/shell';
+import { TryYourOwnData } from '@/components/onboarding';
 
 export function OverviewPage() {
   const { state } = useWorkspace();
@@ -101,6 +102,7 @@ export function RunButtons() {
       >
         <Radar size={14} /> Reset &amp; replay Demo night
       </button>
+      <TryYourOwnData />
     </>
   );
 }

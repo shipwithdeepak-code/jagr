@@ -202,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <div className="mb-3 rounded-lg border border-line bg-surface px-2.5 py-2">
         <div className="text-[12.5px] font-medium text-ink">Tempo · Product</div>
-        <div className="text-[11.5px] text-ink-3">{env === 'demo' ? 'Demo night · simulated replay' : 'Workspace · simulated sources'}</div>
+        <div className="text-[11.5px] text-ink-3">{env === 'demo' ? 'Demo night · simulated replay' : product.mode === 'imported' ? 'Workspace · your data (browser-local)' : 'Workspace · sample data (simulated)'}</div>
       </div>
       {primary.map((it) => (
         <NavRow key={it.to} item={it} />
@@ -270,11 +270,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               title={ENVIRONMENT[env].description}
             >
               <span className={cx('size-1.5 rounded-full', env === 'demo' ? 'bg-high' : 'bg-info')} />
-              {ENVIRONMENT[env].badge}
+              {env === 'workspace' && !product.mode ? 'Not set up yet' : env === 'workspace' && product.mode === 'imported' ? 'Your data · browser-local' : ENVIRONMENT[env].badge}
             </span>
-            {env === 'workspace' && (
+            {env === 'workspace' && product.mode && (
               <span className="hidden truncate xl:inline">
-                {product.state.watches.filter((w) => w.status === 'active').length} watches · brief {product.state.brief.time} {product.state.brief.timezone}
+                {(() => {
+                  const n = product.state.watches.filter((w) => w.status === 'active').length;
+                  return `${n} ${n === 1 ? 'watch' : 'watches'}`;
+                })()}
               </span>
             )}
           </div>
@@ -285,11 +288,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Button
                   variant="primary"
                   icon={RefreshCw}
-                  disabled={product.running}
+                  disabled={product.running || !product.mode || (product.mode === 'imported' && !product.state.watches.length)}
+                  title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : undefined}
                   onClick={async () => {
-                    await product.runMonitoring();
+                    const r = await product.runMonitoring();
                     navigate('/');
-                    toast({ tone: 'success', title: 'Monitoring complete', body: 'Watches ran 18:00 → 08:00 on simulated sources. Brief generated at 08:00.' });
+                    toast(
+                      product.mode === 'imported'
+                        ? r
+                          ? { tone: 'success', title: 'Monitoring complete', body: `Watches ran over your imported data (${r.investigations.length} investigation${r.investigations.length === 1 ? '' : 's'}).` }
+                          : { tone: 'warning', title: 'Nothing to investigate yet', body: 'Import metrics, issues or feedback first.' }
+                        : { tone: 'success', title: 'Monitoring complete', body: 'Watches ran 18:00 → 08:00 on simulated sources. Brief generated at 08:00.' },
+                    );
                   }}
                 >
                   {product.running ? 'Running…' : 'Run monitoring'}

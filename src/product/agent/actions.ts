@@ -55,7 +55,7 @@ export function executeAction(action: ProposedAction, decision?: ActionDecision)
       return `${option?.label ?? action.title} — recorded as sent in the simulation. No customer was contacted.`;
     default:
       return action.title.startsWith('Draft')
-        ? `${action.title} — saved as a draft in Jagr. Not filed: Jira was unavailable.`
+        ? `${action.title} — saved as a draft in Jagr. Not filed in any external tracker.`
         : `${action.title} — done in the simulated issue tracker.`;
   }
 }
@@ -82,8 +82,11 @@ export function proposeActions(args: {
   issues: IssueRecord[];
   releases: ReleaseRecord[];
   at: string;
+  /** 'imported': issues came from the user's file — nothing to link or file in an external tracker. */
+  issueSource?: 'imported';
 }): ProposedAction[] {
   const { inv, hypotheses, attention, issues, releases, at } = args;
+  const imported = args.issueSource === 'imported';
   if (!atLeast(attention, 'MEDIUM')) return [];
   const out: ProposedAction[] = [];
   const area = AREA_LABEL[inv.area].toLowerCase();
@@ -92,17 +95,21 @@ export function proposeActions(args: {
   const releaseLive = !!release && release.status !== 'ruled_out' && (release.strength === 'moderate' || release.strength === 'strong');
   const version = inv.releaseAssociation?.version;
   // Never propose writing to a source Jagr knows is down as if it would just work.
-  const jiraDown = inv.evidence.some((e) => e.provider === 'jira' && e.direction === 'gap');
-  const jiraNote = jiraDown ? ' Jira is unavailable right now: Jagr holds this as a draft and files it once Jira responds.' : '';
+  const jiraDown = imported || inv.evidence.some((e) => e.provider === 'jira' && e.direction === 'gap');
+  const jiraNote = imported
+    ? ' Jira is not connected to this workspace: Jagr prepares it as a draft you can copy into your tracker.'
+    : jiraDown
+      ? ' Jira is unavailable right now: Jagr holds this as a draft and files it once Jira responds.'
+      : '';
 
   const product = issues.filter((i) => !i.labels.includes('payment-provider'));
   if (product.length) {
     out.push(
       make(inv, 'link_issues', at, {
-        title: `Link ${product.length} Jira ${product.length === 1 ? 'issue' : 'issues'} to this investigation`,
+        title: `Link ${product.length} ${imported ? 'imported' : 'Jira'} ${product.length === 1 ? 'issue' : 'issues'} to this investigation`,
         why: 'These issues describe the same problem; linking them saves triage from rediscovering it.',
         evidence: product.slice(0, 4).map((i) => `${i.id}: ${i.title}`),
-        whatWillHappen: `Adds a comment with the Jagr investigation link to ${product.map((i) => i.id).join(', ')}.`,
+        whatWillHappen: imported ? `Links ${product.map((i) => i.id).join(', ')} to this investigation inside Jagr. Nothing is written to an external tracker.` : `Adds a comment with the Jagr investigation link to ${product.map((i) => i.id).join(', ')}.`,
         whatCouldGoWrong: 'Minimal — a comment can be deleted. No status, owner or priority changes.',
         reversible: true,
         result: `Linked ${product.map((i) => i.id).join(', ')} to this investigation`,

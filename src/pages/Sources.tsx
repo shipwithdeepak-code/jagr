@@ -10,10 +10,29 @@ import { ConnectionBadge, PROVIDER_ICON, ProviderName } from '@/components/produ
 import { SeriesChart } from '@/components/charts';
 import { Badge, Button, Card, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';
 import { useToast } from '@/components/toast';
+import { ImportedSources } from '@/components/imports';
+import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 
 const OPS: Record<string, string> = { metrics: 'getMetrics()', issues: 'getIssues()', releases: 'getReleases()', reviews: 'getReviews()', events: 'getEvents()', changes: 'getChanges()', send_email: 'send()' };
 
 export function SourcesPage() {
+  const { mode } = useProduct();
+  if (mode === 'imported') {
+    return (
+      <>
+        <PageHeader
+          title="Sources"
+          description="Your product evidence. Jagr normalises metrics, issues, releases and customer feedback into one evidence model, then investigates across them."
+          actions={<WorkspaceDataBadge />}
+        />
+        <ImportedSources />
+      </>
+    );
+  }
+  return <SampleSources />;
+}
+
+function SampleSources() {
   const { state, setConnection } = useProduct();
   const toast = useToast();
   const set = (p: ProviderId, s: ConnectionState, detail: string) => {
@@ -26,6 +45,12 @@ export function SourcesPage() {
       <PageHeader
         title="Sources"
         description="The tools you already use. Jagr reads them through one normalised adapter interface, so a Jira issue, a GA4 metric and an App Store review can be correlated as evidence."
+        actions={
+          <>
+            <WorkspaceDataBadge />
+            <TryYourOwnData />
+          </>
+        }
       />
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
@@ -110,15 +135,16 @@ export function SourcesPage() {
 export function SourceRecordPage() {
   const { provider, kind, id } = useParams();
   const ref = { provider: provider as ProviderId, kind: kind as RecordKind, id: decodeURIComponent(id ?? '') };
-  const world = defaultWorld();
+  const { state, importedWorld } = useProduct();
+  // Records resolve against the data this workspace actually investigated.
+  const world = importedWorld?.world ?? defaultWorld();
   const rec = provider && kind && id ? resolveRef(world, ref) : undefined;
-  const { state } = useProduct();
   const conn = state.connections.find((c) => c.provider === provider);
 
   if (!rec || !conn) {
     return (
       <EmptyState icon={Info} title="Record not found" action={<Link to="/sources" className="text-[13px] font-medium text-accent">Back to sources</Link>}>
-        This link doesn’t point at a record in the demo workspace.
+        This link doesn’t point at a record in this workspace’s data.
       </EmptyState>
     );
   }

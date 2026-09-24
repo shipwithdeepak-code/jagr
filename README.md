@@ -1,50 +1,90 @@
 # JAGR
 
-**Autonomous product monitoring and investigation for PMs.**
+**Your product keeps moving after you leave. Jagr investigates what changed.**
 
-> Investigate what changed. Act before it becomes an incident.
-
-Jagr watches the tools a PM already uses (Jira, Google Analytics 4, App Store Connect, Google Play Console). It investigates meaningful changes across them and tells the PM what actually needs attention: one email per real problem, with the evidence, the uncertainty and links into each source, plus a morning brief.
+An autonomous product investigator for PMs. Product signals live across analytics, tickets, releases and customer feedback. Jagr is not another dashboard. It notices a meaningful change, gathers evidence across those sources, and tests competing explanations. It separates what it observed from what it inferred and what it doesn't know. It only interrupts you when it matters, and consequential actions wait for your approval.
 
 ```
 WATCH → DETECT → INVESTIGATE → CORRELATE → ASSESS → NOTIFY → APPROVE → ACT
 ```
 
-This is a portfolio build, **not production-ready**. External product data is **simulated** unless a connector is actually connected; in this build none is. Simulated data is labelled everywhere it appears.
+This is a V1, **not production-ready**. There are no accounts: a workspace lives in the browser it was created in.
+
+## Try it with your own data (about 5 minutes)
+
+1. Open Jagr and choose **Use my own data**.
+2. **Sources → Upload data**: upload CSV or JSON files. Download the four sample files from the same panel to see the format.
+
+   | Type | Required columns | Optional |
+   |---|---|---|
+   | Metrics | `timestamp, metric, value` | `baseline` |
+   | Issues | `id, title, created_at` | `status, labels, priority, type, version, component` |
+   | Releases | `id, name, date` | `status, version, rollout, platform` |
+   | Customer feedback | `id, text, rating (1–5), created_at` | `title, version` |
+
+   - Metrics V1 can investigate: `checkout_conversion`, `signup_conversion`, `purchase_revenue`, `sessions`, `search_usage`.
+   - Timestamps must be ISO 8601; ambiguous dates like `09/24/2026` are rejected, not guessed.
+   - Every rejected row is shown with its line number and reason. Nothing is silently dropped.
+3. **Create a watch**, e.g. *Checkout health*.
+4. Choose the planner: **Deterministic**, or the **AI planner** if the deployment has one configured.
+5. **Run monitoring**, then open the investigation:
+   - what changed, why it matters, and what Jagr checked
+   - evidence, each item with its source, `USER IMPORT` status and time
+   - hypotheses, and Observed / Inferred / Unknown
+   - attention, the recommended next step and approvals
+   - the Agent Trace
+
+Imported files are normalized into the same evidence model the engine already uses. The investigator doesn't know the data came from a file, and it can't replace your data with sample data. Channels are renamed accordingly: evidence reads *Metrics*, *Issues & releases* and *Feedback*, never "Jira" or "App Store". Actions don't claim an external tracker: a Jira incident becomes a draft you can copy.
+
+**Privacy.** Imported data is used to run investigations in this workspace and is stored in this browser (`localStorage`). If AI planning is enabled, investigation context (including summaries of your evidence) is sent to the configured model provider. There is no telemetry.
+
+## Data modes
+
+| Mode | Data | Status label |
+|---|---|---|
+| **My data** (workspace) | Your CSV / JSON imports | `USER IMPORT` (sources without imports: `NOT CONFIGURED`) |
+| **Sample workspace** | A simulated night where checkout conversion drops 18% | `SIMULATED` |
+| **Demo night** | The original agent's scripted Klarna replay, separate from any workspace | `SIMULATED` |
+| **Jira Cloud** | A real connector exists (REST v3, tested against mocked responses) but needs server-side credentials, so it is shown as `NOT CONFIGURED` | `CONNECTED` once configured |
 
 ## What is real and what is simulated
 
-| Real (implemented and tested) | Simulated |
+| Real (implemented and tested) | Simulated or not built |
 |---|---|
-| Investigation engine: detection, evidence gaps, hypotheses, stopping rules, 9-call budget | Analytics (GA4) data |
-| Provider-agnostic LLM planner and provider adapters (Claude, Gemini, OpenAI, OpenAI-compatible) | App Store Connect data |
-| Real Gemini planner calls (verified with `gemini-3.1-flash-lite`) | Google Play data |
-| Deterministic policy validator between every plan and every tool call | Jira data (the Jira Cloud connector exists but is not configured) |
-| Hypotheses (for / against / unknown, weak / moderate / strong), Observed / Inferred / Unknown | Email delivery (rendered in-app, never sent) |
-| Causality guard, deduplication, attention and risk model | Production actions (rollout pause, rollback, customer messages) |
-| Approval enforcement in the execution layer (HIGH / CRITICAL) | Demo night's scripted scenario |
-| Agent Trace, golden / adversarial / planner evaluation suites | |
-| Jira Cloud connector boundary (REST v3, tested against mocked responses) | |
+| CSV / JSON import, validation and normalization into the evidence model | The sample workspace's analytics, App Store and Google Play data |
+| Investigation engine: detection, evidence gaps, hypotheses, stopping rules, 9-call budget | Jira data in the sample workspace (the connector exists but is not configured) |
+| Provider-agnostic LLM planner (Claude, Gemini, OpenAI, OpenAI-compatible) | Email delivery (rendered in-app, never sent) |
+| Real Gemini planner calls (verified with `gemini-3.1-flash-lite`, including on imported data) | Production actions (rollout pause, rollback, customer messages) |
+| Production planner endpoint (`api/planner.ts`, a Vercel function sharing the dev server's handler) | Accounts, sync across devices (the workspace is browser-local) |
+| Deterministic policy validator between every plan and every tool call | Demo night's scripted scenario |
+| Hypotheses, Observed / Inferred / Unknown, causality guard, deduplication, attention and risk model | |
+| Approval enforcement in the execution layer (HIGH / CRITICAL) | |
+| Agent Trace, and the golden / adversarial / planner / bring-your-own-data evaluation suites | |
 
-## Two environments
+## Environments
 
-- **Workspace**: the product. Your watches, monitoring runs, investigations, approvals and the planner switch (Deterministic, or the configured LLM). Sources are labelled *Simulated sources*. The golden scenario is the checkout conversion −18% night.
-- **Demo night**: a separate, deterministic, scripted replay of the original agent's overnight scenario (a Klarna payment-provider regression), with its own *Reset & replay*. It has no LLM planner. Resetting it never touches the workspace, including tasks filed from workspace investigations.
+- **Workspace**: the product (*My data* or *Sample workspace*). Watches, monitoring runs, investigations, approvals and the planner switch.
+- **Demo night**: a separate, deterministic, scripted replay with its own *Reset & replay*. It has no LLM planner, and resetting it never touches the workspace.
 
-The **Workspace | Demo night** switch in the header selects the environment, and the choice survives a reload. Tasks and Approvals show the current environment's records by default; *All environments* is an explicit option, and every record carries its environment badge.
+The **Workspace | Demo night** switch in the header selects the environment, and the choice survives a reload. Tasks and Approvals show the current environment's records by default; *All environments* is an explicit option.
 
 ## Run it
 
 ```bash
 npm install
-npm run dev              # http://localhost:5173 (includes the dev-only planner endpoint)
-npm test                 # 241 tests: engine, golden, adversarial, planner, providers, environments
+npm run dev              # http://localhost:5173 (includes the planner endpoint)
+npm test                 # 259 tests: engine, golden, adversarial, planner, providers, environments, bring-your-own-data
 npm run typecheck
-npm run build            # static build in dist/ (plans deterministically: no planner endpoint)
+npm run build
 npm run eval:planners    # MANUAL: real provider calls for configured providers; never part of npm test
 ```
 
-No API key is needed: without one, Jagr uses the deterministic planner. To plan with an LLM, see *Provider-agnostic planning* below. Keys go in `.env.local`, which is git-ignored and read only by the dev server.
+No API key is needed: without one, Jagr uses the deterministic planner and says "AI planner unavailable — deterministic investigation active".
+
+**AI planner in production.**
+- `api/planner.ts` is a Vercel serverless function built on the same handler as the dev server, and `vercel.json` routes `/api/planner/*` to it.
+- The deployment owner sets `LLM_PROVIDER`, `LLM_MODEL` and `LLM_API_KEY` as server-side environment variables in the Vercel project (never `VITE_`-prefixed). Users don't paste their own keys.
+- The endpoint spends the owner's model budget, so it accepts small requests only (64 KB) and applies a best-effort per-IP rate limit. Set spend limits with your provider as well.
 
 ## The product loop (2 minutes)
 
@@ -60,6 +100,8 @@ No API key is needed: without one, Jagr uses the deterministic planner. To plan 
 ## Architecture
 
 ```
+api/
+  planner.ts                Production planner endpoint (Vercel function; same handler as the dev server)
 src/
   product/                  ← the watch product
     types.ts                Watch, SourceConnection, WatchInvestigation, EmailNotification, MorningBriefDoc…
@@ -76,6 +118,7 @@ src/
     agent/plannerPrompt.ts  Investigation state → provider-neutral prompt
     agent/plannerManager.ts PlannerManager: timeouts, circuit breaker, plan reuse, explicit provider fallback
     agent/providers/        Server-side only: config, registry, adapters (anthropic, gemini, openai[-compatible]), endpoint
+    imports/                Bring your own data: CSV/JSON parsing, row validation, imports → World adapter
     live/*.live.ts          Manual live-provider comparison (npm run eval:planners) — never part of npm test
     agent/actions.ts        Risk-based autonomy and the approval gate (executeAction refuses without approval)
     agent/decisions.ts      Human approve / reject / modify, applied over results and appended to the trace
@@ -175,7 +218,7 @@ Notes from live Gemini testing:
 - Busy models return 503 "high demand"; Jagr labels the failure and falls back.
 - Real calls took about 0.6–18 s each, so a full monitoring run with an LLM planner takes a few minutes.
 
-- **Where keys live:** in the Vite dev server process, read only by `providers/config.ts` and used only inside adapters. The browser talks to `/api/planner/health`, `/api/planner/plan` and `/api/planner/test`, and never receives a key. Keys never go into URLs, the bundle, storage or the trace, and upstream error text is redacted. The static production build has no planner endpoint, so it runs the deterministic planner.
+- **Where keys live:** in the server process (the Vite dev server locally, the Vercel function in production), read only by `providers/config.ts` and used only inside adapters. The browser talks to `/api/planner/health`, `/api/planner/plan` and `/api/planner/test`, and never receives a key. Keys never go into URLs, the bundle, storage or the trace, and upstream error text is redacted.
 - **Fallback:**
   - A provider that is *unavailable* (timeout, unreachable, not configured, circuit open) hands over to the configured fallback provider, if there is one. The trace says *"Primary planner unavailable. Fallback provider used."*
   - A provider that returns *bad output* (malformed, empty, schema violation), or a plan the validator *rejects*, never triggers a provider switch; it goes straight to the deterministic planner.
@@ -203,7 +246,10 @@ Notes from live Gemini testing:
 
 - The Jira Cloud connector is real but not configured: Jira API tokens can't safely live in a browser app, so it needs a server. Jira stores release *dates*, not times, so minute-level release timing has to come from the stores or deploy events. Every other source is simulated and labelled SIMULATED SOURCE in the trace.
 - Live LLM planning has been verified with **Gemini only** (`gemini-3.1-flash-lite`, real API calls, checkout −18% with and without Jira). Claude and OpenAI adapters are tested against mocked native responses and a local mock server, not the live APIs. One scenario doesn't show that LLM planning beats the deterministic planner; `npm run eval:planners` is the tool for that comparison.
-- Live planning is slow and at the provider's mercy: real Gemini calls took about 0.6–18 s each (a full night takes 1–2 minutes), with intermittent 503 "high demand" errors that fall back to the deterministic planner. The planner endpoint exists only in the dev server, so the static deployment always plans deterministically.
+- Live planning is slow and at the provider's mercy: real Gemini calls took about 0.6–18 s each (a full night takes 1–2 minutes), with intermittent 503 "high demand" errors that fall back to the deterministic planner.
+- The production planner function has been verified by compiling it exactly as Node ESM and calling it locally (including a real Gemini call), but it has not yet been exercised on a live Vercel deployment. Its rate limit is per instance, so it is best effort.
+- Workspaces are browser-local: no accounts, no sync across devices, and a browser storage limit of a few MB (Jagr says so if a save fails). A hosted store with sign-in (e.g. Supabase and magic links) is the next step.
+- Imported data: V1 recognizes five metric names, uses the analytics, issue-tracker and reviews evidence channels (no crash-rate import), counts issue and review volumes against fixed baselines, and has no per-watch custom thresholds.
 - Demo night is the original scripted engine: it does not use the investigation engine or the planner, and it replays a different scenario from the workspace golden case.
 - A planner with a different strategy can spend the full 9-call budget where the deterministic planner stops early (seen in ADV-01 and ADV-12 with the impact-first test planner). The budget bounds it; the outcome was unchanged.
 - Known failures, from the adversarial set:

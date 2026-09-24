@@ -17,7 +17,9 @@ import { AttentionBadge, attentionRoute, ProviderName } from './product';
 
 /** Every tool result says where it came from. Simulated data is never presented as live. */
 export function SourceStateTag({ state }: { state?: SourceConnection['state'] }) {
-  if (!state || state === 'connected') return state ? <Badge tone="ok">LIVE SOURCE</Badge> : null;
+  if (!state || state === 'connected') return state ? <Badge tone="ok">CONNECTED</Badge> : null;
+  if (state === 'imported') return <span className="rounded bg-accent-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-accent">USER IMPORT</span>;
+  if (state === 'not_configured') return <span className="rounded bg-subtle px-1.5 py-px text-[10px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">NOT CONFIGURED</span>;
   if (state === 'simulated') return <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>;
   return <span className="rounded bg-high-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-high">{state === 'error' ? 'SOURCE ERROR' : 'SOURCE UNAVAILABLE'}</span>;
 }
@@ -555,7 +557,11 @@ export function PlannerModeLine({ info }: { info?: PlannerRunInfo }) {
       <span className="text-ink-3">Environment:</span>
       <span className="rounded bg-subtle px-1.5 py-px text-[10px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">WORKSPACE</span>
       <span className="ml-1 text-ink-3">Data:</span>
-      <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">{(i.data ?? 'simulated').toUpperCase()}</span>
+      {i.data === 'imported' ? (
+        <span className="rounded bg-accent-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-accent">USER IMPORT</span>
+      ) : (
+        <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">{(i.data ?? 'simulated').toUpperCase()}</span>
+      )}
       <span className="ml-1 text-ink-3">Planner:</span>
       <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold tracking-wide', i.mode === 'llm' ? 'bg-accent-soft text-accent' : i.mode === 'test_double' ? 'bg-high-soft text-high' : 'bg-subtle text-ink-2 ring-1 ring-inset ring-line')}>
         {i.mode === 'llm' ? 'MODEL' : i.mode === 'test_double' ? 'SCRIPTED TEST PLANNER' : 'DETERMINISTIC'}

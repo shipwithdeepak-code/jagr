@@ -74,8 +74,8 @@ export async function resolvePlanner(choice: PlannerChoice = 'deterministic', he
   if (choice === 'deterministic') return { info: { mode: 'deterministic', label: 'Deterministic planner', reason: 'Selected in the planner switch.' } };
 
   if (!health) health = await fetchPlannerHealth();
-  if (!health) return { info: { mode: 'deterministic', label: 'Deterministic planner', reason: 'Configured LLM selected, but there is no planner endpoint in this build.' } };
-  if (health.mode === 'deterministic') return { info: { mode: 'deterministic', label: 'Deterministic planner', reason: `Configured LLM selected, but no LLM provider is configured. ${health.problems?.join(' ') ?? ''}`.trim() } };
+  if (!health) return { info: { mode: 'deterministic', label: 'Deterministic planner', reason: 'AI planner unavailable — deterministic investigation active (no planner endpoint on this deployment).' } };
+  if (health.mode === 'deterministic') return { info: { mode: 'deterministic', label: 'Deterministic planner', reason: `AI planner unavailable — deterministic investigation active (no LLM provider configured). ${health.problems?.join(' ') ?? ''}`.trim() } };
 
   const p = health.primary;
   const fb = health.fallback?.configured ? health.fallback : undefined;

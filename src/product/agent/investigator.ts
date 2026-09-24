@@ -14,7 +14,7 @@ import type {
   Watch,
 } from '../types';
 import { AREA_LABEL, AREA_METRICS, SIGNALS } from '../catalog';
-import { makeLink, PROVIDERS } from '../integrations/adapters';
+import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
 import type { IssueRecord, ReleaseRecord, ReviewRecord } from '../integrations/types';
 import { metricEvidence, type Gathered } from '../engine/investigate';
 import type { MetricResult, ToolOutcome, Toolbox } from './tools';
@@ -90,6 +90,7 @@ const TOOL_NOUN: Record<ToolName, string> = {
  * Evidence the investigation didn't need can be exactly what an action needs.
  */
 export async function checkRolloutBeforeAction(args: {
+  labels?: ProviderLabels;
   toolbox: Toolbox;
   watch: Watch;
   version: string;
@@ -98,6 +99,7 @@ export async function checkRolloutBeforeAction(args: {
   at: string;
   pass: number;
 }): Promise<{ releases: ReleaseRecord[]; steps: TraceStep[] }> {
+  const P = labelOf(args.labels);
   const steps: TraceStep[] = [];
   const releases: ReleaseRecord[] = [];
   let tick = 0;
@@ -107,10 +109,10 @@ export async function checkRolloutBeforeAction(args: {
   for (const store of ['google_play', 'app_store'] as const) {
     if (!args.watch.sources.includes(store)) continue;
     const input = `${store === 'app_store' ? 'iOS' : 'Android'} releases ${fmtTime(args.since)}–${fmtTime(args.until)}`;
-    step({ kind: 'tool_call', title: `${PROVIDERS[store].short} → ${input}`, tool: 'getStoreReleases', source: store, input, why: `Before recommending an action on ${args.version}, check whether it is still rolling out on ${store === 'app_store' ? 'iOS' : 'Android'}.` });
+    step({ kind: 'tool_call', title: `${P(store).short} → ${input}`, tool: 'getStoreReleases', source: store, input, why: `Before recommending an action on ${args.version}, check whether it is still rolling out on ${store === 'app_store' ? 'iOS' : 'Android'}.` });
     const o = await args.toolbox.getStoreReleases({ since: args.since, until: args.until, store });
     if (!o.ok) {
-      step({ kind: 'result', title: `${PROVIDERS[store].name} ${o.state === 'not_in_watch' ? 'is not part of this watch' : `is ${o.state}`} — rollout state unknown`, tool: 'getStoreReleases', source: store, status: o.state === 'error' ? 'error' : 'unavailable' });
+      step({ kind: 'result', title: `${P(store).name} ${o.state === 'not_in_watch' ? 'is not part of this watch' : `is ${o.state}`} — rollout state unknown`, tool: 'getStoreReleases', source: store, status: o.state === 'error' ? 'error' : 'unavailable' });
       continue;
     }
     const r = o.data.find((x) => x.version === args.version);
@@ -183,7 +185,10 @@ export async function runInvestigation(args: {
   /** The model planner. Absent → the deterministic planner, labelled as a fallback in the trace. */
   planner?: InvestigationPlanner;
   investigationId?: string;
+  /** Source display names for this run (imported data renames channels). */
+  labels?: ProviderLabels;
 }): Promise<InvestigationOutput> {
+  const P = labelOf(args.labels);
   const { toolbox: tb, watch, primary, area, onsetAt, at, pass } = args;
   const trace: TraceStep[] = [];
   let tick = 0;
@@ -212,9 +217,17 @@ export async function runInvestigation(args: {
   const gap = (source: Exclude<ProviderId, 'email'>, o: Extract<ToolOutcome<unknown>, { ok: false }>) => {
     if (o.state === 'not_in_watch') {
       if (!g.notInWatch.includes(source)) g.notInWatch.push(source);
-      return `${PROVIDERS[source].name} is not part of this watch`;
+      return `${P(source).name} is not part of this watch`;
     }
-    const detail = `${PROVIDERS[source].name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
+    if (o.state === 'no_data') {
+      const detail = `${o.detail.charAt(0).toUpperCase()}${o.detail.slice(1)} in this workspace — not checked.`;
+      if (!g.gaps.some((x) => x.detail === detail)) {
+        g.gaps.push({ provider: source, detail, noData: true });
+        add({ id: `${source}:nodata:${g.gaps.length}`, provider: source, direction: 'gap', statement: detail, refs: [] }, 'unavailable');
+      }
+      return detail;
+    }
+    const detail = `${P(source).name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
     if (!g.gaps.some((x) => x.provider === source)) {
       g.gaps.push({ provider: source, detail });
       add({ id: `${source}:gap`, provider: source, direction: 'gap', statement: detail, refs: [] }, 'unavailable');
@@ -226,7 +239,7 @@ export async function runInvestigation(args: {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     const t = onData(o.data);
     if (o.data.series.id === areaMetric) g.areaMetric = o.data;
-    const e = metricEvidence(o.data.series, o.data.reading, args.simulatedLinks(source));
+    const e = metricEvidence(o.data.series, o.data.reading, args.simulatedLinks(source), args.labels);
     add(e, ...t);
     return { ok: true, result: e.statement.replace(/^[^:]+: /, ''), refs: e.refs };
   };
@@ -234,7 +247,7 @@ export async function runInvestigation(args: {
   const releaseStep = (o: ToolOutcome<ReleaseRecord[]>, source: Exclude<ProviderId, 'email'>) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (!o.data.length) {
-      add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${PROVIDERS[source].short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: source === 'jira' ? 'getJiraRelease' : 'getStoreReleases', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
+      add({ id: `${source}:no_release`, provider: source, direction: 'stable', statement: `${P(source).short}: no releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}.`, refs: [], query: { tool: source === 'jira' ? 'getJiraRelease' : 'getStoreReleases', input: `${fmtTime(changeWindow.since)}–${fmtTime(changeWindow.until)}` } }, 'no_release');
       return { ok: true, result: `No releases between ${fmtTime(changeWindow.since)} and ${fmtTime(changeWindow.until)}`, refs: [] };
     }
     for (const r of o.data) {
@@ -245,10 +258,10 @@ export async function runInvestigation(args: {
           id: `${source}:release:${r.id}`,
           provider: source,
           direction: 'change',
-          statement: `${PROVIDERS[source].short}: release ${r.version}${r.platform !== 'all' ? ` (${r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : 'web'})` : ''} at ${fmtTime(r.releasedAt)}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}.`,
+          statement: `${P(source).short}: release ${r.version}${r.platform !== 'all' ? ` (${r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : 'web'})` : ''} at ${fmtTime(r.releasedAt)}${r.rollout ? ` — ${r.rollout.toLowerCase()}` : ''}.`,
           onsetAt: r.releasedAt,
           refs: [ref],
-          link: link(ref, `Open ${PROVIDERS[source].short}`),
+          link: link(ref, `Open ${P(source).short}`),
         },
         'release',
       );
@@ -261,7 +274,7 @@ export async function runInvestigation(args: {
     if (!o.ok) return { ok: false, state: o.state, result: gap('jira', o), refs: [] };
     const issues = o.data;
     if (!issues.length) {
-      add({ id: `jira:no_issues:${area}`, provider: 'jira', direction: 'stable', statement: `Jira: no new ${areaLabel} issues since ${fmtTime(since)}.`, refs: [], query: { tool: 'getRecentJiraIssues', input: `${areaLabel} issues since ${fmtTime(since)}` } }, 'no_issues');
+      add({ id: `jira:no_issues:${area}`, provider: 'jira', direction: 'stable', statement: `${P('jira').short}: no new ${areaLabel} issues since ${fmtTime(since)}.`, refs: [], query: { tool: 'getRecentJiraIssues', input: `${areaLabel} issues since ${fmtTime(since)}` } }, 'no_issues');
       return { ok: true, result: `No new ${areaLabel} issues`, refs: [] };
     }
     g.issues.push(...issues);
@@ -275,7 +288,7 @@ export async function runInvestigation(args: {
           id: `jira:issues:${area}`,
           provider: 'jira',
           direction: 'degraded',
-          statement: `Jira: ${product.length} new ${areaLabel} ${product.length === 1 ? 'issue' : 'issues'} since ${fmtTime(product[0].createdAt)} (${product.slice(0, 4).map((i) => i.id).join(', ')}${product.length > 4 ? ', …' : ''}).`,
+          statement: `${P('jira').short}: ${product.length} new ${areaLabel} ${product.length === 1 ? 'issue' : 'issues'} since ${fmtTime(product[0].createdAt)} (${product.slice(0, 4).map((i) => i.id).join(', ')}${product.length > 4 ? ', …' : ''}).`,
           onsetAt: product[0].createdAt,
           refs: product.map((i) => ({ provider: 'jira', kind: 'issue', id: i.id })),
           link: link({ provider: 'jira', kind: 'issue', id: product[0].id }, 'Open Jira'),
@@ -285,7 +298,7 @@ export async function runInvestigation(args: {
     }
     if (ext) {
       add(
-        { id: `jira:external:${ext.id}`, provider: 'jira', direction: 'change', statement: `Jira: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [{ provider: 'jira', kind: 'issue', id: ext.id }], link: link({ provider: 'jira', kind: 'issue', id: ext.id }, 'Open Jira') },
+        { id: `jira:external:${ext.id}`, provider: 'jira', direction: 'change', statement: `${P('jira').short}: ${ext.id} "${ext.title}" (labelled ${ext.labels.join(', ')}) at ${fmtTime(ext.createdAt)}.`, onsetAt: ext.createdAt, refs: [{ provider: 'jira', kind: 'issue', id: ext.id }], link: link({ provider: 'jira', kind: 'issue', id: ext.id }, 'Open Jira') },
         'external_issue',
       );
     }
@@ -295,7 +308,7 @@ export async function runInvestigation(args: {
   const reviewsStep = (o: ToolOutcome<ReviewRecord[]>, source: 'app_store' | 'google_play') => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (!o.data.length) {
-      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${PROVIDERS[source].short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: source === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
+      add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no 1–2★ reviews mention ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: source === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');
       return { ok: true, result: `No negative reviews about ${areaLabel}`, refs: [] };
     }
     g.reviews.push(...o.data);
@@ -305,10 +318,10 @@ export async function runInvestigation(args: {
         id: `${source}:reviews:${area}`,
         provider: source,
         direction: 'degraded',
-        statement: `${PROVIDERS[source].short}: ${o.data.length} ${o.data.length === 1 ? 'review rated 1–2★ mentions' : 'reviews rated 1–2★ mention'} ${areaLabel} since ${fmtTime(o.data[0].createdAt)}.`,
+        statement: `${P(source).short}: ${o.data.length} ${o.data.length === 1 ? 'review rated 1–2★ mentions' : 'reviews rated 1–2★ mention'} ${areaLabel} since ${fmtTime(o.data[0].createdAt)}.`,
         onsetAt: o.data[0].createdAt,
         refs,
-        link: link(refs[0], `Open ${PROVIDERS[source].short}`),
+        link: link(refs[0], `Open ${P(source).short}`),
       },
       'reviews',
     );
@@ -391,7 +404,7 @@ export async function runInvestigation(args: {
           const tagged = v ? [...g.issues.filter((i) => i.affectsVersion === v || i.labels.includes(v)), ...g.reviews.filter((r) => r.version === v)] : [];
           if (tagged.length) forIds.push(...g.evidence.filter((e) => e.refs.some((r) => tagged.some((x) => x.id === r.id))).map((e) => e.id));
           againstIds = ids('no_release');
-          const releaseSourceDown = g.gaps.some((x) => candidates.some((c) => c.source === x.provider && c.tests.includes('release_related')));
+          const releaseSourceDown = g.gaps.some((x) => !x.noData && candidates.some((c) => c.source === x.provider && c.tests.includes('release_related')));
           // Timing is correlation. A release in the window is weak evidence; reports tagged with that
           // version make it moderate. It never becomes strong: that would be causation by timing.
           if (v) strength = tagged.length ? 'moderate' : 'weak';
@@ -406,7 +419,7 @@ export async function runInvestigation(args: {
           againstIds = [...ids('crash_stable'), ...ids('no_issues'), ...ids('no_reviews')];
           const n = degradedProviders.size;
           strength = n >= 3 ? 'strong' : n === 2 ? 'moderate' : n === 1 ? 'weak' : 'none';
-          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${PROVIDERS[c.source].short} ${TOOL_NOUN[c.tool]}`);
+          const unchecked = candidates.filter((c) => c.tests.includes(kind) && !done.has(c.key)).map((c) => `${P(c.source).short} ${TOOL_NOUN[c.tool]}`);
           if (unchecked.length) unknowns.push(`Not checked: ${[...new Set(unchecked)].join(', ')}.`);
           break;
         }
@@ -427,7 +440,7 @@ export async function runInvestigation(args: {
           unknowns.push('No server-side data is connected to confirm what analytics reports.');
           break;
         case 'external_or_unobserved':
-          statement = externalIssue ? `A third-party problem reported in Jira (${externalIssue.id})` : 'A cause outside the connected sources (payment provider, backend, marketing change)';
+          statement = externalIssue ? `A third-party problem reported in ${P('jira').short} (${externalIssue.id})` : 'A cause outside the connected sources (payment provider, backend, marketing change)';
           forIds = ids('external_issue');
           strength = forIds.length ? 'moderate' : 'weak';
           unknowns.push(area === 'checkout' ? 'Payment-provider and backend status are not connected to Jagr.' : 'Backend and marketing data are not connected to Jagr.');
@@ -461,11 +474,11 @@ export async function runInvestigation(args: {
   const diff = (a: AgentHypothesis[], b: AgentHypothesis[]) => b.flatMap((h, i) => (describe(h) !== describe(a[i]) ? [`${HYP_LABEL[h.kind]}: ${describe(a[i])} → ${describe(h)}`] : []));
 
   // ── Run ─────────────────────────────────────────────────────
-  step({ kind: 'signal', title: `Signal: ${primary.label} ${primary.magnitude}`, detail: `${PROVIDERS[primary.provider].short} · began in the ${fmtTime(primary.onsetAt)} bucket · ${args.trigger}`, source: primary.provider, refs: primary.refs });
+  step({ kind: 'signal', title: `Signal: ${primary.label} ${primary.magnitude}`, detail: `${P(primary.provider).short} · began in the ${fmtTime(primary.onsetAt)} bucket · ${args.trigger}`, source: primary.provider, refs: primary.refs });
   step({
     kind: 'plan',
     title: 'Investigation plan',
-    detail: `Keep ${kinds.length} explanations open and test each: ${kinds.map((k) => HYP_LABEL[k].toLowerCase()).join(', ')}. Sources in this watch: ${watch.sources.map((p) => `${PROVIDERS[p].short} (${args.connectionState(p)})`).join(', ')}.`,
+    detail: `Keep ${kinds.length} explanations open and test each: ${kinds.map((k) => HYP_LABEL[k].toLowerCase()).join(', ')}. Sources in this watch: ${watch.sources.map((p) => `${P(p).short} (${args.connectionState(p)})`).join(', ')}.`,
   });
   // Sources known to be down are recorded as gaps now; the validator will not let anything call them.
   for (const p of watch.sources) {
@@ -473,7 +486,7 @@ export async function runInvestigation(args: {
     const st = args.connectionState(p);
     if (st !== 'unavailable' && st !== 'error') continue;
     const detail = gap(p, { ok: false, state: st, detail: args.connectionDetail?.(p) ?? `connection ${st}` });
-    step({ kind: 'gap', title: `${PROVIDERS[p].short} unavailable — its tools will not be called`, detail, source: p, status: st as TraceStep['status'] });
+    step({ kind: 'gap', title: `${P(p).short} unavailable — its tools will not be called`, detail, source: p, status: st as TraceStep['status'] });
   }
 
   // 1. Re-read the primary signal from its source rather than trusting the detector's cached value.
@@ -499,7 +512,7 @@ export async function runInvestigation(args: {
     return { tool: (store === 'app_store' ? 'getAppStoreReviews' : 'getPlayStoreReviews') as ToolName, input: `${areaLabel} reviews, last 6h`, out };
   })();
   toolCalls++;
-  step({ kind: 'tool_call', title: `${PROVIDERS[primary.provider].short} → ${confirm.input}`, tool: confirm.tool, source: primary.provider, input: confirm.input, why: 'Re-read the signal from its source before investigating — do not trust a cached reading.' });
+  step({ kind: 'tool_call', title: `${P(primary.provider).short} → ${confirm.input}`, tool: confirm.tool, source: primary.provider, input: confirm.input, why: 'Re-read the signal from its source before investigating — do not trust a cached reading.' });
   step({ kind: 'result', title: confirm.out.result, tool: confirm.tool, source: primary.provider, status: confirm.out.ok ? 'ok' : (confirm.out.state as TraceStep['status']), refs: confirm.out.refs });
 
   let hyps = evaluate();
@@ -538,7 +551,7 @@ export async function runInvestigation(args: {
     area: areaLabel,
     budget: { used, max: BUDGET },
     hypotheses: hs.map((h) => ({ id: HYPOTHESIS_ID[h.kind], kind: h.kind, label: HYP_LABEL[h.kind], status: h.status, strength: h.strength, ceiling: CEILING[h.kind], evidenceFor: h.evidenceFor.map(statement), evidenceAgainst: h.evidenceAgainst.map(statement), unknowns: h.unknowns })),
-    evidence: g.evidence.map((e) => ({ source: PROVIDERS[e.provider].short, direction: e.direction, statement: e.statement })),
+    evidence: g.evidence.map((e) => ({ source: P(e.provider).short, direction: e.direction, statement: e.statement })),
     options: candidates.map(
       (c): PlannerOption => ({
         id: qualified(c),
@@ -669,11 +682,11 @@ export async function runInvestigation(args: {
     ].find((x) => x.c);
     const feedback = scope?.c;
     if (!untested.length && impactSettled && impact!.status !== 'ruled_out' && feedback && toolCalls < BUDGET) {
-      step({ kind: 'gap', title: scope!.title, detail: `Impact is confirmed; the cause question is not what this answers. Next: ${PROVIDERS[feedback.source].short} — ${scope!.why}` });
+      step({ kind: 'gap', title: scope!.title, detail: `Impact is confirmed; the cause question is not what this answers. Next: ${P(feedback.source).short} — ${scope!.why}` });
       done.add(feedback.key);
       toolCalls++;
       const out = await feedback.exec();
-      step({ kind: 'tool_call', title: `${PROVIDERS[feedback.source].short} → ${feedback.input}`, tool: feedback.tool, source: feedback.source, input: feedback.input, why: scope!.why });
+      step({ kind: 'tool_call', title: `${P(feedback.source).short} → ${feedback.input}`, tool: feedback.tool, source: feedback.source, input: feedback.input, why: scope!.why });
       const before = hyps;
       hyps = evaluate();
       const changed = diff(before, hyps);
@@ -681,7 +694,7 @@ export async function runInvestigation(args: {
       continue;
     }
     if (!untested.length && impactSettled) {
-      const skipped = remaining.map((c) => `${PROVIDERS[c.source].short} (${c.tool})`);
+      const skipped = remaining.map((c) => `${P(c.source).short} (${c.tool})`);
       stopReason = `Enough evidence: the ${areaLabel} problem is ${impact!.status === 'ruled_out' ? 'not confirmed by any other source' : 'confirmed by three or more independent sources'} and every competing explanation has been tested.${skipped.length ? ` Skipped ${skipped.join(', ')} — they could not change the attention decision.` : ''}`;
       break;
     }
@@ -701,8 +714,9 @@ export async function runInvestigation(args: {
     for (const k of chosen.targets) attempts[k] = (attempts[k] ?? 0) + 1;
     toolCalls++;
     const out = await next.exec();
-    if (!out.ok) failedSources.add(next.source);
-    step({ kind: 'tool_call', title: `${PROVIDERS[next.source].short} → ${next.input}`, tool: next.tool, source: next.source, input: next.input, why: next.why });
+    // Only an unreachable source is skipped for the rest of the pass — a metric with no data is not an outage.
+    if (!out.ok && out.state !== 'no_data') failedSources.add(next.source);
+    step({ kind: 'tool_call', title: `${P(next.source).short} → ${next.input}`, tool: next.tool, source: next.source, input: next.input, why: next.why });
     chosen.decision.resultSummary = out.result;
     const before = hyps;
     hyps = evaluate();

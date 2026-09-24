@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig, type StructuredMode } from './types';
+import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig, type StructuredMode } from './types.js';
 
 /**
  * OpenAI and OpenAI-compatible endpoints — Chat Completions API.

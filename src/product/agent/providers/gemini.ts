@@ -1,4 +1,4 @@
-import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types';
+import { defaultFetch, ProviderHttpError, safeErrorType, stripKeywords, TruncatedOutputError, type Fetch, type ProviderAdapter, type ProviderConfig } from './types.js';
 
 /**
  * Google Gemini — generateContent REST API. Structured output via responseMimeType

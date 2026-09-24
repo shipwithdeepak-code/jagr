@@ -4,24 +4,40 @@ import type { AttentionLevel, ConnectionState, EmailNotification, InvestigationS
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { fmtDate, fmtTime } from '@/lib/time';
 import { Badge, cx, Eyebrow, type Tone } from './ui';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { ProductContext } from '@/state/productContext';
 import { useEnvironment, type EnvironmentScope } from '@/state/environment';
 
 export const PROVIDER_ICON: Record<ProviderId, LucideIcon> = { jira: Ticket, ga4: BarChart3, app_store: Smartphone, google_play: Play, email: Mail };
 
+/** The source's display name in the current workspace (imported data renames channels). */
+export function useProviderLabel(provider: ProviderId) {
+  const ctx = useContext(ProductContext);
+  return ctx?.state.connections.find((c) => c.provider === provider)?.label ?? PROVIDERS[provider];
+}
+
+export function useSourceState(provider: ProviderId): ConnectionState | undefined {
+  const ctx = useContext(ProductContext);
+  return ctx?.state.connections.find((c) => c.provider === provider)?.state;
+}
+
 export function ProviderName({ provider, short, className }: { provider: ProviderId; short?: boolean; className?: string }) {
   const Icon = PROVIDER_ICON[provider];
+  const label = useProviderLabel(provider);
   return (
     <span className={cx('inline-flex items-center gap-1.5', className)}>
       <Icon size={13} className="shrink-0" />
-      {short ? PROVIDERS[provider].short : PROVIDERS[provider].name}
+      {short ? label.short : label.name}
     </span>
   );
 }
 
-const CONNECTION: Record<ConnectionState, { tone: Tone; label: string }> = {
+/** One vocabulary for source status, everywhere. Never blur simulated, imported and connected data. */
+export const CONNECTION: Record<ConnectionState, { tone: Tone; label: string }> = {
   connected: { tone: 'ok', label: 'Connected' },
   simulated: { tone: 'info', label: 'Simulated' },
+  imported: { tone: 'accent', label: 'User import' },
+  not_configured: { tone: 'neutral', label: 'Not configured' },
   unavailable: { tone: 'high', label: 'Unavailable' },
   error: { tone: 'crit', label: 'Error' },
 };
@@ -77,6 +93,8 @@ export function attentionRoute(level: AttentionLevel, interruptAt: AttentionLeve
 
 /** A deep link into a source. Simulated records open Jagr's record view and say so. */
 export function SourceLinkButton({ link, compact }: { link: SourceLink; compact?: boolean }) {
+  const state = useSourceState(link.provider);
+  const tag = state === 'imported' ? 'IMPORT' : link.simulated ? 'SIM' : undefined;
   return (
     <Link
       to={link.href}
@@ -84,7 +102,7 @@ export function SourceLinkButton({ link, compact }: { link: SourceLink; compact?
       className={cx('inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface font-medium shadow-card hover:bg-subtle', compact ? 'h-7 px-2 text-[12px]' : 'h-8 px-2.5 text-[12.5px]')}
     >
       <ProviderName provider={link.provider} short />
-      {link.simulated && <span className="rounded bg-info-soft px-1 text-[10px] font-semibold text-info">SIM</span>}
+      {tag && <span className={cx('rounded px-1 text-[10px] font-semibold', tag === 'IMPORT' ? 'bg-accent-soft text-accent' : 'bg-info-soft text-info')}>{tag}</span>}
       <ExternalLink size={11} className="text-ink-3" />
     </Link>
   );

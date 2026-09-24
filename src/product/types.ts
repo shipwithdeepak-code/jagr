@@ -15,18 +15,22 @@ export type ISO = string;
 export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'email';
 
 /**
- * connected  — a real connector with valid credentials (none exist in this build)
- * simulated  — deterministic fixture data, clearly labelled
- * unavailable — the provider cannot be reached; Jagr records a gap, never fabricates
- * error      — the provider responded with an error (e.g. expired token)
+ * connected      — a real connector with valid credentials (none exist in this build)
+ * simulated      — deterministic fixture data, clearly labelled
+ * imported       — data the user uploaded (CSV / JSON), labelled USER IMPORT
+ * not_configured — nothing connected or imported for this source
+ * unavailable    — the provider cannot be reached; Jagr records a gap, never fabricates
+ * error          — the provider responded with an error (e.g. expired token)
  */
-export type ConnectionState = 'connected' | 'simulated' | 'unavailable' | 'error';
+export type ConnectionState = 'connected' | 'simulated' | 'imported' | 'not_configured' | 'unavailable' | 'error';
 
 export interface SourceConnection {
   provider: ProviderId;
   state: ConnectionState;
   detail: string;
   updatedAt: ISO;
+  /** Display name override — imported data renames the channel (e.g. "Customer feedback", not "App Store"). */
+  label?: { name: string; short: string };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -418,7 +422,7 @@ export interface SchedulerLogEntry {
 export interface PlannerRunInfo {
   mode: 'llm' | 'test_double' | 'deterministic';
   /** Where the investigated data came from. The planner never changes this. */
-  data?: 'simulated' | 'live' | 'mixed';
+  data?: 'simulated' | 'imported' | 'live' | 'mixed';
   label: string;
   provider?: string;
   model?: string;
