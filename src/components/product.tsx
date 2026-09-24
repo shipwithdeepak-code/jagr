@@ -41,6 +41,7 @@ export const CONNECTION: Record<ConnectionState, { tone: Tone; label: string }> 
   not_configured: { tone: 'neutral', label: 'Not configured' },
   unavailable: { tone: 'high', label: 'Unavailable' },
   error: { tone: 'crit', label: 'Error' },
+  needs_reconnect: { tone: 'high', label: 'Needs reconnection' },
 };
 
 export function ConnectionBadge({ state }: { state: ConnectionState }) {

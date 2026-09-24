@@ -261,8 +261,9 @@ export async function runInvestigation(args: {
       }
       return detail;
     }
-    const notConfigured = args.connectionState(source) === 'not_configured';
-    const detail = notConfigured ? `${P(source).name} is not configured — its data was not checked.` : `${P(source).name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
+    const cs = args.connectionState(source);
+    const notConfigured = cs === 'not_configured' || cs === 'needs_reconnect';
+    const detail = cs === 'needs_reconnect' ? `${P(source).name} needs to be reconnected — its data was not checked.` : notConfigured ? `${P(source).name} is not configured — its data was not checked.` : `${P(source).name} is ${o.state === 'error' ? 'returning an error' : 'unavailable'} (${o.detail}) — its data was not checked.`;
     if (!g.gaps.some((x) => x.provider === source)) {
       g.gaps.push({ provider: source, detail });
       add({ id: `${source}:gap`, provider: source, direction: 'gap', statement: detail, refs: [], gap: notConfigured ? 'not_configured' : o.state === 'error' ? 'error' : 'unavailable' }, 'unavailable');
@@ -490,7 +491,7 @@ export async function runInvestigation(args: {
   }
 
   // Candidates that read one source vs. a role query across several.
-  const down = (x: SourceId) => failedSources.has(x) || ['unavailable', 'error', 'not_configured'].includes(args.connectionState(x));
+  const down = (x: SourceId) => failedSources.has(x) || ['unavailable', 'error', 'not_configured', 'needs_reconnect'].includes(args.connectionState(x));
   const reachable = (c: Candidate) => (c.sources ? c.sources.some((x) => !down(x)) : !down(c.source));
   const labelFor = (c: Candidate) => (c.sources ? 'Changes' : P(c.source).short);
   const covers = (c: Candidate, x: string) => (c.sources ? c.sources.includes(x as SourceId) : c.source === x);
@@ -645,9 +646,9 @@ export async function runInvestigation(args: {
   for (const p of watch.sources) {
     if (p === 'email' || p === primary.provider) continue;
     const st = args.connectionState(p);
-    if (st !== 'unavailable' && st !== 'error' && st !== 'not_configured') continue;
+    if (st !== 'unavailable' && st !== 'error' && st !== 'not_configured' && st !== 'needs_reconnect') continue;
     const detail = gap(p, { ok: false, state: st === 'error' ? 'error' : 'unavailable', detail: args.connectionDetail?.(p) ?? `connection ${st}` });
-    step({ kind: 'gap', title: `${P(p).short} ${st === 'not_configured' ? 'not configured' : 'unavailable'} — its tools will not be called`, detail, source: p, status: st === 'error' ? 'error' : 'unavailable' });
+    step({ kind: 'gap', title: `${P(p).short} ${st === 'not_configured' ? 'not configured' : st === 'needs_reconnect' ? 'needs reconnection' : 'unavailable'} — its tools will not be called`, detail, source: p, status: st === 'error' ? 'error' : 'unavailable' });
   }
 
   // 1. Re-read the primary signal from its source rather than trusting the detector's cached value.

@@ -27,8 +27,10 @@ export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github'
  * not_configured — nothing connected or imported for this source
  * unavailable    — the provider cannot be reached; Jagr records a gap, never fabricates
  * error          — the provider responded with an error (e.g. expired token)
+ * needs_reconnect — configuration arrived (e.g. from a workspace export) but credentials never travel:
+ *                  someone must connect it again before Jagr can read it
  */
-export type ConnectionState = 'connected' | 'simulated' | 'imported' | 'not_configured' | 'unavailable' | 'error';
+export type ConnectionState = 'connected' | 'simulated' | 'imported' | 'not_configured' | 'unavailable' | 'error' | 'needs_reconnect';
 
 export interface SourceConnection {
   provider: ProviderId;

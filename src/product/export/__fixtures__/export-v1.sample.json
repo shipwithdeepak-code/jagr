@@ -1,0 +1,4029 @@
+{
+ "format": "jagr.workspace-export",
+ "version": 1,
+ "exportedAt": "2026-09-24T08:10:00.000Z",
+ "producer": {
+  "app": "jagr",
+  "appVersion": "1.1.0",
+  "origin": "browser-local"
+ },
+ "workspace": {
+  "id": "local",
+  "name": "Sample workspace",
+  "mode": "sample",
+  "createdAt": "2026-09-24T08:00:00.000Z",
+  "settings": {
+   "planner": "deterministic",
+   "aiEgressAllowed": true,
+   "timezone": "UTC"
+  },
+  "brief": {
+   "enabled": true,
+   "time": "08:00",
+   "timezone": "UTC"
+  },
+  "clock": "2026-09-24T08:05:00.000Z"
+ },
+ "connections": [
+  {
+   "id": "jira",
+   "source": "jira",
+   "provider": "simulated",
+   "roles": [
+    "work_items",
+    "changes"
+   ],
+   "authKind": "simulated",
+   "state": "simulated",
+   "detail": "Deterministic fixture data (no credentials configured)",
+   "config": {},
+   "updatedAt": "2026-09-23T17:55:00.000Z"
+  },
+  {
+   "id": "ga4",
+   "source": "ga4",
+   "provider": "simulated",
+   "roles": [
+    "metrics"
+   ],
+   "authKind": "simulated",
+   "state": "simulated",
+   "detail": "Deterministic fixture data (no credentials configured)",
+   "config": {},
+   "updatedAt": "2026-09-23T17:55:00.000Z"
+  },
+  {
+   "id": "app_store",
+   "source": "app_store",
+   "provider": "simulated",
+   "roles": [
+    "metrics",
+    "changes",
+    "feedback"
+   ],
+   "authKind": "simulated",
+   "state": "simulated",
+   "detail": "Deterministic fixture data (no credentials configured)",
+   "config": {},
+   "updatedAt": "2026-09-23T17:55:00.000Z"
+  },
+  {
+   "id": "google_play",
+   "source": "google_play",
+   "provider": "simulated",
+   "roles": [
+    "metrics",
+    "changes",
+    "feedback"
+   ],
+   "authKind": "simulated",
+   "state": "simulated",
+   "detail": "Deterministic fixture data (no credentials configured)",
+   "config": {},
+   "updatedAt": "2026-09-23T17:55:00.000Z"
+  }
+ ],
+ "metricDefinitions": [],
+ "watches": [
+  {
+   "id": "w-checkout",
+   "name": "Checkout health",
+   "description": "Checkout conversion, crashes, checkout bugs and reviews that mention paying.",
+   "template": "checkout_health",
+   "area": "checkout",
+   "sources": [
+    "ga4",
+    "jira",
+    "app_store",
+    "google_play"
+   ],
+   "signals": [
+    {
+     "key": "metric:checkout_conversion"
+    },
+    {
+     "key": "metric:purchase_revenue"
+    },
+    {
+     "key": "metric:crash_free_sessions_ios"
+    },
+    {
+     "key": "metric:crash_free_sessions_android"
+    },
+    {
+     "key": "work_items",
+     "area": "checkout"
+    },
+    {
+     "key": "feedback",
+     "area": "checkout"
+    },
+    {
+     "key": "changes"
+    }
+   ],
+   "schedule": {
+    "frequency": "30m",
+    "dailyAt": "07:00"
+   },
+   "timezone": "UTC",
+   "severityThreshold": "LOW",
+   "notificationPolicy": {
+    "interruptAt": "HIGH",
+    "briefMin": "MEDIUM",
+    "morningBrief": true
+   },
+   "status": "active",
+   "createdAt": "2026-09-23T17:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z"
+  },
+  {
+   "id": "w-signup",
+   "name": "Signup funnel",
+   "description": "Signup conversion and signup-related bugs.",
+   "template": "signup_funnel",
+   "area": "signup",
+   "sources": [
+    "ga4",
+    "jira"
+   ],
+   "signals": [
+    {
+     "key": "metric:signup_conversion"
+    },
+    {
+     "key": "work_items",
+     "area": "signup"
+    },
+    {
+     "key": "changes"
+    }
+   ],
+   "schedule": {
+    "frequency": "1h",
+    "dailyAt": "07:00"
+   },
+   "timezone": "UTC",
+   "severityThreshold": "LOW",
+   "notificationPolicy": {
+    "interruptAt": "HIGH",
+    "briefMin": "MEDIUM",
+    "morningBrief": true
+   },
+   "status": "active",
+   "createdAt": "2026-09-23T17:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z"
+  },
+  {
+   "id": "w-customer",
+   "name": "Customer issues",
+   "description": "New Jira bugs and negative app reviews across every product area.",
+   "template": "customer_issues",
+   "area": "*",
+   "sources": [
+    "jira",
+    "app_store",
+    "google_play"
+   ],
+   "signals": [
+    {
+     "key": "work_items",
+     "area": "*"
+    },
+    {
+     "key": "feedback",
+     "area": "*"
+    }
+   ],
+   "schedule": {
+    "frequency": "1h",
+    "dailyAt": "07:00"
+   },
+   "timezone": "UTC",
+   "severityThreshold": "LOW",
+   "notificationPolicy": {
+    "interruptAt": "HIGH",
+    "briefMin": "MEDIUM",
+    "morningBrief": true
+   },
+   "status": "active",
+   "createdAt": "2026-09-23T17:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z"
+  },
+  {
+   "id": "w-search",
+   "name": "Search & discovery",
+   "description": "Search usage and search bugs.",
+   "template": "search_discovery",
+   "area": "search",
+   "sources": [
+    "ga4",
+    "jira"
+   ],
+   "signals": [
+    {
+     "key": "metric:search_usage"
+    },
+    {
+     "key": "work_items",
+     "area": "search"
+    }
+   ],
+   "schedule": {
+    "frequency": "4h",
+    "dailyAt": "07:00"
+   },
+   "timezone": "UTC",
+   "severityThreshold": "LOW",
+   "notificationPolicy": {
+    "interruptAt": "HIGH",
+    "briefMin": "MEDIUM",
+    "morningBrief": true
+   },
+   "status": "active",
+   "createdAt": "2026-09-23T17:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z"
+  }
+ ],
+ "imports": [],
+ "investigations": [
+  {
+   "id": "wi-checkout-1930",
+   "watchId": "w-checkout",
+   "watchIds": [
+    "w-checkout",
+    "w-customer"
+   ],
+   "area": "checkout",
+   "title": "Checkout health degraded",
+   "summary": "Checkout conversion −18% since 19:00; corroborated by Jira, App Store; began 20 min after release 4.8.1. Investigation confidence high that the checkout problem is real; cause not established.",
+   "startedAt": "2026-09-23T19:30:00.000Z",
+   "updatedAt": "2026-09-24T08:00:00.000Z",
+   "status": "CONFIRMED",
+   "statusHistory": [
+    {
+     "state": "DETECTED",
+     "at": "2026-09-23T19:30:00.000Z"
+    },
+    {
+     "state": "INVESTIGATING",
+     "at": "2026-09-23T20:00:00.000Z"
+    },
+    {
+     "state": "CONFIRMED",
+     "at": "2026-09-23T20:30:00.000Z"
+    }
+   ],
+   "attention": "HIGH",
+   "attentionReason": "Core funnel degradation (Checkout conversion −18%) corroborated by 2 other sources.",
+   "confidence": 0.91,
+   "confidenceReason": "3 independent sources show the degradation. This is confidence that the checkout problem is real, not that its cause is known.",
+   "signals": [
+    {
+     "key": "metric:checkout_conversion",
+     "provider": "ga4",
+     "area": "checkout",
+     "label": "Checkout conversion",
+     "magnitude": "−18%",
+     "ratio": 3.6823529411764695,
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "detectedAt": "2026-09-24T08:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "key": "metric:purchase_revenue",
+     "provider": "ga4",
+     "area": "checkout",
+     "label": "Purchase revenue",
+     "magnitude": "−16%",
+     "ratio": 1.5630791666666664,
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "detectedAt": "2026-09-24T08:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ]
+    },
+    {
+     "key": "metric:crash_free_sessions_ios",
+     "provider": "app_store",
+     "area": "stability",
+     "label": "Crash-free sessions (iOS)",
+     "magnitude": "−0.66 pts",
+     "ratio": 2.2008333333333496,
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "detectedAt": "2026-09-24T08:00:00.000Z",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ]
+    },
+    {
+     "key": "metric:crash_free_sessions_android",
+     "provider": "google_play",
+     "area": "stability",
+     "label": "Crash-free sessions (Android)",
+     "magnitude": "−0.34 pts",
+     "ratio": 1.1491666666666354,
+     "onsetAt": "2026-09-23T19:15:00.000Z",
+     "detectedAt": "2026-09-24T08:00:00.000Z",
+     "refs": [
+      {
+       "provider": "google_play",
+       "kind": "metric",
+       "id": "google_play.crash_free_sessions"
+      }
+     ]
+    },
+    {
+     "key": "work_items",
+     "provider": "jira",
+     "area": "checkout",
+     "label": "Checkout issues in Jira",
+     "magnitude": "2 new issues",
+     "ratio": 0.6666666666666666,
+     "onsetAt": "2026-09-23T19:20:00.000Z",
+     "detectedAt": "2026-09-24T00:30:00.000Z",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-514"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-516"
+      }
+     ]
+    },
+    {
+     "key": "feedback",
+     "provider": "app_store",
+     "area": "checkout",
+     "label": "App Store reviews about checkout",
+     "magnitude": "2 negative reviews",
+     "ratio": 0.6666666666666666,
+     "onsetAt": "2026-09-23T20:12:00.000Z",
+     "detectedAt": "2026-09-24T02:00:00.000Z",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9010"
+      },
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9011"
+      }
+     ]
+    }
+   ],
+   "evidence": [
+    {
+     "id": "ga4:metric:checkout_conversion",
+     "provider": "ga4",
+     "direction": "degraded",
+     "statement": "Analytics: Checkout conversion is 2.77% vs 3.40% baseline (−18%) since 19:00.",
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ],
+     "link": {
+      "label": "Open Analytics",
+      "provider": "ga4",
+      "href": "/sources/ga4/metric/ga4.checkout_conversion",
+      "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=checkout_conversion",
+      "simulated": true,
+      "ref": {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     }
+    },
+    {
+     "id": "jira:release:jira-rel-4.8.1",
+     "provider": "jira",
+     "direction": "change",
+     "statement": "Jira: release 4.8.1 dated 18:30 — a planned date, not when it reached users.",
+     "onsetAt": "2026-09-23T18:30:00.000Z",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      }
+     ],
+     "link": {
+      "label": "Open Jira",
+      "provider": "jira",
+      "href": "/sources/jira/release/jira-rel-4.8.1",
+      "externalUrl": "https://your-company.atlassian.net/projects/APP/versions",
+      "simulated": true,
+      "ref": {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      }
+     },
+     "changeKind": "release",
+     "timing": "planned"
+    },
+    {
+     "id": "app_store:release:as-rel-4.8.1",
+     "provider": "app_store",
+     "direction": "change",
+     "statement": "App Store: release 4.8.1 (iOS) at 18:40 — phased release.",
+     "onsetAt": "2026-09-23T18:40:00.000Z",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      }
+     ],
+     "link": {
+      "label": "Open App Store",
+      "provider": "app_store",
+      "href": "/sources/app_store/release/as-rel-4.8.1",
+      "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/distribution",
+      "simulated": true,
+      "ref": {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      }
+     },
+     "changeKind": "release",
+     "timing": "actual"
+    },
+    {
+     "id": "google_play:release:gp-rel-4.8.1",
+     "provider": "google_play",
+     "direction": "change",
+     "statement": "Play Store: release 4.8.1 (Android) at 18:45 — 20% staged rollout.",
+     "onsetAt": "2026-09-23T18:45:00.000Z",
+     "refs": [
+      {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     ],
+     "link": {
+      "label": "Open Play Store",
+      "provider": "google_play",
+      "href": "/sources/google_play/release/gp-rel-4.8.1",
+      "externalUrl": "https://play.google.com/console/app/tempo/vitals/crashes",
+      "simulated": true,
+      "ref": {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     },
+     "changeKind": "release",
+     "timing": "actual"
+    },
+    {
+     "id": "jira:issues:checkout",
+     "provider": "jira",
+     "direction": "degraded",
+     "statement": "Jira: 4 new checkout issues since 19:20 (PAY-512, PAY-513, PAY-514, PAY-516).",
+     "onsetAt": "2026-09-23T19:20:00.000Z",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-513"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-514"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-516"
+      }
+     ],
+     "link": {
+      "label": "Open Jira",
+      "provider": "jira",
+      "href": "/sources/jira/issue/PAY-512",
+      "externalUrl": "https://your-company.atlassian.net/browse/PAY-512",
+      "simulated": true,
+      "ref": {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      }
+     }
+    },
+    {
+     "id": "ga4:metric:sessions",
+     "provider": "ga4",
+     "direction": "stable",
+     "statement": "Analytics: Sessions is within its normal range (+0.4% vs baseline).",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "link": {
+      "label": "Open Analytics",
+      "provider": "ga4",
+      "href": "/sources/ga4/metric/ga4.sessions",
+      "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=sessions",
+      "simulated": true,
+      "ref": {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     }
+    },
+    {
+     "id": "app_store:metric:crash_free_sessions_ios",
+     "provider": "app_store",
+     "direction": "degraded",
+     "statement": "App Store: Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00.",
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ],
+     "link": {
+      "label": "Open App Store",
+      "provider": "app_store",
+      "href": "/sources/app_store/metric/app_store.crash_free_sessions",
+      "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/distribution",
+      "simulated": true,
+      "ref": {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     }
+    },
+    {
+     "id": "ga4:metric:purchase_revenue",
+     "provider": "ga4",
+     "direction": "degraded",
+     "statement": "Analytics: Purchase revenue is $4,050 vs $4,800 baseline (−16%) since 19:00.",
+     "onsetAt": "2026-09-23T19:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ],
+     "link": {
+      "label": "Open Analytics",
+      "provider": "ga4",
+      "href": "/sources/ga4/metric/ga4.purchase_revenue",
+      "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=purchase_revenue",
+      "simulated": true,
+      "ref": {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     }
+    },
+    {
+     "id": "app_store:reviews:checkout",
+     "provider": "app_store",
+     "direction": "degraded",
+     "statement": "App Store: 3 reviews rated 1–2★ mention checkout since 20:12.",
+     "onsetAt": "2026-09-23T20:12:00.000Z",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9010"
+      },
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9011"
+      },
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9012"
+      }
+     ],
+     "link": {
+      "label": "Open App Store",
+      "provider": "app_store",
+      "href": "/sources/app_store/review/as-r-9010",
+      "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/appstore/activity/ratings",
+      "simulated": true,
+      "ref": {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9010"
+      }
+     }
+    }
+   ],
+   "observed": [
+    "Analytics: Checkout conversion is 2.77% vs 3.40% baseline (−18%) since 19:00.",
+    "Jira: release 4.8.1 dated 18:30 — a planned date, not when it reached users.",
+    "App Store: release 4.8.1 (iOS) at 18:40 — phased release.",
+    "Play Store: release 4.8.1 (Android) at 18:45 — 20% staged rollout.",
+    "Jira: 4 new checkout issues since 19:20 (PAY-512, PAY-513, PAY-514, PAY-516).",
+    "Analytics: Sessions is within its normal range (+0.4% vs baseline).",
+    "App Store: Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00.",
+    "Analytics: Purchase revenue is $4,050 vs $4,800 baseline (−16%) since 19:00.",
+    "App Store: 3 reviews rated 1–2★ mention checkout since 20:12."
+   ],
+   "inferred": [
+    "3 sources first degraded within 20 minutes of each other, so they likely reflect the same underlying checkout problem.",
+    "The degradation began 20 minutes after release 4.8.1 — a temporal association.",
+    "Traffic is normal, so the change is in how people convert, not in how many arrive."
+   ],
+   "unknowns": [
+    "Whether release 4.8.1 is responsible — timing alone does not establish causation.",
+    "Payment-provider and server error data are not connected to Jagr.",
+    "Not checked: Play Store crash rate, Play Store reviews."
+   ],
+   "hypotheses": [
+    {
+     "statement": "Checkout degradation temporally associated with release 4.8.1",
+     "basis": "temporal_correlation",
+     "role": "leading"
+    },
+    {
+     "statement": "An unrelated factor outside the connected sources (payment provider, backend, marketing change)",
+     "basis": "outside_sources",
+     "role": "alternative"
+    }
+   ],
+   "likelyExplanation": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation.",
+   "uncertainty": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow.",
+   "recommendedNextStep": "Review checkout errors and crash reports associated with 4.8.1, and triage PAY-512 and PAY-513.",
+   "correlatedProviders": [
+    "ga4",
+    "jira",
+    "app_store"
+   ],
+   "sourceLinks": [
+    {
+     "label": "Open Analytics",
+     "provider": "ga4",
+     "href": "/sources/ga4/metric/ga4.checkout_conversion",
+     "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=checkout_conversion",
+     "simulated": true,
+     "ref": {
+      "provider": "ga4",
+      "kind": "metric",
+      "id": "ga4.checkout_conversion"
+     }
+    },
+    {
+     "label": "Open Jira",
+     "provider": "jira",
+     "href": "/sources/jira/issue/PAY-512",
+     "externalUrl": "https://your-company.atlassian.net/browse/PAY-512",
+     "simulated": true,
+     "ref": {
+      "provider": "jira",
+      "kind": "issue",
+      "id": "PAY-512"
+     }
+    },
+    {
+     "label": "Open App Store",
+     "provider": "app_store",
+     "href": "/sources/app_store/metric/app_store.crash_free_sessions",
+     "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/distribution",
+     "simulated": true,
+     "ref": {
+      "provider": "app_store",
+      "kind": "metric",
+      "id": "app_store.crash_free_sessions"
+     }
+    },
+    {
+     "label": "Open Analytics",
+     "provider": "ga4",
+     "href": "/sources/ga4/metric/ga4.purchase_revenue",
+     "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=purchase_revenue",
+     "simulated": true,
+     "ref": {
+      "provider": "ga4",
+      "kind": "metric",
+      "id": "ga4.purchase_revenue"
+     }
+    },
+    {
+     "label": "Open App Store",
+     "provider": "app_store",
+     "href": "/sources/app_store/review/as-r-9010",
+     "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/appstore/activity/ratings",
+     "simulated": true,
+     "ref": {
+      "provider": "app_store",
+      "kind": "review",
+      "id": "as-r-9010"
+     }
+    },
+    {
+     "label": "Open Jira",
+     "provider": "jira",
+     "href": "/sources/jira/release/jira-rel-4.8.1",
+     "externalUrl": "https://your-company.atlassian.net/projects/APP/versions",
+     "simulated": true,
+     "ref": {
+      "provider": "jira",
+      "kind": "release",
+      "id": "jira-rel-4.8.1"
+     }
+    },
+    {
+     "label": "Open App Store",
+     "provider": "app_store",
+     "href": "/sources/app_store/release/as-rel-4.8.1",
+     "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/distribution",
+     "simulated": true,
+     "ref": {
+      "provider": "app_store",
+      "kind": "release",
+      "id": "as-rel-4.8.1"
+     }
+    },
+    {
+     "label": "Open Play Store",
+     "provider": "google_play",
+     "href": "/sources/google_play/release/gp-rel-4.8.1",
+     "externalUrl": "https://play.google.com/console/app/tempo/vitals/crashes",
+     "simulated": true,
+     "ref": {
+      "provider": "google_play",
+      "kind": "release",
+      "id": "gp-rel-4.8.1"
+     }
+    },
+    {
+     "label": "Open Play Store",
+     "provider": "google_play",
+     "href": "/sources/google_play/metric/google_play.crash_free_sessions",
+     "externalUrl": "https://play.google.com/console/app/tempo/vitals/crashes",
+     "simulated": true,
+     "ref": {
+      "provider": "google_play",
+      "kind": "metric",
+      "id": "google_play.crash_free_sessions"
+     }
+    },
+    {
+     "label": "Open Jira",
+     "provider": "jira",
+     "href": "/sources/jira/issue/PAY-514",
+     "externalUrl": "https://your-company.atlassian.net/browse/PAY-514",
+     "simulated": true,
+     "ref": {
+      "provider": "jira",
+      "kind": "issue",
+      "id": "PAY-514"
+     }
+    },
+    {
+     "label": "Open Jira",
+     "provider": "jira",
+     "href": "/sources/jira/issue/PAY-516",
+     "externalUrl": "https://your-company.atlassian.net/browse/PAY-516",
+     "simulated": true,
+     "ref": {
+      "provider": "jira",
+      "kind": "issue",
+      "id": "PAY-516"
+     }
+    },
+    {
+     "label": "Open App Store",
+     "provider": "app_store",
+     "href": "/sources/app_store/review/as-r-9011",
+     "externalUrl": "https://appstoreconnect.apple.com/apps/tempo/appstore/activity/ratings",
+     "simulated": true,
+     "ref": {
+      "provider": "app_store",
+      "kind": "review",
+      "id": "as-r-9011"
+     }
+    }
+   ],
+   "jagrPath": "/investigations/w/wi-checkout-1930",
+   "jagrLink": "https://jagr.vercel.app/investigations/w/wi-checkout-1930",
+   "dedupeKey": "checkout:2026-09-23",
+   "runs": [
+    {
+     "at": "2026-09-23T19:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": false,
+     "note": "Possible fluctuation: Checkout conversion −19%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.32 pts · LOW · low investigation confidence"
+    },
+    {
+     "at": "2026-09-23T20:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.34 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T20:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.35 pts, Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T21:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.37 pts, Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T21:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": false,
+     "note": "Customer issues saw Checkout issues in Jira (2 new issues) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-23T21:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.36 pts, Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T22:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.32 pts, Checkout issues in Jira 3 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T22:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": true,
+     "note": "Customer issues saw Checkout issues in Jira (3 new issues) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-23T22:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.32 pts, Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T23:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −17%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.34 pts, Checkout issues in Jira 2 new issues, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T23:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": false,
+     "note": "Customer issues saw Checkout issues in Jira (2 new issues), App Store reviews about checkout (2 negative reviews) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-23T23:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.36 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-23T23:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": false,
+     "note": "Possible fluctuation: Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T00:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.68 pts, Crash-free sessions (Android) −0.36 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T00:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": false,
+     "note": "Possible fluctuation: Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T00:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": false,
+     "note": "Customer issues saw Checkout issues in Jira (2 new issues), App Store reviews about checkout (2 negative reviews) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-24T00:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.35 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T00:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": false,
+     "note": "Possible fluctuation: Checkout issues in Jira 2 new issues · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T01:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.36 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T01:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": false,
+     "note": "Customer issues saw App Store reviews about checkout (2 negative reviews) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-24T01:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.68 pts, Crash-free sessions (Android) −0.37 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T02:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.36 pts, App Store reviews about checkout 2 negative reviews · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T02:00:00.000Z",
+     "watchId": "w-customer",
+     "anomalous": false,
+     "note": "Customer issues saw App Store reviews about checkout (2 negative reviews) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "at": "2026-09-24T02:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.34 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T03:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.34 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T03:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.36 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T04:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T04:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −17%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.33 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T05:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −17%, Crash-free sessions (iOS) −0.68 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T05:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.69 pts, Crash-free sessions (Android) −0.34 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T06:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −15%, Crash-free sessions (iOS) −0.68 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T06:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T07:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T07:30:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.67 pts, Crash-free sessions (Android) −0.35 pts · HIGH · high investigation confidence"
+    },
+    {
+     "at": "2026-09-24T08:00:00.000Z",
+     "watchId": "w-checkout",
+     "anomalous": true,
+     "note": "Degraded: Checkout conversion −18%, Purchase revenue −16%, Crash-free sessions (iOS) −0.66 pts, Crash-free sessions (Android) −0.34 pts · HIGH · high investigation confidence"
+    }
+   ],
+   "notifiedLevels": [
+    "HIGH"
+   ],
+   "trace": [
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-0",
+     "at": "2026-09-23T19:30:00.000Z",
+     "pass": 1,
+     "kind": "signal",
+     "title": "Signal: Checkout conversion −19%",
+     "detail": "Analytics · began in the 19:00 bucket · detected by the Checkout health watch",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-1",
+     "at": "2026-09-23T19:30:01.000Z",
+     "pass": 1,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated), App Store (simulated), Play Store (simulated)."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-2",
+     "at": "2026-09-23T19:30:02.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Analytics → checkout_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "checkout_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-3",
+     "at": "2026-09-23T19:30:05.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Checkout conversion is 2.77% vs 3.40% baseline (−19%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-4",
+     "at": "2026-09-23T19:30:06.000Z",
+     "pass": 1,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-5",
+     "at": "2026-09-23T19:30:07.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)"
+     }
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-6",
+     "at": "2026-09-23T19:30:08.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Changes → Jira, App Store, Play Store · 15:00–19:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "input": "Jira, App Store, Play Store · 15:00–19:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-7",
+     "at": "2026-09-23T19:30:11.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      },
+      {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      },
+      {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     ],
+     "changed": [
+      "Release-related: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-8",
+     "at": "2026-09-23T19:30:12.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting checkout bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "1 checkout issue: PAY-512"
+     }
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-9",
+     "at": "2026-09-23T19:30:13.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Jira → checkout issues created since 18:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "checkout issues created since 18:00",
+     "why": "Are people reporting checkout bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-10",
+     "at": "2026-09-23T19:30:16.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "1 checkout issue: PAY-512",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      }
+     ],
+     "changed": [
+      "Release-related: weak → moderate",
+      "Real product issue: untested → moderate",
+      "Measurement artifact: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-11",
+     "at": "2026-09-23T19:30:17.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(sessions)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(sessions)",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(sessions)",
+      "resultSummary": "Sessions is within its normal range (−0.1% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-12",
+     "at": "2026-09-23T19:30:18.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-13",
+     "at": "2026-09-23T19:30:21.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Sessions is within its normal range (−0.1% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-14",
+     "at": "2026-09-23T19:30:22.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(crash_free_sessions_ios)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(crash_free_sessions_ios)",
+      "evidenceGap": "Real product issue is only moderate",
+      "reason": "Is crash-free sessions (ios) worse than normal?",
+      "hypothesesAffected": [
+       "HYP-02"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(crash_free_sessions_ios)",
+      "resultSummary": "Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00."
+     }
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-15",
+     "at": "2026-09-23T19:30:23.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "App Store → crash_free_sessions_ios",
+     "tool": "getMetric",
+     "source": "app_store",
+     "input": "crash_free_sessions_ios",
+     "why": "Is crash-free sessions (ios) worse than normal?"
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-16",
+     "at": "2026-09-23T19:30:26.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00.",
+     "tool": "getMetric",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ],
+     "changed": [
+      "Real product issue: moderate → strong"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-17",
+     "at": "2026-09-23T19:30:27.000Z",
+     "pass": 1,
+     "kind": "gap",
+     "title": "Scope gap: how much revenue is affected?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: Analytics — Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-18",
+     "at": "2026-09-23T19:30:28.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Analytics → purchase_revenue",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "purchase_revenue",
+     "why": "Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-19",
+     "at": "2026-09-23T19:30:31.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Purchase revenue is $4,039 vs $4,800 baseline (−16%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-20",
+     "at": "2026-09-23T19:30:32.000Z",
+     "pass": 1,
+     "kind": "gap",
+     "title": "Scope gap: are customers noticing?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: App Store — Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-21",
+     "at": "2026-09-23T19:30:33.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "App Store → 1–2★ reviews mentioning checkout since 18:00",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "input": "1–2★ reviews mentioning checkout since 18:00",
+     "why": "Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-22",
+     "at": "2026-09-23T19:30:36.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "No negative reviews about checkout",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T19:30:00.000Z-1-23",
+     "at": "2026-09-23T19:30:37.000Z",
+     "pass": 1,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Enough evidence: the checkout problem is confirmed by three or more independent sources and every competing explanation has been tested. Skipped Play Store (getMetric), Play Store (getFeedback) — they could not change the attention decision."
+    },
+    {
+     "id": "wi-checkout-1930-1-close-0",
+     "at": "2026-09-23T19:30:38.000Z",
+     "pass": 1,
+     "kind": "assessment",
+     "title": "Evidence lines up across Analytics, Jira, App Store",
+     "detail": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation."
+    },
+    {
+     "id": "wi-checkout-1930-1-close-1",
+     "at": "2026-09-23T19:30:39.000Z",
+     "pass": 1,
+     "kind": "uncertainty",
+     "title": "Release 4.8.1 is not proven causal",
+     "detail": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow."
+    },
+    {
+     "id": "wi-checkout-1930-1-close-2",
+     "at": "2026-09-23T19:30:40.000Z",
+     "pass": 1,
+     "kind": "attention",
+     "title": "Attention: LOW",
+     "detail": "A single degraded reading that has not persisted — likely a fluctuation. Investigation confidence: low — that a real checkout problem exists, not that its cause is known."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-0",
+     "at": "2026-09-23T20:00:00.000Z",
+     "pass": 2,
+     "kind": "signal",
+     "title": "Signal: Checkout conversion −18%",
+     "detail": "Analytics · began in the 19:00 bucket · scheduled re-check by Checkout health",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-1",
+     "at": "2026-09-23T20:00:01.000Z",
+     "pass": 2,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated), App Store (simulated), Play Store (simulated)."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-2",
+     "at": "2026-09-23T20:00:02.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Analytics → checkout_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "checkout_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-3",
+     "at": "2026-09-23T20:00:05.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-4",
+     "at": "2026-09-23T20:00:06.000Z",
+     "pass": 2,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-5",
+     "at": "2026-09-23T20:00:07.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)"
+     }
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-6",
+     "at": "2026-09-23T20:00:08.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Changes → Jira, App Store, Play Store · 15:00–19:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "input": "Jira, App Store, Play Store · 15:00–19:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-7",
+     "at": "2026-09-23T20:00:11.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      },
+      {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      },
+      {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     ],
+     "changed": [
+      "Release-related: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-8",
+     "at": "2026-09-23T20:00:12.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting checkout bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "1 checkout issue: PAY-512"
+     }
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-9",
+     "at": "2026-09-23T20:00:13.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Jira → checkout issues created since 18:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "checkout issues created since 18:00",
+     "why": "Are people reporting checkout bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-10",
+     "at": "2026-09-23T20:00:16.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "1 checkout issue: PAY-512",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      }
+     ],
+     "changed": [
+      "Release-related: weak → moderate",
+      "Real product issue: untested → moderate",
+      "Measurement artifact: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-11",
+     "at": "2026-09-23T20:00:17.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(sessions)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(sessions)",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(sessions)",
+      "resultSummary": "Sessions is within its normal range (−0.3% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-12",
+     "at": "2026-09-23T20:00:18.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-13",
+     "at": "2026-09-23T20:00:21.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Sessions is within its normal range (−0.3% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-14",
+     "at": "2026-09-23T20:00:22.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(crash_free_sessions_ios)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(crash_free_sessions_ios)",
+      "evidenceGap": "Real product issue is only moderate",
+      "reason": "Is crash-free sessions (ios) worse than normal?",
+      "hypothesesAffected": [
+       "HYP-02"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(crash_free_sessions_ios)",
+      "resultSummary": "Crash-free sessions (iOS) is 99.05% vs 99.72% baseline (−0.67 pts) since 19:00."
+     }
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-15",
+     "at": "2026-09-23T20:00:23.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "App Store → crash_free_sessions_ios",
+     "tool": "getMetric",
+     "source": "app_store",
+     "input": "crash_free_sessions_ios",
+     "why": "Is crash-free sessions (ios) worse than normal?"
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-16",
+     "at": "2026-09-23T20:00:26.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Crash-free sessions (iOS) is 99.05% vs 99.72% baseline (−0.67 pts) since 19:00.",
+     "tool": "getMetric",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ],
+     "changed": [
+      "Real product issue: moderate → strong"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-17",
+     "at": "2026-09-23T20:00:27.000Z",
+     "pass": 2,
+     "kind": "gap",
+     "title": "Scope gap: how much revenue is affected?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: Analytics — Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-18",
+     "at": "2026-09-23T20:00:28.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Analytics → purchase_revenue",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "purchase_revenue",
+     "why": "Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-19",
+     "at": "2026-09-23T20:00:31.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Purchase revenue is $4,053 vs $4,800 baseline (−16%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-20",
+     "at": "2026-09-23T20:00:32.000Z",
+     "pass": 2,
+     "kind": "gap",
+     "title": "Scope gap: are customers noticing?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: App Store — Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-21",
+     "at": "2026-09-23T20:00:33.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "App Store → 1–2★ reviews mentioning checkout since 18:00",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "input": "1–2★ reviews mentioning checkout since 18:00",
+     "why": "Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-22",
+     "at": "2026-09-23T20:00:36.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "No negative reviews about checkout",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:00:00.000Z-2-23",
+     "at": "2026-09-23T20:00:37.000Z",
+     "pass": 2,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Enough evidence: the checkout problem is confirmed by three or more independent sources and every competing explanation has been tested. Skipped Play Store (getMetric), Play Store (getFeedback) — they could not change the attention decision."
+    },
+    {
+     "id": "wi-checkout-1930-2-close-0",
+     "at": "2026-09-23T20:00:38.000Z",
+     "pass": 2,
+     "kind": "assessment",
+     "title": "Evidence lines up across Analytics, Jira, App Store",
+     "detail": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation."
+    },
+    {
+     "id": "wi-checkout-1930-2-close-1",
+     "at": "2026-09-23T20:00:39.000Z",
+     "pass": 2,
+     "kind": "uncertainty",
+     "title": "Release 4.8.1 is not proven causal",
+     "detail": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow."
+    },
+    {
+     "id": "wi-checkout-1930-2-close-2",
+     "at": "2026-09-23T20:00:40.000Z",
+     "pass": 2,
+     "kind": "attention",
+     "title": "Attention: HIGH",
+     "detail": "Core funnel degradation (Checkout conversion −18%) corroborated by 2 other sources. Investigation confidence: high — that a real checkout problem exists, not that its cause is known."
+    },
+    {
+     "id": "wi-checkout-1930-2-close-3",
+     "at": "2026-09-23T20:00:41.000Z",
+     "pass": 2,
+     "kind": "action",
+     "title": "LOW risk · Link 1 Jira issue to this investigation",
+     "detail": "Done automatically (low risk, reversible). Linked PAY-512 to this investigation"
+    },
+    {
+     "id": "wi-checkout-1930-2-close-4",
+     "at": "2026-09-23T20:00:42.000Z",
+     "pass": 2,
+     "kind": "action",
+     "title": "MEDIUM risk · Open a Jira incident for the checkout degradation",
+     "detail": "Recommended — one click to do it. HIGH attention: a core checkout degradation corroborated across sources needs an owner now."
+    },
+    {
+     "id": "wi-checkout-1930-2-close-5",
+     "at": "2026-09-23T20:00:43.000Z",
+     "pass": 2,
+     "kind": "approval",
+     "title": "HIGH risk · Pause the 4.8.1 rollout",
+     "detail": "Prepared — waiting for your approval. The checkout degradation began 20 minutes after 4.8.1 started rolling out. Pausing limits exposure while the team investigates — it does not assume the release is the cause."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-0",
+     "at": "2026-09-23T20:30:00.000Z",
+     "pass": 3,
+     "kind": "signal",
+     "title": "Signal: Checkout conversion −18%",
+     "detail": "Analytics · began in the 19:00 bucket · scheduled re-check by Checkout health",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-1",
+     "at": "2026-09-23T20:30:01.000Z",
+     "pass": 3,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated), App Store (simulated), Play Store (simulated)."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-2",
+     "at": "2026-09-23T20:30:02.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "Analytics → checkout_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "checkout_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-3",
+     "at": "2026-09-23T20:30:05.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-4",
+     "at": "2026-09-23T20:30:06.000Z",
+     "pass": 3,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-5",
+     "at": "2026-09-23T20:30:07.000Z",
+     "pass": 3,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)"
+     }
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-6",
+     "at": "2026-09-23T20:30:08.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "Changes → Jira, App Store, Play Store · 15:00–19:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "input": "Jira, App Store, Play Store · 15:00–19:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-7",
+     "at": "2026-09-23T20:30:11.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      },
+      {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      },
+      {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     ],
+     "changed": [
+      "Release-related: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-8",
+     "at": "2026-09-23T20:30:12.000Z",
+     "pass": 3,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting checkout bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "2 checkout issues: PAY-512, PAY-513"
+     }
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-9",
+     "at": "2026-09-23T20:30:13.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "Jira → checkout issues created since 18:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "checkout issues created since 18:00",
+     "why": "Are people reporting checkout bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-10",
+     "at": "2026-09-23T20:30:16.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "2 checkout issues: PAY-512, PAY-513",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-513"
+      }
+     ],
+     "changed": [
+      "Release-related: weak → moderate",
+      "Real product issue: untested → moderate",
+      "Measurement artifact: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-11",
+     "at": "2026-09-23T20:30:17.000Z",
+     "pass": 3,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(sessions)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(sessions)",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(sessions)",
+      "resultSummary": "Sessions is within its normal range (−0.0% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-12",
+     "at": "2026-09-23T20:30:18.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-13",
+     "at": "2026-09-23T20:30:21.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "Sessions is within its normal range (−0.0% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-14",
+     "at": "2026-09-23T20:30:22.000Z",
+     "pass": 3,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(crash_free_sessions_ios)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(crash_free_sessions_ios)",
+      "evidenceGap": "Real product issue is only moderate",
+      "reason": "Is crash-free sessions (ios) worse than normal?",
+      "hypothesesAffected": [
+       "HYP-02"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(crash_free_sessions_ios)",
+      "resultSummary": "Crash-free sessions (iOS) is 99.05% vs 99.72% baseline (−0.67 pts) since 19:00."
+     }
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-15",
+     "at": "2026-09-23T20:30:23.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "App Store → crash_free_sessions_ios",
+     "tool": "getMetric",
+     "source": "app_store",
+     "input": "crash_free_sessions_ios",
+     "why": "Is crash-free sessions (ios) worse than normal?"
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-16",
+     "at": "2026-09-23T20:30:26.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "Crash-free sessions (iOS) is 99.05% vs 99.72% baseline (−0.67 pts) since 19:00.",
+     "tool": "getMetric",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ],
+     "changed": [
+      "Real product issue: moderate → strong"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-17",
+     "at": "2026-09-23T20:30:27.000Z",
+     "pass": 3,
+     "kind": "gap",
+     "title": "Scope gap: how much revenue is affected?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: Analytics — Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-18",
+     "at": "2026-09-23T20:30:28.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "Analytics → purchase_revenue",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "purchase_revenue",
+     "why": "Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-19",
+     "at": "2026-09-23T20:30:31.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "Purchase revenue is $4,054 vs $4,800 baseline (−16%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-20",
+     "at": "2026-09-23T20:30:32.000Z",
+     "pass": 3,
+     "kind": "gap",
+     "title": "Scope gap: are customers noticing?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: App Store — Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-21",
+     "at": "2026-09-23T20:30:33.000Z",
+     "pass": 3,
+     "kind": "tool_call",
+     "title": "App Store → 1–2★ reviews mentioning checkout since 18:00",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "input": "1–2★ reviews mentioning checkout since 18:00",
+     "why": "Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-22",
+     "at": "2026-09-23T20:30:36.000Z",
+     "pass": 3,
+     "kind": "result",
+     "title": "1 negative review: “Checkout keeps crashing”",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9010"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T20:30:00.000Z-3-23",
+     "at": "2026-09-23T20:30:37.000Z",
+     "pass": 3,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Enough evidence: the checkout problem is confirmed by three or more independent sources and every competing explanation has been tested. Skipped Play Store (getMetric), Play Store (getFeedback) — they could not change the attention decision."
+    },
+    {
+     "id": "wi-checkout-1930-3-close-0",
+     "at": "2026-09-23T20:30:38.000Z",
+     "pass": 3,
+     "kind": "assessment",
+     "title": "Evidence lines up across Analytics, Jira, App Store",
+     "detail": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation."
+    },
+    {
+     "id": "wi-checkout-1930-3-close-1",
+     "at": "2026-09-23T20:30:39.000Z",
+     "pass": 3,
+     "kind": "uncertainty",
+     "title": "Release 4.8.1 is not proven causal",
+     "detail": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow."
+    },
+    {
+     "id": "wi-checkout-1930-notify-2026-09-23T20:30:00.000Z",
+     "at": "2026-09-23T20:30:40.000Z",
+     "pass": 3,
+     "kind": "notify",
+     "title": "Emailed the PM: “Jagr: Checkout conversion dropped 18%”",
+     "detail": "HIGH and confirmed — notify."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T21:00:00.000Z",
+     "at": "2026-09-23T21:00:00.000Z",
+     "pass": 3,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-dedupe-2026-09-23T21:00:00.000Z-w-customer",
+     "at": "2026-09-23T21:00:00.000Z",
+     "pass": 3,
+     "kind": "signal",
+     "title": "Also seen by Customer issues",
+     "detail": "Customer issues saw Checkout issues in Jira (2 new issues) — linked to this investigation instead of opening a duplicate."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T21:30:00.000Z",
+     "at": "2026-09-23T21:30:00.000Z",
+     "pass": 3,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T22:00:00.000Z",
+     "at": "2026-09-23T22:00:00.000Z",
+     "pass": 3,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T22:30:00.000Z",
+     "at": "2026-09-23T22:30:00.000Z",
+     "pass": 3,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-0",
+     "at": "2026-09-23T23:00:00.000Z",
+     "pass": 4,
+     "kind": "signal",
+     "title": "Signal: Checkout conversion −18%",
+     "detail": "Analytics · began in the 19:00 bucket · scheduled re-check by Checkout health",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-1",
+     "at": "2026-09-23T23:00:01.000Z",
+     "pass": 4,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated), App Store (simulated), Play Store (simulated)."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-2",
+     "at": "2026-09-23T23:00:02.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "Analytics → checkout_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "checkout_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-3",
+     "at": "2026-09-23T23:00:05.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "Checkout conversion is 2.79% vs 3.40% baseline (−18%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.checkout_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-4",
+     "at": "2026-09-23T23:00:06.000Z",
+     "pass": 4,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-5",
+     "at": "2026-09-23T23:00:07.000Z",
+     "pass": 4,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)"
+     }
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-6",
+     "at": "2026-09-23T23:00:08.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "Changes → Jira, App Store, Play Store · 15:00–19:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "input": "Jira, App Store, Play Store · 15:00–19:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-7",
+     "at": "2026-09-23T23:00:11.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "Jira: release 4.8.1 dated 18:30 (30 min before the change began; planned date) · App Store: release 4.8.1 at 18:40 (20 min before the change began) · Play Store: release 4.8.1 at 18:45 (15 min before the change began)",
+     "tool": "getChanges",
+     "sources": [
+      "jira",
+      "app_store",
+      "google_play"
+     ],
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "release",
+       "id": "jira-rel-4.8.1"
+      },
+      {
+       "provider": "app_store",
+       "kind": "release",
+       "id": "as-rel-4.8.1"
+      },
+      {
+       "provider": "google_play",
+       "kind": "release",
+       "id": "gp-rel-4.8.1"
+      }
+     ],
+     "changed": [
+      "Release-related: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-8",
+     "at": "2026-09-23T23:00:12.000Z",
+     "pass": 4,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting checkout bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "3 checkout issues: PAY-512, PAY-513, PAY-514"
+     }
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-9",
+     "at": "2026-09-23T23:00:13.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "Jira → checkout issues created since 18:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "checkout issues created since 18:00",
+     "why": "Are people reporting checkout bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-10",
+     "at": "2026-09-23T23:00:16.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "3 checkout issues: PAY-512, PAY-513, PAY-514",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-512"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-513"
+      },
+      {
+       "provider": "jira",
+       "kind": "issue",
+       "id": "PAY-514"
+      }
+     ],
+     "changed": [
+      "Release-related: weak → moderate",
+      "Real product issue: untested → moderate",
+      "Measurement artifact: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-11",
+     "at": "2026-09-23T23:00:17.000Z",
+     "pass": 4,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(sessions)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(sessions)",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(sessions)",
+      "resultSummary": "Sessions is within its normal range (+0.1% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-12",
+     "at": "2026-09-23T23:00:18.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-13",
+     "at": "2026-09-23T23:00:21.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "Sessions is within its normal range (+0.1% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-14",
+     "at": "2026-09-23T23:00:22.000Z",
+     "pass": 4,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric(crash_free_sessions_ios)",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-checkout-1930",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric(crash_free_sessions_ios)",
+      "evidenceGap": "Real product issue is only moderate",
+      "reason": "Is crash-free sessions (ios) worse than normal?",
+      "hypothesesAffected": [
+       "HYP-02"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric(crash_free_sessions_ios)",
+      "resultSummary": "Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00."
+     }
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-15",
+     "at": "2026-09-23T23:00:23.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "App Store → crash_free_sessions_ios",
+     "tool": "getMetric",
+     "source": "app_store",
+     "input": "crash_free_sessions_ios",
+     "why": "Is crash-free sessions (ios) worse than normal?"
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-16",
+     "at": "2026-09-23T23:00:26.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "Crash-free sessions (iOS) is 99.06% vs 99.72% baseline (−0.66 pts) since 19:00.",
+     "tool": "getMetric",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "metric",
+       "id": "app_store.crash_free_sessions"
+      }
+     ],
+     "changed": [
+      "Real product issue: moderate → strong"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-17",
+     "at": "2026-09-23T23:00:27.000Z",
+     "pass": 4,
+     "kind": "gap",
+     "title": "Scope gap: how much revenue is affected?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: Analytics — Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-18",
+     "at": "2026-09-23T23:00:28.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "Analytics → purchase_revenue",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "purchase_revenue",
+     "why": "Size the business impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-19",
+     "at": "2026-09-23T23:00:31.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "Purchase revenue is $3,996 vs $4,800 baseline (−17%) since 19:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.purchase_revenue"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-20",
+     "at": "2026-09-23T23:00:32.000Z",
+     "pass": 4,
+     "kind": "gap",
+     "title": "Scope gap: are customers noticing?",
+     "detail": "Impact is confirmed; the cause question is not what this answers. Next: App Store — Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-21",
+     "at": "2026-09-23T23:00:33.000Z",
+     "pass": 4,
+     "kind": "tool_call",
+     "title": "App Store → 1–2★ reviews mentioning checkout since 18:00",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "input": "1–2★ reviews mentioning checkout since 18:00",
+     "why": "Scope customer-visible impact before deciding who to tell and what to prepare."
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-22",
+     "at": "2026-09-23T23:00:36.000Z",
+     "pass": 4,
+     "kind": "result",
+     "title": "2 negative reviews: “Checkout keeps crashing” …",
+     "tool": "getFeedback",
+     "source": "app_store",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9010"
+      },
+      {
+       "provider": "app_store",
+       "kind": "review",
+       "id": "as-r-9011"
+      }
+     ],
+     "changed": [
+      "No change to any explanation — scoping only"
+     ]
+    },
+    {
+     "id": "2026-09-23T23:00:00.000Z-4-23",
+     "at": "2026-09-23T23:00:37.000Z",
+     "pass": 4,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Enough evidence: the checkout problem is confirmed by three or more independent sources and every competing explanation has been tested. Skipped Play Store (getMetric), Play Store (getFeedback) — they could not change the attention decision."
+    },
+    {
+     "id": "wi-checkout-1930-4-close-0",
+     "at": "2026-09-23T23:00:38.000Z",
+     "pass": 4,
+     "kind": "assessment",
+     "title": "Evidence lines up across Analytics, Jira, App Store",
+     "detail": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation."
+    },
+    {
+     "id": "wi-checkout-1930-4-close-1",
+     "at": "2026-09-23T23:00:39.000Z",
+     "pass": 4,
+     "kind": "uncertainty",
+     "title": "Release 4.8.1 is not proven causal",
+     "detail": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T23:30:00.000Z",
+     "at": "2026-09-23T23:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-23T23:30:00.000Z",
+     "at": "2026-09-23T23:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T00:00:00.000Z",
+     "at": "2026-09-24T00:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T00:00:00.000Z",
+     "at": "2026-09-24T00:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T00:30:00.000Z",
+     "at": "2026-09-24T00:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T00:30:00.000Z",
+     "at": "2026-09-24T00:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T01:00:00.000Z",
+     "at": "2026-09-24T01:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T01:30:00.000Z",
+     "at": "2026-09-24T01:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T02:00:00.000Z",
+     "at": "2026-09-24T02:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T02:30:00.000Z",
+     "at": "2026-09-24T02:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T03:00:00.000Z",
+     "at": "2026-09-24T03:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T03:30:00.000Z",
+     "at": "2026-09-24T03:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T04:00:00.000Z",
+     "at": "2026-09-24T04:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T04:30:00.000Z",
+     "at": "2026-09-24T04:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T05:00:00.000Z",
+     "at": "2026-09-24T05:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T05:30:00.000Z",
+     "at": "2026-09-24T05:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T06:00:00.000Z",
+     "at": "2026-09-24T06:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T06:30:00.000Z",
+     "at": "2026-09-24T06:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T07:00:00.000Z",
+     "at": "2026-09-24T07:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T07:30:00.000Z",
+     "at": "2026-09-24T07:30:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-checkout-1930-recheck-2026-09-24T08:00:00.000Z",
+     "at": "2026-09-24T08:00:00.000Z",
+     "pass": 4,
+     "kind": "recheck",
+     "title": "Re-checked: Checkout conversion still −18%",
+     "detail": "7 tool calls · no material change to evidence, explanations or attention."
+    }
+   ],
+   "agentHypotheses": [
+    {
+     "kind": "release_related",
+     "statement": "The change is related to release 4.8.1",
+     "status": "supported",
+     "strength": "moderate",
+     "evidenceFor": [
+      "app_store:release:as-rel-4.8.1",
+      "google_play:release:gp-rel-4.8.1",
+      "jira:release:jira-rel-4.8.1",
+      "jira:issues:checkout",
+      "app_store:reviews:checkout"
+     ],
+     "evidenceAgainst": [],
+     "unknowns": [
+      "Whether release 4.8.1 is responsible — timing is not causation."
+     ]
+    },
+    {
+     "kind": "shared_product_issue",
+     "statement": "A real checkout problem is affecting users (bug or crash)",
+     "status": "supported",
+     "strength": "strong",
+     "evidenceFor": [
+      "ga4:metric:checkout_conversion",
+      "jira:issues:checkout",
+      "app_store:metric:crash_free_sessions_ios",
+      "ga4:metric:purchase_revenue",
+      "app_store:reviews:checkout"
+     ],
+     "evidenceAgainst": [],
+     "unknowns": [
+      "Not checked: Play Store crash rate, Play Store reviews."
+     ]
+    },
+    {
+     "kind": "demand_shift",
+     "statement": "Fewer people reached the funnel (traffic or demand change)",
+     "status": "ruled_out",
+     "strength": "none",
+     "evidenceFor": [],
+     "evidenceAgainst": [
+      "ga4:metric:sessions"
+     ],
+     "unknowns": []
+    },
+    {
+     "kind": "measurement_artifact",
+     "statement": "A tracking or measurement change, not a real change in behaviour",
+     "status": "ruled_out",
+     "strength": "none",
+     "evidenceFor": [],
+     "evidenceAgainst": [
+      "ga4:metric:purchase_revenue",
+      "jira:issues:checkout",
+      "app_store:metric:crash_free_sessions_ios",
+      "app_store:reviews:checkout"
+     ],
+     "unknowns": [
+      "No server-side data is connected to confirm what analytics reports."
+     ]
+    },
+    {
+     "kind": "external_or_unobserved",
+     "statement": "A cause outside the connected sources (payment provider, backend, marketing change)",
+     "status": "open",
+     "strength": "weak",
+     "evidenceFor": [],
+     "evidenceAgainst": [],
+     "unknowns": [
+      "Payment-provider and backend status are not connected to Jagr."
+     ]
+    }
+   ],
+   "actions": [
+    {
+     "id": "act-wi-checkout-1930-link_work_items",
+     "investigationId": "wi-checkout-1930",
+     "kind": "link_work_items",
+     "risk": "LOW",
+     "autonomy": "autonomous",
+     "status": "executed",
+     "proposedAt": "2026-09-23T20:00:00.000Z",
+     "title": "Link 1 Jira issue to this investigation",
+     "why": "These issues describe the same problem; linking them saves triage from rediscovering it.",
+     "evidence": [
+      "PAY-512: Checkout spinner never completes on iOS 4.8.1"
+     ],
+     "whatWillHappen": "Adds a comment with the Jagr investigation link to PAY-512.",
+     "whatCouldGoWrong": "Minimal — a comment can be deleted. No status, owner or priority changes.",
+     "reversible": true,
+     "result": "Linked PAY-512 to this investigation"
+    },
+    {
+     "id": "act-wi-checkout-1930-create_incident",
+     "investigationId": "wi-checkout-1930",
+     "kind": "create_incident",
+     "risk": "MEDIUM",
+     "autonomy": "recommend",
+     "status": "recommended",
+     "proposedAt": "2026-09-23T20:00:00.000Z",
+     "title": "Open a Jira incident for the checkout degradation",
+     "why": "HIGH attention: a core checkout degradation corroborated across sources needs an owner now.",
+     "evidence": [
+      "Analytics: Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.",
+      "Jira: release 4.8.1 dated 18:30 — a planned date, not when it reached users.",
+      "App Store: release 4.8.1 (iOS) at 18:40 — phased release.",
+      "Play Store: release 4.8.1 (Android) at 18:45 — 20% staged rollout.",
+      "Jira: 1 new checkout issue since 19:20 (PAY-512)."
+     ],
+     "whatWillHappen": "Creates an incident ticket with the evidence, the timeline and a link back to this investigation.",
+     "whatCouldGoWrong": "Starts the incident process for something that might resolve on its own.",
+     "reversible": true
+    },
+    {
+     "id": "act-wi-checkout-1930-pause_rollout",
+     "investigationId": "wi-checkout-1930",
+     "kind": "pause_rollout",
+     "risk": "HIGH",
+     "autonomy": "prepare_and_notify",
+     "status": "awaiting_approval",
+     "proposedAt": "2026-09-23T20:00:00.000Z",
+     "title": "Pause the 4.8.1 rollout",
+     "why": "The checkout degradation began 20 minutes after 4.8.1 started rolling out. Pausing limits exposure while the team investigates — it does not assume the release is the cause.",
+     "evidence": [
+      "Analytics: Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.",
+      "Jira: release 4.8.1 dated 18:30 — a planned date, not when it reached users.",
+      "App Store: release 4.8.1 (iOS) at 18:40 — phased release.",
+      "Play Store: release 4.8.1 (Android) at 18:45 — 20% staged rollout.",
+      "Jira: 1 new checkout issue since 19:20 (PAY-512)."
+     ],
+     "whatWillHappen": "Halts further rollout of 4.8.1; users who already have it keep it.",
+     "whatCouldGoWrong": "If the release is not the cause, fixes shipped in it are delayed and the degradation continues.",
+     "reversible": true,
+     "options": [
+      {
+       "id": "android",
+       "label": "Pause the Android staged rollout of 4.8.1",
+       "description": "Stops the 20% staged rollout from growing."
+      },
+      {
+       "id": "both",
+       "label": "Pause Android and iOS rollouts of 4.8.1",
+       "description": "Also pauses the phased release."
+      }
+     ]
+    }
+   ],
+   "toolCalls": 28,
+   "stopReason": "Enough evidence: the checkout problem is confirmed by three or more independent sources and every competing explanation has been tested. Skipped Play Store (getMetric), Play Store (getFeedback) — they could not change the attention decision.",
+   "releaseAssociation": {
+    "version": "4.8.1",
+    "releasedAt": "2026-09-23T18:40:00.000Z",
+    "minutesBeforeOnset": 20,
+    "kind": "release",
+    "timing": "actual"
+   }
+  },
+  {
+   "id": "wi-signup-0000",
+   "watchId": "w-signup",
+   "watchIds": [
+    "w-signup"
+   ],
+   "area": "signup",
+   "title": "Signup conversion declined",
+   "summary": "Signup conversion −8.7% since 23:00; only Analytics shows it. Investigation confidence low that the signup problem is real; cause not established.",
+   "startedAt": "2026-09-24T00:00:00.000Z",
+   "updatedAt": "2026-09-24T08:00:00.000Z",
+   "status": "CONFIRMED",
+   "statusHistory": [
+    {
+     "state": "DETECTED",
+     "at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+     "state": "INVESTIGATING",
+     "at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+     "state": "CONFIRMED",
+     "at": "2026-09-24T01:00:00.000Z"
+    }
+   ],
+   "attention": "MEDIUM",
+   "attentionReason": "Persistent funnel degradation with no corroborating source — worth a look, not an interruption.",
+   "confidence": 0.5,
+   "confidenceReason": "1 source shows the degradation. This is confidence that the signup problem is real, not that its cause is known.",
+   "signals": [
+    {
+     "key": "metric:signup_conversion",
+     "provider": "ga4",
+     "area": "signup",
+     "label": "Signup conversion",
+     "magnitude": "−8.7%",
+     "ratio": 1.730416666666669,
+     "onsetAt": "2026-09-23T23:00:00.000Z",
+     "detectedAt": "2026-09-24T08:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ]
+    }
+   ],
+   "evidence": [
+    {
+     "id": "ga4:metric:signup_conversion",
+     "provider": "ga4",
+     "direction": "degraded",
+     "statement": "Analytics: Signup conversion is 10.96% vs 12.00% baseline (−8.7%) since 23:00.",
+     "onsetAt": "2026-09-23T23:00:00.000Z",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ],
+     "link": {
+      "label": "Open Analytics",
+      "provider": "ga4",
+      "href": "/sources/ga4/metric/ga4.signup_conversion",
+      "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=signup_conversion",
+      "simulated": true,
+      "ref": {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     }
+    },
+    {
+     "id": "jira:no_release",
+     "provider": "jira",
+     "direction": "stable",
+     "statement": "Jira: no releases between 19:00 and 23:30.",
+     "refs": [],
+     "query": {
+      "tool": "getChanges",
+      "input": "19:00–23:30"
+     }
+    },
+    {
+     "id": "jira:no_issues:signup",
+     "provider": "jira",
+     "direction": "stable",
+     "statement": "Jira: no new signup issues since 22:00.",
+     "refs": [],
+     "query": {
+      "tool": "getWorkItems",
+      "input": "signup issues since 22:00"
+     }
+    },
+    {
+     "id": "ga4:metric:sessions",
+     "provider": "ga4",
+     "direction": "stable",
+     "statement": "Analytics: Sessions is within its normal range (+0.4% vs baseline).",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "link": {
+      "label": "Open Analytics",
+      "provider": "ga4",
+      "href": "/sources/ga4/metric/ga4.sessions",
+      "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=sessions",
+      "simulated": true,
+      "ref": {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     }
+    }
+   ],
+   "observed": [
+    "Analytics: Signup conversion is 10.96% vs 12.00% baseline (−8.7%) since 23:00.",
+    "Jira: no releases between 19:00 and 23:30.",
+    "Jira: no new signup issues since 22:00.",
+    "Analytics: Sessions is within its normal range (+0.4% vs baseline)."
+   ],
+   "inferred": [
+    "Traffic is normal, so the change is in how people convert, not in how many arrive.",
+    "Only one source shows this change; it may be a real shift or a measurement issue."
+   ],
+   "unknowns": [
+    "What is behind the change — no release or other change was found in the window.",
+    "Server-side error data is not connected to Jagr.",
+    "No server-side data is connected to confirm what analytics reports."
+   ],
+   "hypotheses": [
+    {
+     "statement": "Signup conversion decline without corroborating signals",
+     "basis": "single_source",
+     "role": "leading"
+    },
+    {
+     "statement": "An unrelated factor outside the connected sources (payment provider, backend, marketing change)",
+     "basis": "outside_sources",
+     "role": "alternative"
+    }
+   ],
+   "likelyExplanation": "Only Analytics shows this change. There is not enough evidence to explain it.",
+   "uncertainty": "The data does not establish causation. No second source confirms the change.",
+   "recommendedNextStep": "Check the signup conversion tracking and compare with backend data before acting.",
+   "correlatedProviders": [
+    "ga4"
+   ],
+   "sourceLinks": [
+    {
+     "label": "Open Analytics",
+     "provider": "ga4",
+     "href": "/sources/ga4/metric/ga4.signup_conversion",
+     "externalUrl": "https://analytics.google.com/analytics/web/#/reports/explorer?metric=signup_conversion",
+     "simulated": true,
+     "ref": {
+      "provider": "ga4",
+      "kind": "metric",
+      "id": "ga4.signup_conversion"
+     }
+    }
+   ],
+   "jagrPath": "/investigations/w/wi-signup-0000",
+   "jagrLink": "https://jagr.vercel.app/investigations/w/wi-signup-0000",
+   "dedupeKey": "signup:2026-09-23",
+   "runs": [
+    {
+     "at": "2026-09-24T00:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −8.8% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T01:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −9.2% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T02:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −8.9% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T03:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −8.4% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T04:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −9.2% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T05:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −9.1% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T06:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −8.8% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T07:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −9.0% · MEDIUM · low investigation confidence"
+    },
+    {
+     "at": "2026-09-24T08:00:00.000Z",
+     "watchId": "w-signup",
+     "anomalous": true,
+     "note": "Degraded: Signup conversion −8.7% · MEDIUM · low investigation confidence"
+    }
+   ],
+   "notifiedLevels": [],
+   "trace": [
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-0",
+     "at": "2026-09-24T00:00:00.000Z",
+     "pass": 1,
+     "kind": "signal",
+     "title": "Signal: Signup conversion −8.8%",
+     "detail": "Analytics · began in the 23:00 bucket · detected by the Signup funnel watch",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-1",
+     "at": "2026-09-24T00:00:01.000Z",
+     "pass": 1,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated)."
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-2",
+     "at": "2026-09-24T00:00:02.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Analytics → signup_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "signup_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-3",
+     "at": "2026-09-24T00:00:05.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Signup conversion is 10.94% vs 12.00% baseline (−8.8%) since 23:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-4",
+     "at": "2026-09-24T00:00:06.000Z",
+     "pass": 1,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-5",
+     "at": "2026-09-24T00:00:07.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "No releases or changes between 19:00 and 23:30"
+     }
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-6",
+     "at": "2026-09-24T00:00:08.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Changes → Jira · 19:00–23:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira"
+     ],
+     "input": "Jira · 19:00–23:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-7",
+     "at": "2026-09-24T00:00:11.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "No releases or changes between 19:00 and 23:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira"
+     ],
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "Release-related: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-8",
+     "at": "2026-09-24T00:00:12.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting signup bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "No new signup issues"
+     }
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-9",
+     "at": "2026-09-24T00:00:13.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Jira → signup issues created since 22:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "signup issues created since 22:00",
+     "why": "Are people reporting signup bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-10",
+     "at": "2026-09-24T00:00:16.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "No new signup issues",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "Real product issue: untested → weak, contested",
+      "Measurement artifact: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-11",
+     "at": "2026-09-24T00:00:17.000Z",
+     "pass": 1,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric",
+      "resultSummary": "Sessions is within its normal range (+0.1% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-12",
+     "at": "2026-09-24T00:00:18.000Z",
+     "pass": 1,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-13",
+     "at": "2026-09-24T00:00:21.000Z",
+     "pass": 1,
+     "kind": "result",
+     "title": "Sessions is within its normal range (+0.1% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-24T00:00:00.000Z-1-14",
+     "at": "2026-09-24T00:00:22.000Z",
+     "pass": 1,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Evidence is insufficient and no remaining source in this watch can add more. Jagr will not guess a cause."
+    },
+    {
+     "id": "wi-signup-0000-1-close-0",
+     "at": "2026-09-24T00:00:23.000Z",
+     "pass": 1,
+     "kind": "assessment",
+     "title": "Only Analytics shows the change",
+     "detail": "Only Analytics shows this change. There is not enough evidence to explain it."
+    },
+    {
+     "id": "wi-signup-0000-1-close-1",
+     "at": "2026-09-24T00:00:24.000Z",
+     "pass": 1,
+     "kind": "uncertainty",
+     "title": "Cause not established",
+     "detail": "The data does not establish causation. No second source confirms the change."
+    },
+    {
+     "id": "wi-signup-0000-1-close-2",
+     "at": "2026-09-24T00:00:25.000Z",
+     "pass": 1,
+     "kind": "attention",
+     "title": "Attention: MEDIUM",
+     "detail": "Persistent funnel degradation with no corroborating source — worth a look, not an interruption. Investigation confidence: low — that a real signup problem exists, not that its cause is known."
+    },
+    {
+     "id": "wi-signup-0000-1-close-3",
+     "at": "2026-09-24T00:00:26.000Z",
+     "pass": 1,
+     "kind": "action",
+     "title": "MEDIUM risk · Create a Jira task to look into the signup change",
+     "detail": "Recommended — one click to do it. Persistent, but not strong enough to interrupt anyone — worth a look during working hours."
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-0",
+     "at": "2026-09-24T01:00:00.000Z",
+     "pass": 2,
+     "kind": "signal",
+     "title": "Signal: Signup conversion −9.2%",
+     "detail": "Analytics · began in the 23:00 bucket · scheduled re-check by Signup funnel",
+     "source": "ga4",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-1",
+     "at": "2026-09-24T01:00:01.000Z",
+     "pass": 2,
+     "kind": "plan",
+     "title": "Investigation plan",
+     "detail": "Keep 5 explanations open and test each: release-related, real product issue, demand shift, measurement artifact, outside connected sources. Sources in this watch: Analytics (simulated), Jira (simulated)."
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-2",
+     "at": "2026-09-24T01:00:02.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Analytics → signup_conversion",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "signup_conversion",
+     "why": "Re-read the signal from its source before investigating — do not trust a cached reading."
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-3",
+     "at": "2026-09-24T01:00:05.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Signup conversion is 10.90% vs 12.00% baseline (−9.2%) since 23:00.",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.signup_conversion"
+      }
+     ]
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-4",
+     "at": "2026-09-24T01:00:06.000Z",
+     "pass": 2,
+     "kind": "hypothesis",
+     "title": "Competing explanations",
+     "detail": "Release-related — untested · Real product issue — untested · Demand shift — untested · Measurement artifact — untested · Outside connected sources — weak"
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-5",
+     "at": "2026-09-24T01:00:07.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getChanges",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getChanges",
+      "evidenceGap": "Release-related is untested",
+      "reason": "Was anything released, deployed or changed shortly before the change began?",
+      "hypothesesAffected": [
+       "HYP-01"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken release-related.",
+      "validator": "APPROVED",
+      "executedTool": "getChanges",
+      "resultSummary": "No releases or changes between 19:00 and 23:30"
+     }
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-6",
+     "at": "2026-09-24T01:00:08.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Changes → Jira · 19:00–23:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira"
+     ],
+     "input": "Jira · 19:00–23:30",
+     "why": "Was anything released, deployed or changed shortly before the change began?"
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-7",
+     "at": "2026-09-24T01:00:11.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "No releases or changes between 19:00 and 23:30",
+     "tool": "getChanges",
+     "sources": [
+      "jira"
+     ],
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "Release-related: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-8",
+     "at": "2026-09-24T01:00:12.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getWorkItems",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getWorkItems",
+      "evidenceGap": "Real product issue is untested",
+      "reason": "Are people reporting signup bugs — or a third-party problem?",
+      "hypothesesAffected": [
+       "HYP-02",
+       "HYP-05"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken real product issue, outside connected sources.",
+      "validator": "APPROVED",
+      "executedTool": "getWorkItems",
+      "resultSummary": "No new signup issues"
+     }
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-9",
+     "at": "2026-09-24T01:00:13.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Jira → signup issues created since 22:00",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "input": "signup issues created since 22:00",
+     "why": "Are people reporting signup bugs — or a third-party problem?"
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-10",
+     "at": "2026-09-24T01:00:16.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "No new signup issues",
+     "tool": "getWorkItems",
+     "source": "jira",
+     "status": "ok",
+     "refs": [],
+     "changed": [
+      "Real product issue: untested → weak, contested",
+      "Measurement artifact: untested → weak"
+     ]
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-11",
+     "at": "2026-09-24T01:00:17.000Z",
+     "pass": 2,
+     "kind": "planner",
+     "title": "Deterministic planner chose getMetric",
+     "planner": {
+      "type": "DETERMINISTIC",
+      "investigationId": "wi-signup-0000",
+      "plannerLabel": "Deterministic planner",
+      "proposedTool": "getMetric",
+      "evidenceGap": "Demand shift is untested",
+      "reason": "Did fewer people arrive, or did the same people convert less?",
+      "hypothesesAffected": [
+       "HYP-03"
+      ],
+      "expectedEvidence": "Evidence that could strengthen or weaken demand shift.",
+      "validator": "APPROVED",
+      "executedTool": "getMetric",
+      "resultSummary": "Sessions is within its normal range (+0.3% vs baseline)."
+     }
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-12",
+     "at": "2026-09-24T01:00:18.000Z",
+     "pass": 2,
+     "kind": "tool_call",
+     "title": "Analytics → sessions",
+     "tool": "getMetric",
+     "source": "ga4",
+     "input": "sessions",
+     "why": "Did fewer people arrive, or did the same people convert less?"
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-13",
+     "at": "2026-09-24T01:00:21.000Z",
+     "pass": 2,
+     "kind": "result",
+     "title": "Sessions is within its normal range (+0.3% vs baseline).",
+     "tool": "getMetric",
+     "source": "ga4",
+     "status": "ok",
+     "refs": [
+      {
+       "provider": "ga4",
+       "kind": "metric",
+       "id": "ga4.sessions"
+      }
+     ],
+     "changed": [
+      "Demand shift: untested → ruled out"
+     ]
+    },
+    {
+     "id": "2026-09-24T01:00:00.000Z-2-14",
+     "at": "2026-09-24T01:00:22.000Z",
+     "pass": 2,
+     "kind": "stop",
+     "title": "Stopped investigating",
+     "detail": "Evidence is insufficient and no remaining source in this watch can add more. Jagr will not guess a cause."
+    },
+    {
+     "id": "wi-signup-0000-2-close-0",
+     "at": "2026-09-24T01:00:23.000Z",
+     "pass": 2,
+     "kind": "assessment",
+     "title": "Only Analytics shows the change",
+     "detail": "Only Analytics shows this change. There is not enough evidence to explain it."
+    },
+    {
+     "id": "wi-signup-0000-2-close-1",
+     "at": "2026-09-24T01:00:24.000Z",
+     "pass": 2,
+     "kind": "uncertainty",
+     "title": "Cause not established",
+     "detail": "The data does not establish causation. No second source confirms the change."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T02:00:00.000Z",
+     "at": "2026-09-24T02:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −8.9%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T03:00:00.000Z",
+     "at": "2026-09-24T03:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −8.4%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T04:00:00.000Z",
+     "at": "2026-09-24T04:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −9.2%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T05:00:00.000Z",
+     "at": "2026-09-24T05:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −9.1%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T06:00:00.000Z",
+     "at": "2026-09-24T06:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −8.8%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T07:00:00.000Z",
+     "at": "2026-09-24T07:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −9.0%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    },
+    {
+     "id": "wi-signup-0000-recheck-2026-09-24T08:00:00.000Z",
+     "at": "2026-09-24T08:00:00.000Z",
+     "pass": 2,
+     "kind": "recheck",
+     "title": "Re-checked: Signup conversion still −8.7%",
+     "detail": "4 tool calls · no material change to evidence, explanations or attention."
+    }
+   ],
+   "agentHypotheses": [
+    {
+     "kind": "release_related",
+     "statement": "A recent release is involved",
+     "status": "ruled_out",
+     "strength": "none",
+     "evidenceFor": [],
+     "evidenceAgainst": [
+      "jira:no_release"
+     ],
+     "unknowns": [
+      "No release was found in the window."
+     ]
+    },
+    {
+     "kind": "shared_product_issue",
+     "statement": "A real signup problem is affecting users (bug or crash)",
+     "status": "contested",
+     "strength": "weak",
+     "evidenceFor": [
+      "ga4:metric:signup_conversion"
+     ],
+     "evidenceAgainst": [
+      "jira:no_issues:signup"
+     ],
+     "unknowns": []
+    },
+    {
+     "kind": "demand_shift",
+     "statement": "Fewer people reached the funnel (traffic or demand change)",
+     "status": "ruled_out",
+     "strength": "none",
+     "evidenceFor": [],
+     "evidenceAgainst": [
+      "ga4:metric:sessions"
+     ],
+     "unknowns": []
+    },
+    {
+     "kind": "measurement_artifact",
+     "statement": "A tracking or measurement change, not a real change in behaviour",
+     "status": "open",
+     "strength": "weak",
+     "evidenceFor": [],
+     "evidenceAgainst": [],
+     "unknowns": [
+      "No server-side data is connected to confirm what analytics reports."
+     ]
+    },
+    {
+     "kind": "external_or_unobserved",
+     "statement": "A cause outside the connected sources (payment provider, backend, marketing change)",
+     "status": "open",
+     "strength": "weak",
+     "evidenceFor": [],
+     "evidenceAgainst": [],
+     "unknowns": [
+      "Backend and marketing data are not connected to Jagr."
+     ]
+    }
+   ],
+   "actions": [
+    {
+     "id": "act-wi-signup-0000-create_work_item",
+     "investigationId": "wi-signup-0000",
+     "kind": "create_work_item",
+     "risk": "MEDIUM",
+     "autonomy": "recommend",
+     "status": "recommended",
+     "proposedAt": "2026-09-24T00:00:00.000Z",
+     "title": "Create a Jira task to look into the signup change",
+     "why": "Persistent, but not strong enough to interrupt anyone — worth a look during working hours.",
+     "evidence": [
+      "Analytics: Signup conversion is 10.94% vs 12.00% baseline (−8.8%) since 23:00."
+     ],
+     "whatWillHappen": "Creates a task in the owning team’s backlog with the evidence attached.",
+     "whatCouldGoWrong": "Adds backlog noise if the change turns out to be a measurement artifact.",
+     "reversible": true
+    }
+   ],
+   "toolCalls": 8,
+   "stopReason": "Evidence is insufficient and no remaining source in this watch can add more. Jagr will not guess a cause."
+  }
+ ],
+ "approvals": [
+  {
+   "actionId": "act-wi-checkout-1930-pause_rollout",
+   "status": "approved",
+   "at": "2026-09-24T08:07:00.000Z",
+   "optionId": "android",
+   "note": "Pause Android only",
+   "result": "Pause the Android staged rollout of 4.8.1 — recorded in the simulated environment. No rollout was changed.",
+   "actor": {
+    "ref": "local-user",
+    "displayName": "You (this browser)"
+   }
+  },
+  {
+   "actionId": "act-wi-checkout-1930-create_incident",
+   "status": "done",
+   "at": "2026-09-24T08:06:00.000Z",
+   "result": "Open a Jira incident for the checkout degradation — done in the simulated issue tracker.",
+   "actor": {
+    "ref": "local-user",
+    "displayName": "You (this browser)"
+   }
+  }
+ ],
+ "notifications": [
+  {
+   "id": "mail-wi-checkout-1930-high",
+   "channel": "in_app",
+   "dedupeKey": "mail-wi-checkout-1930-high",
+   "deliveredAt": "2026-09-23T20:30:00.000Z",
+   "status": "delivered",
+   "investigationId": "wi-checkout-1930",
+   "email": {
+    "id": "mail-wi-checkout-1930-high",
+    "kind": "alert",
+    "investigationId": "wi-checkout-1930",
+    "watchId": "w-checkout",
+    "subject": "Jagr: Checkout conversion dropped 18%",
+    "sentAt": "2026-09-23T20:30:00.000Z",
+    "trigger": "confirmed",
+    "attention": "HIGH",
+    "sections": {
+     "whatChanged": "Checkout conversion ↓18% since 19:00.",
+     "whatJagrFound": [
+      "Analytics: Checkout conversion is 2.78% vs 3.40% baseline (−18%) since 19:00.",
+      "Jira: release 4.8.1 dated 18:30 — a planned date, not when it reached users.",
+      "App Store: release 4.8.1 (iOS) at 18:40 — phased release.",
+      "Play Store: release 4.8.1 (Android) at 18:45 — 20% staged rollout.",
+      "Jira: 2 new checkout issues since 19:20 (PAY-512, PAY-513).",
+      "App Store: Crash-free sessions (iOS) is 99.05% vs 99.72% baseline (−0.67 pts) since 19:00."
+     ],
+     "likelyExplanation": "Checkout conversion declined shortly after release 4.8.1 and Jira, App Store also show checkout problems. The available evidence supports a temporal correlation, but does not establish causation.",
+     "uncertainty": "The data does not establish causation. Payment-provider data is not connected, so a third-party payment problem cannot be ruled out. Android 4.8.1 is on a 20% staged rollout, so impact there may still grow.",
+     "recommendedNextStep": "Review checkout errors and crash reports associated with 4.8.1, and triage PAY-512 and PAY-513."
+    },
+    "buttons": [
+     {
+      "label": "Open investigation",
+      "href": "/investigations/w/wi-checkout-1930",
+      "kind": "jagr",
+      "simulated": false
+     },
+     {
+      "label": "Open Jira",
+      "href": "/sources/jira/issue/PAY-512",
+      "kind": "source",
+      "provider": "jira",
+      "simulated": true
+     },
+     {
+      "label": "Open Analytics",
+      "href": "/sources/ga4/metric/ga4.checkout_conversion",
+      "kind": "source",
+      "provider": "ga4",
+      "simulated": true
+     },
+     {
+      "label": "Open App Store",
+      "href": "/sources/app_store/metric/app_store.crash_free_sessions",
+      "kind": "source",
+      "provider": "app_store",
+      "simulated": true
+     },
+     {
+      "label": "Open Play Store",
+      "href": "/sources/google_play/release/gp-rel-4.8.1",
+      "kind": "source",
+      "provider": "google_play",
+      "simulated": true
+     }
+    ],
+    "delivery": "simulated_outbox"
+   }
+  }
+ ],
+ "exportId": "exp_muf94iio_o0ulpu"
+}

@@ -38,6 +38,8 @@ This is a V1, **not production-ready**. There are no accounts: a workspace lives
 
 Imported files are normalized into the same evidence model the engine already uses. The investigator doesn't know the data came from a file, and it can't replace your data with sample data. Channels are renamed accordingly: evidence reads *Metrics*, *Issues & releases* and *Feedback*, never "Jira" or "App Store". Actions don't claim an external tracker: a Jira incident becomes a draft you can copy.
 
+**Moving a workspace.** Sources → *Workspace export* downloads a Jagr Workspace Export v1 file (watches, imports with their rejected rows, investigations with their evidence and trace, decisions). It never contains credentials, sessions or email addresses; addresses inside imported text are redacted. *Import an export…* validates the file first (dry run), shows what it will do, and replaces this browser's workspace only after you confirm; the same export is never imported twice.
+
 **Privacy.** Imported data is used to run investigations in this workspace and is stored in this browser (`localStorage`). If AI planning is enabled, investigation context (including summaries of your evidence) is sent to the configured model provider. There is no telemetry.
 
 ## Data modes

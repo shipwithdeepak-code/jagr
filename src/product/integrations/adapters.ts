@@ -85,6 +85,7 @@ class SimulatedAdapter implements IntegrationAdapter {
 
   private guard() {
     if (this.conn.state === 'not_configured') throw new ProviderUnavailableError(this.provider, 'unavailable', 'not configured');
+    if (this.conn.state === 'needs_reconnect') throw new ProviderUnavailableError(this.provider, 'unavailable', 'needs to be reconnected');
     if (this.conn.state === 'unavailable' || this.conn.state === 'error') {
       throw new ProviderUnavailableError(this.provider, this.conn.state, this.conn.detail);
     }

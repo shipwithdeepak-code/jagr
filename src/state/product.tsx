@@ -12,6 +12,11 @@ import { reduceProgress, startProgress, type RunProgress } from '@/product/progr
 import type { RunEvent } from '@/product/engine/monitor';
 import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode } from './productContext';
 import { migrateStoredProductState } from './productMigration';
+import { exportLocalWorkspace, localWorkspaceFromExport, planImport, type ImportPlan } from '@/product/export/workspace';
+import { EMAIL_FROM } from '@/product/catalog';
+
+/** Recorded in exports this browser produces. */
+const APP_VERSION = '1.1.0';
 
 /**
  * Product workspace, persisted in this browser (localStorage). Two data modes:
@@ -182,6 +187,14 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     void execute(fresh);
   }, [execute]);
 
+  const exportWorkspace = useCallback(() => exportLocalWorkspace(ref.current, { now: new Date().toISOString(), appVersion: APP_VERSION }), []);
+  const previewImport = useCallback((text: string): ImportPlan => planImport(text, { alreadyImported: ref.current.importedExportIds ?? [] }), []);
+  const applyImport = useCallback((plan: ImportPlan) => {
+    if (!plan.report.ok || !plan.doc) throw new Error('Cannot import: the dry run reported problems.');
+    const local = localWorkspaceFromExport(plan.doc, { emailFrom: EMAIL_FROM });
+    setState({ ...initial(), ...local, version: 3, stale: !local.result, planner: local.planner ?? ref.current.planner, importedExportIds: [...(ref.current.importedExportIds ?? []), plan.doc.exportId] });
+  }, []);
+
   const api = useMemo<ProductApi>(
     () => ({
       state,
@@ -204,8 +217,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       importedWorld,
       storageError,
       clearWorkspace,
+      exportWorkspace,
+      previewImport,
+      applyImport,
     }),
-    [state, running, progress, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice, mode, createWorkspace, addImport, removeImport, importedWorld, storageError, clearWorkspace],
+    [exportWorkspace, previewImport, applyImport, state, running, progress, runMonitoring, createWatch, setWatchStatus, setConnection, setBrief, decide, reset, health, setPlannerChoice, mode, createWorkspace, addImport, removeImport, importedWorld, storageError, clearWorkspace],
   );
   return <ProductContext.Provider value={api}>{children}</ProductContext.Provider>;
 }

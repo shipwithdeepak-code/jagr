@@ -228,6 +228,8 @@ export function healthOf(id: SourceId, conn: SourceConnection | undefined, asOf:
   if (!conn) return { source: id, mode: 'simulated', state: 'not_configured', detail: 'Not part of this workspace' };
   const mode: SourceMode = conn.state === 'connected' ? 'connected' : conn.state === 'imported' ? 'imported' : 'simulated';
   if (conn.state === 'not_configured' || conn.state === 'unavailable' || conn.state === 'error') return { source: id, mode, state: conn.state, detail: conn.detail };
+  // Configuration without credentials (e.g. arrived in an export): cannot be read until reconnected.
+  if (conn.state === 'needs_reconnect') return { source: id, mode, state: 'not_configured', detail: conn.detail || 'needs to be reconnected' };
   if (conn.freshAsOf && Date.parse(conn.freshAsOf) < Date.parse(asOf)) return { source: id, mode, state: 'stale', freshAsOf: conn.freshAsOf, detail: `data complete only up to ${conn.freshAsOf}` };
   return { source: id, mode, state: 'ok', freshAsOf: conn.freshAsOf };
 }

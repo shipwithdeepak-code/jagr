@@ -1,4 +1,6 @@
 import type { RunProgress } from '@/product/progress';
+import type { ImportPlan } from '@/product/export/workspace';
+import type { WorkspaceExportV1 } from '@/product/export/v1';
 import { createContext, useContext } from 'react';
 import type { ActionDecision, BriefSchedule, ConnectionState, MonitoringResult, ProposedAction, ProviderId, SourceConnection, Watch } from '@/product/types';
 import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
@@ -26,6 +28,8 @@ export interface ProductState {
   workspace?: { mode: WorkspaceMode; createdAt: string };
   /** User-imported evidence (imported workspaces). Stored in this browser only. */
   imports?: ImportedDataset[];
+  /** Jagr exports already imported into this browser workspace (importing one twice is refused). */
+  importedExportIds?: string[];
 }
 
 export interface PlannerOptionInfo {
@@ -61,6 +65,12 @@ export interface ProductApi {
   storageError?: string;
   clearWorkspace(): void;
   reset(): void;
+  /** Jagr Workspace Export v1 of this browser workspace (no secrets, sessions or email addresses). */
+  exportWorkspace(): WorkspaceExportV1;
+  /** Dry run: validate an export file and report what an import would do. Writes nothing. */
+  previewImport(text: string): ImportPlan;
+  /** Replace this browser workspace with a validated export. Only after the user confirmed the report. */
+  applyImport(plan: ImportPlan): void;
 }
 
 export const ProductContext = createContext<ProductApi | null>(null);

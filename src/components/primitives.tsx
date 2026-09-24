@@ -35,6 +35,7 @@ const SOURCE: Record<ConnectionState, { label: string; tone: Tone; shape: 'dot' 
   not_configured: { label: 'Not configured', tone: 'faint', shape: 'ring' },
   unavailable: { label: 'Unavailable', tone: 'high', shape: 'ring' },
   error: { label: 'Error', tone: 'crit', shape: 'ring' },
+  needs_reconnect: { label: 'Needs reconnection', tone: 'high', shape: 'ring' },
 };
 const ATTENTION: Record<AttentionLevel, Tone> = { LOW: 'neutral', MEDIUM: 'med', HIGH: 'high', CRITICAL: 'crit' };
 const STRENGTH: Record<StrengthValue, { label: string; tone: Tone; bars: number }> = {
@@ -313,7 +314,7 @@ export function LinkArrow({ children }: { children: ReactNode }) {
 // SourceCoverage — how every evidence channel is fed, at a glance
 // ─────────────────────────────────────────────────────────────
 
-const SOURCE_ORDER: ConnectionState[] = ['imported', 'connected', 'simulated', 'not_configured', 'unavailable', 'error'];
+const SOURCE_ORDER: ConnectionState[] = ['imported', 'connected', 'simulated', 'not_configured', 'needs_reconnect', 'unavailable', 'error'];
 const SOURCE_MEANING: Record<ConnectionState, string> = {
   imported: 'your uploaded files',
   connected: 'live credentials',
@@ -321,6 +322,7 @@ const SOURCE_MEANING: Record<ConnectionState, string> = {
   not_configured: 'left out of runs',
   unavailable: 'recorded as a gap',
   error: 'recorded as a gap',
+  needs_reconnect: 'credentials needed — recorded as a gap',
 };
 
 export function SourceCoverage({ connections }: { connections: { provider: string; state: ConnectionState }[] }) {

@@ -13,6 +13,7 @@ import { useToast } from '@/components/toast';
 import { ImportedSources } from '@/components/imports';
 import { SourceCoverage } from '@/components/primitives';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
+import { WorkspaceTransfer } from '@/components/workspaceTransfer';
 
 const OPS: Record<string, string> = { metrics: 'getMetrics()', issues: 'getIssues()', releases: 'getReleases()', reviews: 'getReviews()', events: 'getEvents()', changes: 'getChanges()', send_email: 'send()' };
 
@@ -27,6 +28,7 @@ export function SourcesPage() {
           actions={<WorkspaceDataBadge />}
         />
         <ImportedSources />
+        <WorkspaceTransfer />
       </>
     );
   }
@@ -121,6 +123,7 @@ function SampleSources() {
       <p className="mt-6 text-[12.5px] text-ink-3">
         The demo-night replay uses its own adapters — see <Link to="/integrations" className="text-accent hover:underline">demo integrations</Link>.
       </p>
+      <WorkspaceTransfer />
     </>
   );
 }
