@@ -43,6 +43,15 @@ export function composeBrief(args: {
     .map((w) => ({ watchName: w.name, linkedTo: relevant.find((r) => r.watchIds.includes(w.id) && r.watchId !== w.id)?.title ?? '' }));
   const quietWatches = briefWatches.filter((w) => !owners.has(w.id) && !contributors.has(w.id));
 
+  // Meaningful changes: only those that are evidence in what is reported (no separate reads, no noise).
+  const reportedInvs = items.map((i) => relevant.find((r) => r.id === i.investigationId)!);
+  const seenChange = new Set<string>();
+  const changes = reportedInvs
+    .flatMap((inv) => inv.evidence.filter((e) => e.direction === 'change' && e.onsetAt).map((e) => ({ e, inv })))
+    .filter(({ e }) => !seenChange.has(e.statement) && !!seenChange.add(e.statement))
+    .map(({ e, inv }) => ({ title: e.statement.replace(/^[^:]{1,40}: /, ''), at: e.onsetAt!, source: e.provider, kind: e.changeKind, timing: e.timing, investigationId: inv.id }))
+    .sort((a, b) => a.at.localeCompare(b.at));
+
   const n = items.length;
   const runs = args.log.filter((l) => l.type === 'watch_run' && inWindow(l.scheduledAt));
   const sources = new Set(briefWatches.flatMap((w) => w.sources));
@@ -58,6 +67,7 @@ export function composeBrief(args: {
       note: quietWatches.length ? `${quietWatches.length} ${quietWatches.length === 1 ? 'watch' : 'watches'} checked. No meaningful changes.` : 'Every watch had something to report.',
     },
     deduplicated,
+    ...(changes.length ? { changes } : {}),
     stats: {
       watchRuns: runs.length,
       sourcesChecked: sources.size,

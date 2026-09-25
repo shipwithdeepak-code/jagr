@@ -9,6 +9,7 @@ import { schedulerTick } from '../src/product/app/scheduler';
 import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun } from '../src/product/app/monitoring';
 import { buildSnapshot } from '../src/product/app/workspaceSnapshot';
 import { replayInvestigation } from '../src/product/app/replay';
+import { briefView } from '../src/product/view/brief';
 import { importFile } from '../src/product/imports/schemas';
 import { WriteConflict } from '../src/product/ports/persistence';
 import type { Runtime } from './runtime';
@@ -268,6 +269,14 @@ export function createApp(rt: Runtime) {
       const summary = await runWorkspaceNow(rt, id);
       await audit(id, p, 'monitor.requested');
       return json(200, summary);
+    }
+    // The latest morning brief as a PM reads it (same view as the Briefs page).
+    if (section === 'briefs' && sub === 'latest' && req.method === 'GET') {
+      const briefs = await rt.repos.briefs.list(id);
+      const latest = briefs[briefs.length - 1];
+      if (!latest) return json(404, { error: 'No morning brief yet: one is composed at the workspace’s brief time.' });
+      const decisions = Object.fromEntries((await rt.repos.decisions.list(id)).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
+      return json(200, briefView(latest, { investigations: await rt.repos.investigations.list(id), watches: await rt.repos.watches.list(id), decisions }));
     }
     if (section === 'snapshot' && req.method === 'GET') return json(200, await buildSnapshot(rt.repos, ws, m, rt.clock.now()));
     if (!section && req.method === 'PATCH') {

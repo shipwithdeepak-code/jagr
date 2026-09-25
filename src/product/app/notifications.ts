@@ -1,4 +1,5 @@
-import type { EmailNotification, MorningBriefDoc, WatchInvestigation } from '../types';
+import type { ActionDecision, EmailNotification, MorningBriefDoc, Watch, WatchInvestigation } from '../types';
+import { briefView } from '../view/brief';
 import type { Clock } from '../ports/clock';
 import type { HttpClient } from '../ports/http';
 import type { DeliveryTarget, NotificationChannel, NotificationMessage } from '../ports/notify';
@@ -57,18 +58,30 @@ export function alertMessage(workspaceId: string, email: EmailNotification, inv:
   };
 }
 
-/** A morning brief, as a domain message. */
-export function briefMessage(workspaceId: string, brief: MorningBriefDoc, appBaseUrl?: string): NotificationMessage {
+/**
+ * A morning brief, as a domain message — built from the same brief view the Briefs page shows (same
+ * items, same attention, same quiet count), so the channel never ranks or words things differently.
+ */
+export function briefMessage(workspaceId: string, brief: MorningBriefDoc, ctx: { investigations: WatchInvestigation[]; watches: Watch[]; decisions?: Record<string, ActionDecision>; appBaseUrl?: string }): NotificationMessage {
+  const v = briefView(brief, { investigations: ctx.investigations, watches: ctx.watches, decisions: ctx.decisions ?? {} });
+  const byId = new Map(ctx.investigations.map((i) => [i.id, i]));
+  const quiet = v.quiet.signals ? `Quiet: ${v.quiet.signals} monitored signal${v.quiet.signals === 1 ? '' : 's'} showed no meaningful change.` : v.quiet.note;
   return {
     kind: 'morning_brief',
     workspaceId,
     dedupeKey: `brief:${brief.generatedAt}`,
-    title: clean(brief.headline),
-    summary: brief.items.length ? `${brief.items.length} item(s) since ${brief.window.start.slice(11, 16)} UTC.` : clean(brief.quiet.note),
-    observed: brief.items.slice(0, 8).map((i) => clean(`${i.attention} · ${i.title} — ${i.summary}`)),
+    title: clean(`Good morning. ${v.headline}`),
+    summary: quiet,
+    observed: v.items.slice(0, 6).map((i) => clean(`${i.attention} · ${i.headline}. What changed: ${i.whatChanged}${i.found.length ? ` What Jagr found: ${i.found.join(' ')}` : ''} Recommended: ${i.next}${i.approvalsWaiting ? ` (${i.approvalsWaiting} awaiting approval)` : ''}`)),
     inferred: [],
-    unknown: [],
-    links: [{ label: 'Open Jagr', href: absolute(appBaseUrl, '/', 'https://jagr.vercel.app/') }],
+    unknown: v.items.slice(0, 6).map((i) => clean(`${i.headline}: ${i.uncertainty}`)),
+    links: [
+      ...v.items.slice(0, 4).flatMap((i) => {
+        const inv = byId.get(i.investigationId);
+        return inv ? [{ label: `Open: ${i.headline}`.slice(0, 70), href: absolute(ctx.appBaseUrl, inv.jagrPath, inv.jagrLink) }] : [];
+      }),
+      { label: 'Open the brief', href: absolute(ctx.appBaseUrl, '/briefs', 'https://jagr.vercel.app/briefs') },
+    ],
   };
 }
 

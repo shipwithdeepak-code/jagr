@@ -5,7 +5,7 @@ import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membersh
 import { WriteConflict } from './persistence';
 import type { SecretPayload, SecretRef, SecretStore } from './secrets';
 import { SecretNotFound, SecretVersionConflict } from './secrets';
-import type { Watch, WatchInvestigation } from '../types';
+import type { MorningBriefDoc, Watch, WatchInvestigation } from '../types';
 import type { ImportedDataset } from '../imports/schemas';
 
 /**
@@ -24,6 +24,7 @@ interface WsData {
   investigations: Map<string, WatchInvestigation>;
   decisions: Map<string, Decision>;
   notifications: Map<string, NotificationRecord>;
+  briefs: Map<string, MorningBriefDoc>;
   cursors: Map<string, string>;
   audit: AuditEntry[];
 }
@@ -37,7 +38,7 @@ interface State {
   data: Map<string, WsData>;
 }
 
-const emptyWs = (): WsData => ({ connections: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), cursors: new Map(), audit: [] });
+const emptyWs = (): WsData => ({ connections: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), cursors: new Map(), audit: [] });
 const emptyState = (): State => ({ workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), data: new Map() });
 
 function copyState(s: State): State {
@@ -51,6 +52,7 @@ function copyState(s: State): State {
       investigations: new Map(clone([...d.investigations])),
       decisions: new Map(clone([...d.decisions])),
       notifications: new Map(clone([...d.notifications])),
+      briefs: new Map(clone([...d.briefs])),
       cursors: new Map(d.cursors),
       audit: clone(d.audit),
     });
@@ -151,6 +153,10 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
         m.set(n.id, clone(n));
         return true;
       },
+    },
+    briefs: {
+      list: async (w) => values(ws(w).briefs).sort((a, b) => a.generatedAt.localeCompare(b.generatedAt)),
+      save: async (w, b) => void ws(w).briefs.set(b.id, clone(b)),
     },
     cursors: {
       get: async (w, key) => ws(w).cursors.get(key) ?? null,

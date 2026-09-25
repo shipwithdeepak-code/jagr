@@ -1,4 +1,4 @@
-import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types';
+import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types';
 import type { Decision, Membership, Repositories, Workspace } from '../ports/persistence';
 import type { ImportedDataset } from '../imports/schemas';
 import { connectionView, type ConnectionView } from '../connections/model';
@@ -22,18 +22,21 @@ export interface WorkspaceSnapshot {
   notifications: { id: string; channel: string; deliveredAt: ISO; status: 'delivered' | 'failed'; investigationId?: string; detail?: string; email?: Omit<EmailNotification, 'to' | 'from'> }[];
   /** Imported workspaces: the stored datasets. */
   imports: ImportedDataset[];
+  /** Morning briefs as composed (most recent last). */
+  briefs: MorningBriefDoc[];
   /** The time the server read this snapshot. */
   at: ISO;
 }
 
 export async function buildSnapshot(repos: Repositories, ws: Workspace, membership: Pick<Membership, 'role' | 'canApprove'>, at: ISO): Promise<WorkspaceSnapshot> {
-  const [connections, watches, investigations, decisions, notifications, imports] = await Promise.all([
+  const [connections, watches, investigations, decisions, notifications, imports, briefs] = await Promise.all([
     repos.connections.list(ws.id),
     repos.watches.list(ws.id),
     repos.investigations.list(ws.id),
     repos.decisions.list(ws.id),
     repos.notifications.list(ws.id),
     ws.mode === 'imported' ? repos.imports.list(ws.id) : Promise.resolve([]),
+    repos.briefs.list(ws.id),
   ]);
   return {
     workspace: { id: ws.id, name: ws.name, mode: ws.mode, createdAt: ws.createdAt, settings: ws.settings, brief: ws.brief, version: ws.version },
@@ -44,6 +47,7 @@ export async function buildSnapshot(repos: Repositories, ws: Workspace, membersh
     decisions: decisions.map(({ decidedBy, ...d }: Decision) => ({ ...d, decidedBy: decidedBy?.displayName })),
     notifications: notifications.map((n) => ({ id: n.id, channel: n.channel, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, detail: n.detail, email: n.email })),
     imports,
+    briefs: briefs.slice(-14),
     at,
   };
 }
@@ -91,6 +95,7 @@ export function productStateFromSnapshot(s: WorkspaceSnapshot, defaults: { email
     decisions: Object.fromEntries(s.decisions.map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d]))),
     planner: s.workspace.settings.planner,
     imports: s.imports,
-    result: invs.length ? { window: { start: starts[0], end: ends[ends.length - 1] }, investigations: invs, emails, briefs: [], log: [], connections, actions: invs.flatMap((i) => i.actions), planner: plannerInfo(s) } : undefined,
+    // A quiet morning is a result too: a brief with nothing to report still renders.
+    result: invs.length || s.briefs.length ? { window: { start: starts[0] ?? s.briefs[0]?.window.start ?? s.at, end: ends[ends.length - 1] ?? s.at }, investigations: invs, emails, briefs: s.briefs, log: [], connections, actions: invs.flatMap((i) => i.actions), planner: plannerInfo(s) } : undefined,
   };
 }

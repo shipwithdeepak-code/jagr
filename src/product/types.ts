@@ -446,6 +446,11 @@ export interface MorningBriefDoc {
   quiet: { watchCount: number; watchNames: string[]; note: string };
   deduplicated: { watchName: string; linkedTo: string }[];
   stats: { watchRuns: number; sourcesChecked: number; emailsSent: number; dismissed: number };
+  /**
+   * Changes (deploys, releases, flags…) that appear as evidence in what the brief reports — with their
+   * timing kind, so a planned date is never read as a delivery time. Absent on briefs composed before it.
+   */
+  changes?: { title: string; at: ISO; source: ProviderId; kind?: ChangeKind; timing?: ChangeTiming; investigationId: string }[];
 }
 
 // ─────────────────────────────────────────────────────────────

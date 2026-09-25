@@ -83,6 +83,16 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       await expect(repos.users.create({ id: 'u2', displayName: 'X', createdAt: '2026-09-24T08:00:00.000Z' }, { provider: 'google', subject: '123' })).rejects.toBeInstanceOf(WriteConflict);
     });
 
+    it('briefs are stored per workspace, replaced by id, listed oldest first', async () => {
+      const { repos } = await make();
+      const b = (id: string, at: string, headline: string) => ({ id, generatedAt: at, window: { start: at, end: at }, headline, items: [], quiet: { watchCount: 0, watchNames: [], note: '' }, deduplicated: [], stats: { watchRuns: 0, sourcesChecked: 0, emailsSent: 0, dismissed: 0 } });
+      await repos.briefs.save('ws-a', b('b2', '2026-09-25T08:00:00.000Z', 'second'));
+      await repos.briefs.save('ws-a', b('b1', '2026-09-24T08:00:00.000Z', 'first'));
+      await repos.briefs.save('ws-a', b('b2', '2026-09-25T08:00:00.000Z', 'second, recomposed'));
+      expect((await repos.briefs.list('ws-a')).map((x) => x.headline)).toEqual(['first', 'second, recomposed']);
+      expect(await repos.briefs.list('ws-b')).toEqual([]);
+    });
+
     it('notifications are deduplicated per channel', async () => {
       const { repos } = await make();
       const n = { id: 'n1', channel: 'chat', dedupeKey: 'inv-1:HIGH', deliveredAt: '2026-09-24T08:00:00.000Z', status: 'delivered' as const };

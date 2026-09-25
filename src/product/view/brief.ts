@@ -37,6 +37,8 @@ export interface BriefView {
   };
   deduplicated: MorningBriefDoc['deduplicated'];
   stats: MorningBriefDoc['stats'];
+  /** Changes that are evidence in the reported items, with their timing kind. */
+  changes: NonNullable<MorningBriefDoc['changes']>;
 }
 
 const bare = (s: string) => {
@@ -117,5 +119,6 @@ export function briefView(
     },
     deduplicated: brief.deduplicated,
     stats: brief.stats,
+    changes: brief.changes ?? [],
   };
 }

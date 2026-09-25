@@ -1,4 +1,4 @@
-import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, ProviderId, Watch, WatchInvestigation } from '../types';
+import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, MorningBriefDoc, ProviderId, Watch, WatchInvestigation } from '../types';
 import type { ImportedDataset } from '../imports/schemas';
 import type { Role } from '../roles/types';
 import type { SecretRef } from './secrets';
@@ -182,6 +182,11 @@ export interface Repositories {
   notifications: {
     list(workspaceId: string): Promise<NotificationRecord[]>;
     add(workspaceId: string, n: NotificationRecord): Promise<boolean>;
+  };
+  /** Morning briefs, as composed (the document a PM reads). Keyed by brief id; saving the same id replaces it. */
+  briefs: {
+    list(workspaceId: string): Promise<MorningBriefDoc[]>;
+    save(workspaceId: string, b: MorningBriefDoc): Promise<void>;
   };
   cursors: {
     get(workspaceId: string, key: string): Promise<string | null>;

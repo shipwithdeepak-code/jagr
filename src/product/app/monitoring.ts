@@ -164,10 +164,15 @@ export async function composeBriefJob(deps: MonitoringDeps, job: Pick<LeasedJob,
   if (!ws) throw new Error(`Workspace ${job.workspaceId} not found.`);
   const at = String(job.payload.dueAt);
   const since = new Date(Date.parse(at) - 24 * 3_600_000).toISOString();
-  const brief = composeBrief({ at, since, watches: await deps.repos.watches.list(ws.id), investigations: await deps.repos.investigations.list(ws.id), emails: [], log: [] });
+  const [watches, investigations, notifications, decisions] = await Promise.all([deps.repos.watches.list(ws.id), deps.repos.investigations.list(ws.id), deps.repos.notifications.list(ws.id), deps.repos.decisions.list(ws.id)]);
+  // Alerts already shown in Jagr, so the brief can say an item was already sent rather than repeat it as news.
+  const emails = notifications.filter((n) => n.channel === 'in_app' && n.email).map((n) => ({ ...(n.email as Omit<EmailNotification, 'to' | 'from'>), to: '', from: '' }));
+  const brief = composeBrief({ at, since, watches, investigations, emails, log: [] });
+  await deps.repos.briefs.save(ws.id, brief);
   await deps.repos.notifications.add(ws.id, { id: brief.id, channel: 'in_app', dedupeKey: `brief:${at}`, deliveredAt: at, status: 'delivered', detail: `${brief.headline} (${brief.items.length} item(s))` });
   // Sample and imported data are never sent to outbound channels.
-  if (ws.mode === 'connected') await deliver(deps, ws, [briefMessage(ws.id, brief, deps.appBaseUrl)]);
+  const decided = Object.fromEntries(decisions.map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
+  if (ws.mode === 'connected') await deliver(deps, ws, [briefMessage(ws.id, brief, { investigations, watches, decisions: decided, appBaseUrl: deps.appBaseUrl })]);
 }
 
 /** Work through due jobs until the budget runs out. Failures retry with backoff, then dead-letter. */

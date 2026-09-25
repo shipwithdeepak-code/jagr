@@ -1,6 +1,6 @@
 import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Repositories, Session, Transactor, User, Workspace } from '../../src/product/ports/persistence';
 import { WriteConflict } from '../../src/product/ports/persistence';
-import type { Watch, WatchInvestigation } from '../../src/product/types';
+import type { MorningBriefDoc, Watch, WatchInvestigation } from '../../src/product/types';
 import type { ImportedDataset } from '../../src/product/imports/schemas';
 import type { SqlClient } from './sql';
 
@@ -44,6 +44,7 @@ export function postgresRepositories(sql: SqlClient): Repositories {
   const decisions = collection<Decision>(sql, 'decisions');
   const notifications = collection<NotificationRecord>(sql, 'notifications');
   const cursors = collection<{ value: string }>(sql, 'cursors');
+  const briefs = collection<MorningBriefDoc>(sql, 'briefs');
 
   return {
     workspaces: {
@@ -107,6 +108,10 @@ export function postgresRepositories(sql: SqlClient): Repositories {
     notifications: {
       list: (w) => notifications.list(w),
       add: async (w, n) => (await sql.query("insert into workspace_docs (workspace_id, collection, id, doc) values ($1, 'notifications', $2, $3::jsonb) on conflict do nothing returning id", [w, n.id, json(n)])).rows.length > 0,
+    },
+    briefs: {
+      list: async (w) => (await briefs.list(w)).sort((a, b) => a.generatedAt.localeCompare(b.generatedAt)),
+      save: (w, b) => briefs.put(w, b.id, b),
     },
     cursors: {
       get: async (w, key) => (await cursors.get(w, key))?.value ?? null,
