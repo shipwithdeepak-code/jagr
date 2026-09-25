@@ -12,6 +12,7 @@ import { connectorFactory } from './runtime';
 import { connectorsFrom } from './index';
 import type { ConnectorDescriptor } from './types';
 import { ConnectorRateLimited } from './errors';
+import recorded from './__fixtures__/github.recorded.json';
 
 /**
  * GitHub connector against responses in the REST API's documented shape (deployments, deployment
@@ -197,5 +198,46 @@ describe('GitHub + Amplitude in a connected workspace (end to end)', () => {
     expect(['untested', 'open']).toContain(rel.status);
     expect(rel.evidenceAgainst).toEqual([]);
     expect(JSON.stringify(inv)).not.toMatch(/[Nn]o (release|deploy|change)s? (was|were )?(found|shipped)|nothing was released/);
+  });
+});
+
+// ── Recorded real responses (sanitised) ──
+const recordedRoute = (u: URL): Reply | undefined => {
+  if (u.hostname !== 'api.github.com') return undefined;
+  let m: RegExpExecArray | null;
+  if (u.pathname === '/repos/shipwithdeepak-code/jagr') return { body: { full_name: 'shipwithdeepak-code/jagr' } };
+  // GitHub matches the environment filter case-insensitively (verified live: "production" finds "Production").
+  if (u.pathname === '/repos/shipwithdeepak-code/jagr/deployments')
+    return { body: u.searchParams.get('page') === '1' ? recorded.deployments.filter((d) => d.environment.toLowerCase() === (u.searchParams.get('environment') ?? '').toLowerCase()) : [] };
+  if ((m = /^\/repos\/shipwithdeepak-code\/jagr\/deployments\/(\d+)\/statuses$/.exec(u.pathname))) return { body: (recorded.statuses as Record<string, unknown[]>)[m[1]] ?? [] };
+  if (u.pathname === '/repos/shipwithdeepak-code/jagr/releases') return { body: recorded.releases };
+  return undefined;
+};
+const recordedConnection: Connection = { ...connection, id: 'live-github', config: { repos: ['shipwithdeepak-code/jagr'] } };
+
+connectorContract({
+  name: 'GitHub (recorded real responses)',
+  descriptor: githubConnector,
+  connection: recordedConnection,
+  secret,
+  otherSecret: { kind: 'api_key', fields: { token: 'github_pat_22BBBBBBBBBBBBBBBBBBBB' } },
+  route: recordedRoute,
+  // Ends before the 19:48 production deploy, which must therefore be excluded.
+  window: { start: '2026-09-24T00:00:00.000Z', end: '2026-09-24T19:30:00.000Z' },
+  expectRecords: { changes: 2 },
+  invalidConfigs: [{ repos: [] }],
+});
+
+describe('GitHub on recorded real responses', () => {
+  it('Vercel deployments: actual time from the success status, short SHA as the version, no releases', async () => {
+    const src = connectorFactory(githubConnector)(recordedConnection, { secret, http: scriptedHttp(recordedRoute).http, clock: manualClock('2026-09-25T00:00:00.000Z') });
+    const changes = await src.changes!.getChanges({ window: { start: '2026-09-24T00:00:00.000Z', end: '2026-09-25T00:00:00.000Z' } });
+    expect(changes.map((c) => [c.kind, c.timing, c.status, c.at, c.version])).toEqual([
+      ['deploy', 'actual', 'success', '2026-09-24T12:47:15.000Z', 'ab790a5'],
+      ['deploy', 'actual', 'success', '2026-09-24T19:16:29.000Z', 'aadae7f'],
+      ['deploy', 'actual', 'success', '2026-09-24T19:48:58.000Z', 'd635d21'],
+    ]);
+    expect(changes[0].title).toBe('Deploy ab790a5 to Production (shipwithdeepak-code/jagr)');
+    expect(changes[0].provenance.url).toBe(`https://github.com/shipwithdeepak-code/jagr/commit/${recorded.deployments.find((d) => d.sha.startsWith('ab790a5'))!.sha}`);
   });
 });

@@ -1,0 +1,62 @@
+{
+ "_recorded": "2026-09-25 from GET api.github.com/repos/shipwithdeepak-code/jagr (production deployments, their statuses, releases). Reduced to the fields the connector reads; creator, payload, URLs and node ids removed.",
+ "deployments": [
+  {
+   "id": 6646698635,
+   "sha": "d635d21eb9b3cc32df1ce725776b86bacee85535",
+   "ref": "d635d21eb9b3cc32df1ce725776b86bacee85535",
+   "environment": "Production",
+   "created_at": "2026-09-24T19:48:57Z",
+   "description": null,
+   "production_environment": false,
+   "transient_environment": false,
+   "task": "deploy"
+  },
+  {
+   "id": 6646084688,
+   "sha": "aadae7f29308e3fcd7e0e119de4a10d1ef009fda",
+   "ref": "aadae7f29308e3fcd7e0e119de4a10d1ef009fda",
+   "environment": "Production",
+   "created_at": "2026-09-24T19:16:29Z",
+   "description": null,
+   "production_environment": false,
+   "transient_environment": false,
+   "task": "deploy"
+  },
+  {
+   "id": 6638060907,
+   "sha": "ab790a5d41e7a4832b26936d0afd1d73b6d26814",
+   "ref": "ab790a5d41e7a4832b26936d0afd1d73b6d26814",
+   "environment": "Production",
+   "created_at": "2026-09-24T12:47:15Z",
+   "description": null,
+   "production_environment": false,
+   "transient_environment": false,
+   "task": "deploy"
+  }
+ ],
+ "statuses": {
+  "6646698635": [
+   {
+    "state": "success",
+    "created_at": "2026-09-24T19:48:58Z",
+    "environment": "Production"
+   }
+  ],
+  "6646084688": [
+   {
+    "state": "success",
+    "created_at": "2026-09-24T19:16:29Z",
+    "environment": "Production"
+   }
+  ],
+  "6638060907": [
+   {
+    "state": "success",
+    "created_at": "2026-09-24T12:47:15Z",
+    "environment": "Production"
+   }
+  ]
+ },
+ "releases": []
+}

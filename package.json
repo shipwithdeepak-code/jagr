@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:planners": "JAGR_LIVE_EVAL=1 vitest run scripts/eval/plannerComparison.live.ts --reporter=verbose --silent=false",
-    "eval:connectors": "JAGR_LIVE_EVAL=1 vitest run scripts/eval/connectors.live.ts --reporter=verbose --silent=false"
+    "eval:connectors": "NODE_USE_ENV_PROXY=1 JAGR_LIVE_EVAL=1 vitest run scripts/eval/connectors.live.ts --reporter=verbose --silent=false",
+    "eval:dogfood": "NODE_USE_ENV_PROXY=1 JAGR_LIVE_EVAL=1 vitest run scripts/eval/dogfood.live.ts --reporter=verbose --silent=false"
   },
   "dependencies": {
     "clsx": "^2.1.1",

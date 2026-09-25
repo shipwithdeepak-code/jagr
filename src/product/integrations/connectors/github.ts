@@ -121,7 +121,8 @@ class GitHubReader {
       timing,
       title: `Deploy ${short} to ${d.environment} (${repo})`,
       at: new Date(at).toISOString(),
-      version: d.ref,
+      // Some deployers (e.g. Vercel) send the full commit SHA as the ref: show it short, like GitHub does.
+      version: /^[0-9a-f]{40}$/i.test(d.ref) ? d.ref.slice(0, 7) : d.ref,
       status,
       notes: [d.description ? redactPersonalData(d.description).slice(0, 300) : undefined, status === 'in_progress' ? 'still in progress — start time, not completion' : undefined].filter(Boolean).join(' · ') || undefined,
       ref: { provider: 'github', kind: 'release', id },

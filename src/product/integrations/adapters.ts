@@ -65,8 +65,13 @@ export function externalUrl(ref: SourceRef): string {
   }
 }
 
-export function makeLink(ref: SourceRef, label: string, simulated: boolean): SourceLink {
-  return { label, provider: ref.provider, href: sourceHref(ref), externalUrl: externalUrl(ref), simulated, ref };
+/**
+ * A link to a source record. `recordUrl` is the record's own page in its source (provenance.url); it is
+ * used only for real (non-simulated) sources and only when it is https — otherwise the source's page.
+ */
+export function makeLink(ref: SourceRef, label: string, simulated: boolean, recordUrl?: string): SourceLink {
+  const own = !simulated && recordUrl && /^https:\/\//.test(recordUrl) ? recordUrl : undefined;
+  return { label, provider: ref.provider, href: sourceHref(ref), externalUrl: own ?? externalUrl(ref), simulated, ref };
 }
 
 const inWindow = (at: string, w: TimeWindow) => at >= w.start && at <= w.end;

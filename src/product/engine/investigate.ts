@@ -86,7 +86,7 @@ function fmtValue(series: MetricSeries, v: number) {
 export function metricEvidence(series: MetricSeries, reading: MetricReading, simulated: boolean, labels?: ProviderLabels): EvidenceItem {
   const P = labelOf(labels);
   const ref = series.ref;
-  const link = makeLink(ref, `Open ${P(series.source).short}`, simulated);
+  const link = makeLink(ref, `Open ${P(series.source).short}`, simulated, series.provenance?.url);
   const degraded = reading.status !== 'normal';
   const statement = degraded
     ? `${P(series.source).short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`

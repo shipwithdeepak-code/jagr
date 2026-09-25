@@ -36,6 +36,28 @@ Every connector must pass `testkit/connectorContract.ts` against recorded provid
 - isolation: two connections of the same connector never carry each other's credential
 - `check()` reports `connected` / `needs_reconnect` / `unavailable` / `error` without throwing
 
+## Live verification
+
+Two manual commands, never part of `npm test`; both print states, counts and hostnames only — never credentials or
+customer text — and report a provider without credentials as not configured (nothing is simulated):
+
+- `npm run eval:connectors` — `check()` and one read per role for every configured connector.
+  `JAGR_EVAL_WINDOW_HOURS` widens the window (default 24). `JAGR_EVAL_NEGATIVE=1` also calls every provider's real
+  endpoint with deliberately invalid credentials and shows how the rejection is classified.
+- `npm run eval:dogfood` — boots the real single-tenant runtime (Postgres via PGlite, encrypted secret store, the
+  real connectors) from the owner credentials, checks every connection, creates watches over what the sources can
+  serve, runs them, and reports provenance, freshness and link hosts, personal data in stored investigations and in
+  AI planner prompts (a recording stand-in replaces the model, so nothing leaves), `aiEgressAllowed=false` (expects
+  zero planner calls) and — only with `JAGR_EVAL_SLACK_SEND=1` — one labelled Slack test message.
+
+Both scripts set `NODE_USE_ENV_PROXY=1`, because Node's built-in `fetch` otherwise ignores `HTTPS_PROXY`.
+
+Results of the first live run (2026-09-25): only GitHub could be exercised with real data. In that environment the
+egress proxy attaches its own GitHub credential to `api.github.com` requests (an invalid token and no token both
+succeed through it; both get a real 401 directly), so the read path and mapping were verified on real data, while
+authentication with a Jagr-configured token was not. Recorded, sanitised responses from that run are in
+`connectors/__fixtures__/github.recorded.json`.
+
 ## Health
 
 - **At run time** (`app/monitoring.ts → sourcesForRun`): a connection without a registered connector, in
@@ -62,11 +84,11 @@ planner runs instead).
 | Connector | Roles | Status |
 |---|---|---|
 | (reference, test only) deploy log | changes | Framework reference in `framework.test.ts` |
-| Amplitude | metrics, changes (annotations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live project** (`npm run eval:connectors`) |
-| GitHub | changes (deployments, releases) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live repository** |
-| Jira Cloud | work items, changes (released versions) | Implemented on the existing Jira Cloud client; contract-tested on fixtures in the documented API shape; **not yet verified against a live site** |
-| Intercom | feedback (support conversations) | Implemented; contract-tested on fixtures in the documented API shape; **not yet verified against a live workspace** |
-| Slack (outbound channel) | notifications only | Implemented; rendering snapshot-tested, delivery tested on the documented API shape; **not yet verified against a live workspace** |
+| Amplitude | metrics, changes (annotations) | **NOT VERIFIED** (no credentials). Real endpoint reached; its rejection of invalid credentials (403) is classified correctly |
+| GitHub | changes (deployments, releases) | **LIVE VERIFIED (read path)** on a real repository — real deployments, statuses and releases through the connector; contract suite also runs on sanitised recorded responses. Token authentication **not verified** (see Live verification) |
+| Jira Cloud | work items, changes (released versions) | **NOT VERIFIED** (no credentials or site). Real Atlassian endpoint reached (unknown site → 404, classified as an error, never as data) |
+| Intercom | feedback (support conversations) | **NOT VERIFIED** (no credentials). Real endpoint reached; invalid token → 401, classified as a credential failure |
+| Slack (outbound channel) | notifications only | **NOT VERIFIED** (no bot token or test channel). Real endpoint reached; invalid token → `ok:false, invalid_auth`, recorded as a failed delivery |
 
 ## Amplitude
 
@@ -118,7 +140,7 @@ Contents: read, Metadata: read) in `JAGR_GITHUB_TOKEN`. Repositories in `JAGR_GI
   the window), then `GET …/deployments/{id}/statuses`. The time is the first `success` status: **actual** timing,
   when the change reached the environment. A failed deployment is recorded at its failure (`failed`). One still
   running — as of the run time; later statuses are not visible to it — is `in_progress` with `reported` timing at
-  its start. Deep link: the commit.
+  its start. Deep link: the commit. A `ref` that is a full commit SHA (Vercel sends one) is shown as the short SHA.
 - **Releases** — `GET /repos/{repo}/releases`. Published, non-draft only; `reported` timing at publication. GitHub
   does not know when users received a release, and the record says so.
 - A 403 with `x-ratelimit-remaining: 0` is a rate limit, not a credential problem.

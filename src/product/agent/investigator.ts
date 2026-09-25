@@ -240,7 +240,11 @@ export async function runInvestigation(args: {
   };
   const has = (t: Tag) => [...tags.values()].some((s) => s.has(t));
   const withTag = (t: Tag) => g.evidence.filter((e) => tags.get(e.id)?.has(t));
-  const link = (ref: SourceRef, label: string) => makeLink(ref, label, args.simulatedLinks(ref.provider));
+  // Each record's own page in its source (provenance.url), used for links from connected sources.
+  const recordUrls = new Map<string, string>();
+  const refKey = (r: SourceRef) => `${r.provider}:${r.kind}:${r.id}`;
+  const remember = (records: { ref: SourceRef; provenance?: { url?: string } }[]) => records.forEach((r) => r.provenance?.url && recordUrls.set(refKey(r.ref), r.provenance.url));
+  const link = (ref: SourceRef, label: string) => makeLink(ref, label, args.simulatedLinks(ref.provider), recordUrls.get(refKey(ref)));
   const areaLabel = AREA_LABEL[area].toLowerCase();
   const since = addMinutes(onsetAt, -60);
   const changeWindow = { since: addMinutes(onsetAt, -240), until: addMinutes(onsetAt, 30) };
@@ -319,6 +323,7 @@ export async function runInvestigation(args: {
    */
   const releaseStep = (o: ToolOutcome<ChangeScan>) => {
     if (!o.ok) return { ok: false, state: o.state, result: o.detail, refs: [] as SourceRef[] };
+    remember(o.data.records);
     const reached: SourceId[] = [];
     const parts: string[] = [];
     for (const cov of o.data.coverage) {
@@ -369,6 +374,7 @@ export async function runInvestigation(args: {
   const issuesStep = (o: ToolOutcome<WorkItem[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (o.stale) staleGap(source, o.stale.freshAsOf);
+    remember(o.data);
     const issues = o.data;
     if (!issues.length && o.stale) return { ok: true, result: `No ${areaLabel} issues up to ${fmtTime(o.stale.freshAsOf)}${staleNote(source, o)} — absence after that is unknown`, refs: [] };
     if (!issues.length) {
@@ -406,6 +412,7 @@ export async function runInvestigation(args: {
   const reviewsStep = (o: ToolOutcome<FeedbackItem[]>, source: SourceId) => {
     if (!o.ok) return { ok: false, state: o.state, result: gap(source, o), refs: [] };
     if (o.stale) staleGap(source, o.stale.freshAsOf);
+    remember(o.data);
     if (!o.data.length && o.stale) return { ok: true, result: `No negative feedback about ${areaLabel} up to ${fmtTime(o.stale.freshAsOf)}${staleNote(source, o)} — absence after that is unknown`, refs: [] };
     if (!o.data.length) {
       add({ id: `${source}:no_reviews:${area}`, provider: source, direction: 'stable', statement: `${P(source).short}: no negative feedback mentions ${areaLabel} since ${fmtTime(since)}.`, refs: [], query: { tool: 'getFeedback', input: `${areaLabel} reviews since ${fmtTime(since)}` } }, 'no_reviews');

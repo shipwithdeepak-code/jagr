@@ -133,6 +133,10 @@ describe('connected workspace, every P0 connector (end to end)', () => {
     expect(text).not.toMatch(PII);
     expect(text).not.toMatch(/\b(caused by|root cause is|was caused)\b/i);
     expect(inv.sourceLinks.every((l) => !l.simulated)).toBe(true);
+    // Links point at the record itself, not the provider's home page.
+    const ext = Object.fromEntries(inv.evidence.filter((e) => e.link).map((e) => [e.provider, e.link!.externalUrl]));
+    expect(ext.github).toBe('https://github.com/acme/web/commit/abcdef1234567');
+    expect(ext.jira).toMatch(/^https:\/\/acme\.atlassian\.net\/browse\/SHOP-20\d$/);
   });
 
   it('AI egress: prompts carry no personal data; a workspace that disallows egress never calls the model', async () => {
