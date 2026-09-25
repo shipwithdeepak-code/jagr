@@ -86,6 +86,23 @@ succeed through it; both get a real 401 directly), so the read path and mapping 
 authentication with a Jagr-configured token was not. Recorded, sanitised responses from that run are in
 `connectors/__fixtures__/github.recorded.json`.
 
+### Re-verification (v1.2, 2026-09-25)
+
+Same environment, same credentials (only GitHub, through the egress proxy's own credential):
+
+| Provider | Result | What was checked on real data |
+|---|---|---|
+| GitHub | **LIVE VERIFIED — read path** (token authentication NOT verified: the proxy supplies its own credential) | Connect → test → healthy through the new connection lifecycle API; 3 real production deployments read through monitoring's connector path with actual timing from their success status, `connected` provenance, read times; every evidence link (commit page) resolves (HTTP 200); disconnect → not configured and no longer readable; the token appears in no stored document or audit entry. Real 401 rejection classified as a credential failure (direct, without the proxy). Rate limiting: classification tested on fixtures only (a real limit was not triggered). |
+| Amplitude | NOT VERIFIED (no credentials) | Real endpoint rejects invalid credentials with 403 → *needs reconnect*. |
+| Jira Cloud | NOT VERIFIED (no credentials or site) | Real Atlassian endpoint: unknown site → 404 → error (never "no issues"). |
+| Intercom | NOT VERIFIED (no credentials) | Real endpoint rejects an invalid token with 401 → *needs reconnect*. |
+| Slack | NOT VERIFIED (no bot token or test channel) | Real endpoint: invalid token → `invalid_auth` → failed delivery / *needs reconnect*. |
+
+No real end-to-end investigation was possible: a change source alone never starts one. With credentials for any
+signal source (Amplitude, Jira or Intercom) — and a Slack test channel — `npm run eval:connectors` and
+`JAGR_EVAL_SLACK_SEND=1 npm run eval:dogfood` run the whole verification (authentication, mapping, timestamps,
+provenance, freshness, links, errors, privacy in investigations and prompts, AI egress, Slack delivery).
+
 ## Health
 
 - **At run time** (`app/monitoring.ts → sourcesForRun`): a connection without a registered connector, in
