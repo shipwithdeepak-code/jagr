@@ -7,6 +7,7 @@ import { AppShell } from '@/components/AppShell';
 import { EmptyState } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProductProvider } from '@/state/product';
+import { ServerSessionProvider } from '@/state/serverSession';
 import { ProductOverviewPage } from '@/pages/ProductOverview';
 
 // Secondary screens load on demand to keep the first paint small.
@@ -96,12 +97,14 @@ export default function App() {
     <BrowserRouter>
       <ToastProvider>
         <WorkspaceProvider>
-          <ProductProvider>
-            <ScrollAndTitle />
-            <AppShell>
-              <Screens />
-            </AppShell>
-          </ProductProvider>
+          <ServerSessionProvider>
+            <ProductProvider>
+              <ScrollAndTitle />
+              <AppShell>
+                <Screens />
+              </AppShell>
+            </ProductProvider>
+          </ServerSessionProvider>
         </WorkspaceProvider>
       </ToastProvider>
     </BrowserRouter>

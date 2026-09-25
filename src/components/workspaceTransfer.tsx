@@ -17,9 +17,9 @@ export function WorkspaceTransfer() {
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const server = useServerAccount();
 
-  const download = () => {
+  const download = async () => {
     try {
-      const doc = exportWorkspace();
+      const doc = await exportWorkspace();
       const blob = new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);

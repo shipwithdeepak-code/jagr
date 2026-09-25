@@ -82,4 +82,16 @@ describe('Sources view-model', () => {
     ];
     expect(groupSources(sourceViews(conns, { asOf: ASOF })).map((g) => g.group)).toEqual(['connected', 'error', 'simulated']);
   });
+
+  it('server workspace: owners/admins get real connect / reconnect / disconnect; environment-managed and members do not', () => {
+    const mk = (over: Partial<Connection>): Connection => ({ id: 'conn-jira', workspaceId: 'ws1', source: 'jira', provider: 'jira', roles: ['work_items', 'changes'], authKind: 'api_key', state: 'needs_reconnect', detail: '', config: {}, updatedAt: ASOF, ...over });
+    const conns: SourceConnection[] = [{ provider: 'jira', state: 'needs_reconnect', detail: '', updatedAt: ASOF }];
+    const avail = (c: Connection, manage: boolean) => Object.fromEntries(sourceViews(conns, { asOf: ASOF, server: { jira: connectionView(c, ASOF) }, manage })[0].actions.map((a) => [a.id, a.available]));
+    expect(avail(mk({}), true)).toEqual({ reconnect: true, test: true, disconnect: true });
+    expect(avail(mk({}), false)).toEqual({ reconnect: false, test: true, disconnect: false });
+    expect(avail(mk({ authKind: 'owner_env' }), true)).toEqual({ reconnect: false, test: true, disconnect: false });
+    const off: SourceConnection[] = [{ provider: 'jira', state: 'not_configured', detail: '', updatedAt: ASOF }];
+    const v = sourceViews(off, { asOf: ASOF, server: { jira: connectionView(mk({ state: 'not_configured' }), ASOF) }, manage: true })[0];
+    expect(v.actions.map((a) => [a.id, a.available])).toEqual([['connect', true]]);
+  });
 });

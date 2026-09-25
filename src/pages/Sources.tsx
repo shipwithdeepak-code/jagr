@@ -16,10 +16,24 @@ import { SourceGroups, SourcesOverview } from '@/components/sources';
 import { sourceViews, type SourceGroup } from '@/product/view/sources';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import { WorkspaceTransfer } from '@/components/workspaceTransfer';
+import { ServerSources } from '@/components/serverWorkspace';
 
 
 export function SourcesPage() {
-  const { mode } = useProduct();
+  const { mode, location, server } = useProduct();
+  if (location === 'server' && mode === 'connected') {
+    return (
+      <>
+        <PageHeader
+          title="Sources"
+          description={`Live sources for ${server?.name ?? 'this workspace'}. Credentials are stored encrypted on the Jagr server and never sent to this browser. Every source reports its real health; a source that cannot be read is a gap in investigations, never “nothing found”.`}
+          actions={<WorkspaceDataBadge />}
+        />
+        <ServerSources />
+        <WorkspaceTransfer />
+      </>
+    );
+  }
   if (mode === 'imported') {
     return (
       <>

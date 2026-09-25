@@ -223,7 +223,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mb-3 px-2.5 text-[11.5px] leading-snug text-ink-3">
           <span className="font-medium text-ink-2">Tempo · Product</span>
           <br />
-          {env === 'demo' ? 'Demo night · simulated replay' : product.mode === 'imported' ? 'Your data · browser-local' : product.mode === 'sample' ? 'Sample data · simulated' : 'Not set up yet'}
+          {env === 'demo' ? 'Demo night · simulated replay' : product.location === 'server' ? `${product.server?.name ?? 'Server workspace'} · ${product.mode === 'connected' ? 'live sources' : product.mode === 'imported' ? 'imported data' : 'sample'}` : product.mode === 'imported' ? 'Your data · browser-local' : product.mode === 'sample' ? 'Sample data · simulated' : 'Not set up yet'}
         </div>
       )}
       {primary.map((it) => (
@@ -290,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               title={ENVIRONMENT[env].description}
             >
               <span className={cx('size-1.5 rounded-full', env === 'demo' ? 'bg-high' : 'bg-info')} />
-              {env === 'workspace' && !product.mode ? 'Not set up yet' : env === 'workspace' && product.mode === 'imported' ? 'Your data · browser-local' : ENVIRONMENT[env].badge}
+              {env === 'workspace' && product.location === 'server' ? (product.mode === 'connected' ? 'Live sources · server' : 'Server workspace') : env === 'workspace' && !product.mode ? 'Not set up yet' : env === 'workspace' && product.mode === 'imported' ? 'Your data · browser-local' : ENVIRONMENT[env].badge}
             </span>
             {env === 'workspace' && product.mode && (
               <span className="hidden truncate xl:inline">
@@ -314,10 +314,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                   disabled={product.running || !product.mode || (product.mode === 'imported' && !product.state.watches.length)}
                   title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : undefined}
                   onClick={async () => {
-                    const r = await product.runMonitoring();
+                    let r;
+                    try {
+                      r = await product.runMonitoring();
+                    } catch (e) {
+                      toast({ tone: 'warning', title: 'The run did not complete', body: (e as Error).message });
+                      return;
+                    }
                     navigate('/');
                     toast(
-                      product.mode === 'imported'
+                      product.location === 'server'
+                        ? { tone: 'success', title: 'Monitoring complete', body: product.mode === 'connected' ? 'Active watches ran against your live sources on the server.' : 'Watches ran on the server over this workspace’s data.' }
+                        : product.mode === 'imported'
                         ? r
                           ? { tone: 'success', title: 'Monitoring complete', body: `Watches ran over your imported data (${r.investigations.length} investigation${r.investigations.length === 1 ? '' : 's'}).` }
                           : { tone: 'warning', title: 'Nothing to investigate yet', body: 'Import metrics, issues or feedback first.' }
@@ -340,6 +348,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
+          {env === 'workspace' && product.server?.error && (
+            <p role="alert" className="mb-4 rounded-lg border border-crit/40 bg-crit-soft px-3 py-2 text-[13px] text-crit">
+              The Jagr server reported a problem: {product.server.error}
+            </p>
+          )}
           {env === 'workspace' && product.progress && (
             <div className="mb-6">
               <RunProgressPanel progress={product.progress} planner={product.plannerChoice === 'llm' && product.llmOption.available ? `AI planner · ${product.llmOption.label}` : 'Deterministic planner'} />

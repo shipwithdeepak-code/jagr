@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "eval:planners": "JAGR_LIVE_EVAL=1 vitest run scripts/eval/plannerComparison.live.ts --reporter=verbose --silent=false",
     "eval:connectors": "NODE_USE_ENV_PROXY=1 JAGR_LIVE_EVAL=1 vitest run scripts/eval/connectors.live.ts --reporter=verbose --silent=false",
+    "eval:ui": "npm run build && JAGR_LIVE_EVAL=1 vitest run scripts/eval/serverWorkspace.ui.live.ts --reporter=verbose",
     "eval:dogfood": "NODE_USE_ENV_PROXY=1 JAGR_LIVE_EVAL=1 vitest run scripts/eval/dogfood.live.ts --reporter=verbose --silent=false"
   },
   "dependencies": {

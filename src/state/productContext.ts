@@ -5,9 +5,13 @@ import { createContext, useContext } from 'react';
 import type { ActionDecision, BriefSchedule, ConnectionState, MonitoringResult, ProposedAction, ProviderId, SourceConnection, Watch } from '@/product/types';
 import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
 import type { ImportedWorld } from '@/product/imports/world';
+import type { ConnectionView } from '@/product/connections/model';
 
-/** sample = the simulated sample night · imported = the user's own CSV / JSON evidence. */
-export type WorkspaceMode = 'sample' | 'imported';
+/**
+ * sample = the simulated sample night · imported = the user's own CSV / JSON evidence ·
+ * connected = live sources (server workspaces only).
+ */
+export type WorkspaceMode = 'sample' | 'imported' | 'connected';
 
 export interface ProductState {
   /** 3 = role-based signals, tools and actions. Older stored workspaces are migrated on load. */
@@ -65,12 +69,29 @@ export interface ProductApi {
   storageError?: string;
   clearWorkspace(): void;
   reset(): void;
-  /** Jagr Workspace Export v1 of this browser workspace (no secrets, sessions or email addresses). */
-  exportWorkspace(): WorkspaceExportV1;
+  /** Jagr Workspace Export v1 of this workspace (no secrets, sessions or email addresses). Server workspaces export on the server. */
+  exportWorkspace(): Promise<WorkspaceExportV1>;
   /** Dry run: validate an export file and report what an import would do. Writes nothing. */
   previewImport(text: string): ImportPlan;
   /** Replace this browser workspace with a validated export. Only after the user confirmed the report. */
   applyImport(plan: ImportPlan): void;
+  /** Where this workspace lives. Server workspaces are read and changed through the Jagr server API. */
+  location: 'browser' | 'server';
+  /** The open server workspace (absent for the browser workspace). */
+  server?: {
+    workspaceId: string;
+    name: string;
+    role: 'owner' | 'admin' | 'member';
+    canApprove: boolean;
+    /** Connections as the server reports them (health, account, last check) — never credentials. */
+    connections: ConnectionView[];
+    settings: { planner: 'deterministic' | 'llm'; aiEgressAllowed: boolean };
+    loading: boolean;
+    /** The last failed server call, shown until the next successful one. */
+    error?: string;
+    refresh(): Promise<void>;
+    setAiEgressAllowed(allowed: boolean): Promise<void>;
+  };
 }
 
 export const ProductContext = createContext<ProductApi | null>(null);

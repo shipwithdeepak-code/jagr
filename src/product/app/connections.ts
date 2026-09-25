@@ -28,6 +28,8 @@ export interface ConnectionType {
   kind: 'source' | 'channel';
   /** The credential fields a member supplies (stored as one api_key secret). */
   credentialFields: { key: string; label: string }[];
+  /** A starting configuration to edit (placeholders, never real values). */
+  configExample: Record<string, unknown>;
   /** The provider's own config validation. */
   parseConfig(config: unknown): { ok: true; config: Record<string, unknown> } | { ok: false; errors: string[] };
 }

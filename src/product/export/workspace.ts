@@ -107,7 +107,7 @@ export interface LocalWorkspaceSnapshot {
   clock: string;
   decisions: Record<string, ActionDecision>;
   planner?: 'deterministic' | 'llm';
-  workspace?: { mode: 'sample' | 'imported'; createdAt: string };
+  workspace?: { mode: 'sample' | 'imported' | 'connected'; createdAt: string };
   imports?: ImportedDataset[];
   importedExportIds?: string[];
 }

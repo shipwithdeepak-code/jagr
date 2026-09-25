@@ -76,7 +76,7 @@ export function ProductOverviewPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring()} disabled={running || (mode === 'imported' && !state.watches.length)}>
+          <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring().catch(() => undefined)} disabled={running || (mode === 'imported' && !state.watches.length)}>
             {running ? 'Running…' : 'Run monitoring'}
           </Button>
           <Link to="/watches?new=1" className="interactive inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle">
@@ -90,7 +90,7 @@ export function ProductOverviewPage() {
         <p className="mb-6 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-2">
           <span className="size-1.5 rounded-full bg-high" aria-hidden />
           Watches or sources changed since the last run — results below reflect the previous configuration.
-          <button className="interactive font-medium text-accent hover:underline" onClick={() => void runMonitoring()} disabled={running}>
+          <button className="interactive font-medium text-accent hover:underline" onClick={() => void runMonitoring().catch(() => undefined)} disabled={running}>
             Re-run
           </button>
         </p>

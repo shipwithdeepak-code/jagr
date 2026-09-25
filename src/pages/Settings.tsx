@@ -5,6 +5,7 @@ import { AREA_LABELS, TEAMS } from '@/domain/defaults';
 import { AUTONOMY_LEVELS, GATE_LABELS } from '@/agents/policy';
 import { useWorkspace } from '@/state/workspace';
 import { Badge, Button, Card, cx, Modal, PageHeader, Select, Toggle } from '@/components/ui';
+import { WorkspaceLocationPanel } from '@/components/serverWorkspace';
 import { useToast } from '@/components/toast';
 
 const WATCH: { key: WatchArea; label: string; category?: SignalCategory; hint: string }[] = [
@@ -46,6 +47,7 @@ export function SettingsPage() {
       <PageHeader title="Settings" description="What JAGR watches, who owns what, how much it may do on its own, and when it interrupts people. Changes apply to the next run and are recorded in the audit log." />
 
       <div className="space-y-6">
+        <WorkspaceLocationPanel />
         <Panel title="What JAGR watches" hint="Thresholds are the relative move (in the bad direction) required before a signal can be anomalous.">
           <div className="divide-y divide-line">
             {WATCH.map((w) => (

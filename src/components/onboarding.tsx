@@ -134,7 +134,7 @@ export function GettingStarted() {
               </Link>
             )}
             {i === current && i === 3 && (
-              <Button size="sm" variant="primary" icon={RefreshCw} className="mt-2" disabled={running || !steps[0].done || !steps[1].done} onClick={() => void runMonitoring()}>
+              <Button size="sm" variant="primary" icon={RefreshCw} className="mt-2" disabled={running || !steps[0].done || !steps[1].done} onClick={() => void runMonitoring().catch(() => undefined)}>
                 {running ? 'Investigating…' : 'Run monitoring'}
               </Button>
             )}
@@ -147,7 +147,8 @@ export function GettingStarted() {
 
 /** Where the workspace's data comes from — shown near every place data is presented. */
 export function WorkspaceDataBadge() {
-  const { mode } = useProduct();
+  const { mode, location } = useProduct();
+  if (location === 'server') return <Badge tone="accent">{mode === 'connected' ? 'Live sources · server workspace' : mode === 'imported' ? 'Your data · server workspace' : 'Sample data · server workspace'}</Badge>;
   if (mode === 'imported') return <Badge tone="accent">Your data · browser-local</Badge>;
   return (
     <span className="inline-flex items-center gap-1">

@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react';
 import { fmtDate, fmtTime } from '@/lib/time';
-import { fmtBehind, groupSources, ROLE_LABEL, SOURCE_GROUP_LABEL, type SourceGroup, type SourceView } from '@/product/view/sources';
+import { fmtBehind, groupSources, ROLE_LABEL, SOURCE_GROUP_LABEL, type SourceActionId, type SourceGroup, type SourceView } from '@/product/view/sources';
 import { PROVIDER_ICON } from './product';
 import { StatusBadge } from './primitives';
 import { Button, cx } from './ui';
@@ -74,7 +74,7 @@ export function SourcesOverview({ views }: { views: SourceView[] }) {
 }
 
 /** Sources grouped by state, most actionable first. `extra` adds per-source content (e.g. simulation controls). */
-export function SourceGroups({ views, extra }: { views: SourceView[]; extra?: (v: SourceView) => ReactNode }) {
+export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; extra?: (v: SourceView) => ReactNode; onAction?: (v: SourceView, action: SourceActionId) => void }) {
   return (
     <div className="space-y-8">
       {groupSources(views).map((g) => (
@@ -87,7 +87,7 @@ export function SourceGroups({ views, extra }: { views: SourceView[]; extra?: (v
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {g.sources.map((v, i) => (
-              <SourceCard key={v.id} view={v} index={i} extra={extra?.(v)} />
+              <SourceCard key={v.id} view={v} index={i} extra={extra?.(v)} onAction={onAction} />
             ))}
           </div>
         </section>
@@ -96,7 +96,7 @@ export function SourceGroups({ views, extra }: { views: SourceView[]; extra?: (v
   );
 }
 
-export function SourceCard({ view: v, extra, index = 0 }: { view: SourceView; extra?: ReactNode; index?: number }) {
+export function SourceCard({ view: v, extra, index = 0, onAction }: { view: SourceView; extra?: ReactNode; index?: number; onAction?: (v: SourceView, action: SourceActionId) => void }) {
   const Icon = PROVIDER_ICON[v.id];
   const health = healthText(v);
   const reasonsId = useId();
@@ -141,7 +141,7 @@ export function SourceCard({ view: v, extra, index = 0 }: { view: SourceView; ex
         <div className="mt-auto pt-3">
           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
             {v.actions.map((a) => (
-              <Button key={a.id} size="sm" variant={a.id === 'reconnect' || a.id === 'connect' ? 'primary' : 'secondary'} disabled={!a.available} aria-describedby={!a.available ? reasonsId : undefined}>
+              <Button key={a.id} size="sm" variant={a.id === 'reconnect' || a.id === 'connect' ? 'primary' : 'secondary'} disabled={!a.available || !onAction} aria-describedby={!a.available ? reasonsId : undefined} onClick={a.available && onAction ? () => onAction(v, a.id) : undefined}>
                 {a.label}
               </Button>
             ))}

@@ -6,7 +6,10 @@ import { decide } from '../src/product/agent/decisions';
 import { ApprovalRequiredError } from '../src/product/agent/actions';
 import { commitServerImport, exportServerWorkspace, planImport } from '../src/product/export/workspace';
 import { schedulerTick } from '../src/product/app/scheduler';
-import { checkConnection, drainJobs, runWorkspaceNow, sourcesForRun } from '../src/product/app/monitoring';
+import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun } from '../src/product/app/monitoring';
+import { buildSnapshot } from '../src/product/app/workspaceSnapshot';
+import { importFile } from '../src/product/imports/schemas';
+import { WriteConflict } from '../src/product/ports/persistence';
 import type { Runtime } from './runtime';
 import type { ApiRequest, ApiResponse } from './http/types';
 import { json, redirect } from './http/types';
@@ -35,7 +38,28 @@ const newId = (prefix: string) => `${prefix}_${randomToken(12)}`;
 
 const DecisionBody = z.object({ actionId: z.string().min(1), status: z.enum(['approved', 'rejected', 'done']), optionId: z.string().optional(), note: z.string().max(500).optional() }).strict();
 const ImportBody = z.object({ doc: z.unknown(), confirm: z.literal(true).optional() }).strict();
-const WatchBody = z.object({ templateId: z.enum(WATCH_TEMPLATES.map((t) => t.id) as [string, ...string[]]), sources: z.array(z.string()).min(1).optional() }).strict();
+const Attention = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
+const WatchBody = z
+  .object({
+    templateId: z.enum(WATCH_TEMPLATES.map((t) => t.id) as [string, ...string[]]),
+    sources: z.array(z.string()).min(1).optional(),
+    name: z.string().min(1).max(80).optional(),
+    schedule: z.object({ frequency: z.enum(['15m', '30m', '1h', '4h', 'daily']), dailyAt: z.string().regex(/^\d{2}:\d{2}$/) }).strict().optional(),
+    severityThreshold: Attention.optional(),
+    thresholds: z.record(z.string(), z.number().positive().max(100)).optional(),
+    notificationPolicy: z.object({ interruptAt: z.enum(['MEDIUM', 'HIGH', 'CRITICAL']), briefMin: z.enum(['MEDIUM', 'HIGH']), morningBrief: z.boolean() }).strict().optional(),
+  })
+  .strict();
+const WatchPatch = z.object({ status: z.enum(['active', 'paused']) }).strict();
+const WorkspacePatch = z
+  .object({
+    name: z.string().min(1).max(80).optional(),
+    brief: z.object({ enabled: z.boolean(), time: z.string().regex(/^\d{2}:\d{2}$/), timezone: z.string().min(1).max(60) }).strict().optional(),
+    planner: z.enum(['deterministic', 'llm']).optional(),
+    aiEgressAllowed: z.boolean().optional(),
+  })
+  .strict();
+const ImportUpload = z.object({ kind: z.enum(['metrics', 'issues', 'releases', 'changes', 'feedback']), filename: z.string().min(1).max(200), text: z.string().min(1).max(3_000_000) }).strict();
 const Credential = z.record(z.string().max(64), z.string().max(8192)).refine((r) => Object.keys(r).length <= 10);
 const ConnectBody = z.object({ provider: z.string().min(1).max(40), config: z.record(z.string(), z.unknown()).default({}), credential: Credential.optional() }).strict();
 const ReconnectBody = z.object({ credential: Credential }).strict();
@@ -108,14 +132,18 @@ export function createApp(rt: Runtime) {
       const body = WatchBody.safeParse(req.body);
       if (!body.success) return json(400, { error: 'Expected { templateId, sources? }.' });
       const tpl = WATCH_TEMPLATES.find((t) => t.id === body.data.templateId)!;
-      const connected = new Set((await rt.repos.connections.list(id)).map((c) => c.source as string));
+      // Sources a watch may use: the workspace's connections (connected) or its imported channels (imported).
+      const connected = new Set(ws.mode === 'imported' ? (await sourcesForRun(rt, ws, rt.clock.now())).connections.filter((c) => c.state === 'imported').map((c) => c.provider as string) : (await rt.repos.connections.list(id)).filter((c) => c.roles.length).map((c) => c.source as string));
       const sources = body.data.sources ?? tpl.sources.filter((s) => connected.has(s));
       const unknown = sources.filter((s) => !connected.has(s));
       if (unknown.length || !sources.length) return json(400, { error: unknown.length ? `Not a source in this workspace: ${unknown.join(', ')}.` : 'None of this template’s sources is connected; pass sources explicitly.' });
       // Connected workspaces define their own metrics: keep the template's metric signals the sources serve.
       // Metrics configured for the template's area that the template does not name are added too.
       const served = ws.mode === 'connected' ? (await sourcesForRun(rt, ws, rt.clock.now())).registry.metrics(sources.filter((x): x is SourceId => isSourceId(x as ProviderId))) : undefined;
-      const watch = watchFromTemplate(newId('watch'), tpl.id, { sources: sources as ProviderId[], metricKeys: served?.map((m) => m.def.key) }, rt.clock.now());
+      const { templateId: _t, sources: _s, ...overrides } = body.data;
+      void _t;
+      void _s;
+      const watch = watchFromTemplate(newId('watch'), tpl.id, { ...overrides, sources: sources as ProviderId[], metricKeys: served?.map((m) => m.def.key) }, rt.clock.now());
       for (const m of served ?? []) {
         const key = `metric:${m.def.key}` as const;
         if ((tpl.area === '*' || m.def.area === tpl.area) && !watch.signals.some((x) => x.key === key)) watch.signals.unshift({ key });
@@ -123,6 +151,16 @@ export function createApp(rt: Runtime) {
       await rt.repos.watches.save(id, watch);
       await audit(id, p, 'watch.created', watch.id, tpl.name);
       return json(201, { watch });
+    }
+    if (section === 'watches' && req.method === 'PATCH' && sub) {
+      const body = WatchPatch.safeParse(req.body);
+      if (!body.success) return json(400, { error: 'Expected { status: "active" | "paused" }.' });
+      const w = await rt.repos.watches.get(id, sub);
+      if (!w) return json(404, { error: 'Watch not found.' });
+      const next = { ...w, status: body.data.status, updatedAt: rt.clock.now() };
+      await rt.repos.watches.save(id, next);
+      await audit(id, p, `watch.${body.data.status === 'active' ? 'resumed' : 'paused'}`, sub);
+      return json(200, { watch: next });
     }
     if (section === 'watches' && req.method === 'DELETE' && sub) {
       if (!(await rt.repos.watches.get(id, sub))) return json(404, { error: 'Watch not found.' });
@@ -196,10 +234,51 @@ export function createApp(rt: Runtime) {
       }
     }
     if (section === 'runs' && req.method === 'POST') {
-      if (ws.mode === 'connected') return json(409, { error: 'Connected workspaces run on the schedule; there is nothing to replay.' });
+      if (ws.mode === 'connected') {
+        // "Run now" for live sources: the same scheduled-watch path, due now, for every active watch.
+        const at = rt.clock.now();
+        const active = (await rt.repos.watches.list(id)).filter((w) => w.status === 'active');
+        let investigations = 0;
+        for (const w of active) investigations += (await runWatchJob(rt, { workspaceId: id, payload: { watchId: w.id, dueAt: at } })).investigations;
+        await audit(id, p, 'monitor.requested', undefined, `${active.length} watch(es)`);
+        return json(200, { workspaceId: id, watches: active.length, investigations });
+      }
       const summary = await runWorkspaceNow(rt, id);
       await audit(id, p, 'monitor.requested');
       return json(200, summary);
+    }
+    if (section === 'snapshot' && req.method === 'GET') return json(200, await buildSnapshot(rt.repos, ws, m, rt.clock.now()));
+    if (!section && req.method === 'PATCH') {
+      if (m.role !== 'owner' && m.role !== 'admin') return json(403, { error: 'Only workspace owners and admins can change workspace settings.' });
+      const body = WorkspacePatch.safeParse(req.body);
+      if (!body.success) return json(400, { error: 'Invalid workspace settings.' });
+      const { name, brief, planner, aiEgressAllowed } = body.data;
+      const next = { ...ws, name: name ?? ws.name, brief: brief ?? ws.brief, settings: { ...ws.settings, ...(planner ? { planner } : {}), ...(aiEgressAllowed !== undefined ? { aiEgressAllowed } : {}) } };
+      try {
+        await rt.repos.workspaces.update(next, ws.version);
+      } catch (e) {
+        if (e instanceof WriteConflict) return json(409, { error: 'The workspace changed meanwhile; reload and try again.' });
+        throw e;
+      }
+      await audit(id, p, 'workspace.updated', undefined, Object.keys(body.data).join(', '));
+      return json(200, { workspace: publicWorkspace((await rt.repos.workspaces.get(id))!) });
+    }
+    if (section === 'imports' && req.method === 'POST' && !sub) {
+      if (ws.mode !== 'imported') return json(409, { error: 'Only imported workspaces take uploaded data.' });
+      const body = ImportUpload.safeParse(req.body);
+      if (!body.success) return json(400, { error: 'Expected { kind, filename, text } (up to 3 MB).' });
+      const at = rt.clock.now();
+      const ds = importFile(body.data.kind, body.data.filename, body.data.text, at, newId(`imp-${body.data.kind}`));
+      if (!ds.error) {
+        await rt.repos.imports.save(id, ds);
+        await audit(id, p, 'import.added', ds.id, `${ds.kind} · ${ds.totalRows} row(s), ${ds.rejected.length} rejected`);
+      }
+      return json(ds.error ? 422 : 201, { dataset: ds });
+    }
+    if (section === 'imports' && req.method === 'DELETE' && sub) {
+      await rt.repos.imports.remove(id, sub);
+      await audit(id, p, 'import.removed', sub);
+      return json(200, { ok: true });
     }
     if (section === 'export' && req.method === 'GET') {
       const doc = await exportServerWorkspace(rt.repos, id, { clock: rt.clock, appVersion: APP_VERSION });
@@ -238,6 +317,14 @@ export function createApp(rt: Runtime) {
     if (head === 'me' && req.method === 'GET') return json(200, { user: p.user, memberships: p.memberships });
     if (head === 'connection-types' && req.method === 'GET') return json(200, { types: Object.values(rt.types).map(typeInfo) });
 
+    if (head === 'workspaces' && !a && req.method === 'GET') {
+      const list = [];
+      for (const mem of p.memberships) {
+        const w = await rt.repos.workspaces.get(mem.workspaceId);
+        if (w) list.push({ id: w.id, name: w.name, mode: w.mode, createdAt: w.createdAt, role: mem.role, canApprove: mem.canApprove });
+      }
+      return json(200, { workspaces: list });
+    }
     if (head === 'workspaces' && !a && req.method === 'POST') {
       const body = WorkspaceBody.safeParse(req.body ?? {});
       if (!body.success) return json(400, { error: 'Invalid workspace.' });
