@@ -1,8 +1,8 @@
-import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Repositories, Session, Transactor, User, Workspace } from '../../src/product/ports/persistence';
-import { WriteConflict } from '../../src/product/ports/persistence';
-import type { MorningBriefDoc, Watch, WatchInvestigation } from '../../src/product/types';
-import type { ImportedDataset } from '../../src/product/imports/schemas';
-import type { SqlClient } from './sql';
+import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Repositories, Session, Transactor, User, Workspace } from '../../src/product/ports/persistence.js';
+import { WriteConflict } from '../../src/product/ports/persistence.js';
+import type { MorningBriefDoc, Watch, WatchInvestigation } from '../../src/product/types.js';
+import type { ImportedDataset } from '../../src/product/imports/schemas.js';
+import type { SqlClient } from './sql.js';
 
 /** Postgres implementation of the Repositories port. Every workspace query is scoped by workspace id. */
 

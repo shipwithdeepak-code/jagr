@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { Area } from '../../types';
-import type { ChangeRecord, MetricDefinition, MetricPoint, MetricSeries, SegmentSeries, TimeWindow } from '../../roles/types';
-import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types';
-import { basicAuth, requestJson } from './http';
-import { provenance } from './runtime';
-import { redactPersonalData } from './redact';
-import { ProviderUnavailableError } from '../types';
+import type { Area } from '../../types.js';
+import type { ChangeRecord, MetricDefinition, MetricPoint, MetricSeries, SegmentSeries, TimeWindow } from '../../roles/types.js';
+import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types.js';
+import { basicAuth, requestJson } from './http.js';
+import { provenance } from './runtime.js';
+import { redactPersonalData } from './redact.js';
+import { ProviderUnavailableError } from '../types.js';
 
 /**
  * Amplitude — MetricSource (event segmentation) and ChangeSource (chart annotations).

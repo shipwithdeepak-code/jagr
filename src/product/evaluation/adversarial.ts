@@ -1,13 +1,13 @@
-import type { MonitoringResult, SourceConnection, Watch, WatchTemplateId } from '../types';
-import { defaultBriefSchedule, watchFromTemplate } from '../catalog';
-import { defaultConnections, resolveRef } from '../integrations/adapters';
-import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, RELEASES_481, t, type World, type WorldSpec } from '../integrations/world';
-import type { IssueRecord, ReviewRecord } from '../integrations/types';
-import { runMonitoring } from '../engine/monitor';
-import { overclaimingSentences } from '../engine/language';
-import { ApprovalRequiredError, executeAction } from '../agent/actions';
-import { generatedTexts, type Check } from './golden';
-import type { InvestigationPlanner } from '../agent/planner';
+import type { MonitoringResult, SourceConnection, Watch, WatchTemplateId } from '../types.js';
+import { defaultBriefSchedule, watchFromTemplate } from '../catalog.js';
+import { defaultConnections, resolveRef } from '../integrations/adapters.js';
+import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, RELEASES_481, t, type World, type WorldSpec } from '../integrations/world.js';
+import type { IssueRecord, ReviewRecord } from '../integrations/types.js';
+import { runMonitoring } from '../engine/monitor.js';
+import { overclaimingSentences } from '../engine/language.js';
+import { ApprovalRequiredError, executeAction } from '../agent/actions.js';
+import { generatedTexts, type Check } from './golden.js';
+import type { InvestigationPlanner } from '../agent/planner.js';
 
 /**
  * Adversarial evaluation. Every case is built so that the obvious answer is wrong — blame the

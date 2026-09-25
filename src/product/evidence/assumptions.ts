@@ -1,4 +1,4 @@
-import type { WatchInvestigation } from '../types';
+import type { WatchInvestigation } from '../types.js';
 
 /**
  * What an investigation's reasoning takes as given without having checked it. Derived only from the

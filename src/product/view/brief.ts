@@ -1,6 +1,6 @@
-import type { ActionDecision, AttentionLevel, InvestigationState, ISO, MorningBriefDoc, SignalKey, Watch, WatchInvestigation } from '../types';
-import { effectiveActions } from '../agent/decisions';
-import { headlineOf } from '../presentation';
+import type { ActionDecision, AttentionLevel, InvestigationState, ISO, MorningBriefDoc, SignalKey, Watch, WatchInvestigation } from '../types.js';
+import { effectiveActions } from '../agent/decisions.js';
+import { headlineOf } from '../presentation.js';
 
 /**
  * The morning brief as a PM reads it: what needs attention (what changed, what Jagr found, what is

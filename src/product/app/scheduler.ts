@@ -1,7 +1,7 @@
-import type { Clock } from '../ports/clock';
-import type { JobQueue } from '../ports/jobs';
-import type { Repositories } from '../ports/persistence';
-import { dailyOccurrences, nextRunAt } from '../scheduler';
+import type { Clock } from '../ports/clock.js';
+import type { JobQueue } from '../ports/jobs.js';
+import type { Repositories } from '../ports/persistence.js';
+import { dailyOccurrences, nextRunAt } from '../scheduler.js';
 
 /**
  * Scheduler tick — the inbound scheduling port.

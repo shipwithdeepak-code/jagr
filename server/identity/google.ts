@@ -1,6 +1,6 @@
-import type { HttpClient } from '../../src/product/ports/http';
-import type { IdentityProvider, VerifiedIdentity } from '../../src/product/ports/identity';
-import { codeChallenge } from './pkce';
+import type { HttpClient } from '../../src/product/ports/http.js';
+import type { IdentityProvider, VerifiedIdentity } from '../../src/product/ports/identity.js';
+import { codeChallenge } from './pkce.js';
 
 /**
  * Google sign-in (OpenID Connect, authorization code + PKCE). The code is exchanged server-to-server

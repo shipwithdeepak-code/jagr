@@ -1,4 +1,4 @@
-import type { ProviderId, SourceConnection, SourceLink, SourceRef } from '../types';
+import type { ProviderId, SourceConnection, SourceLink, SourceRef } from '../types.js';
 import {
   ProviderUnavailableError,
   type Capability,
@@ -10,12 +10,12 @@ import {
   type ReviewRecord,
   type SourceEvent,
   type TimeWindow,
-} from './types';
-import { BUCKET_MIN, type World } from './world';
-import { SourceRegistry } from '../roles/registry';
-import type { SourceId } from '../roles/types';
-import { isSourceId } from '../roles/types';
-import { roleSourceFromAdapter } from './bridge';
+} from './types.js';
+import { BUCKET_MIN, type World } from './world.js';
+import { SourceRegistry } from '../roles/registry.js';
+import type { SourceId } from '../roles/types.js';
+import { isSourceId } from '../roles/types.js';
+import { roleSourceFromAdapter } from './bridge.js';
 
 /**
  * Simulated adapters for Jira, GA4, App Store Connect and Google Play.

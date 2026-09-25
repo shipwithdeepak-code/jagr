@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Clock } from '../../src/product/ports/clock';
-import type { JobQueue, JobState, LeasedJob } from '../../src/product/ports/jobs';
-import { LeaseLost } from '../../src/product/ports/jobs';
-import type { SqlClient } from './sql';
+import type { Clock } from '../../src/product/ports/clock.js';
+import type { JobQueue, JobState, LeasedJob } from '../../src/product/ports/jobs.js';
+import { LeaseLost } from '../../src/product/ports/jobs.js';
+import type { SqlClient } from './sql.js';
 
 /**
  * Postgres implementation of the JobQueue port. Due jobs are claimed with FOR UPDATE SKIP LOCKED, so

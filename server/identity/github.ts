@@ -1,6 +1,6 @@
-import type { HttpClient } from '../../src/product/ports/http';
-import type { IdentityProvider, VerifiedIdentity } from '../../src/product/ports/identity';
-import { codeChallenge } from './pkce';
+import type { HttpClient } from '../../src/product/ports/http.js';
+import type { IdentityProvider, VerifiedIdentity } from '../../src/product/ports/identity.js';
+import { codeChallenge } from './pkce.js';
 
 /** GitHub sign-in (OAuth app, authorization code + PKCE). The subject is GitHub's numeric user id, never the login (logins can change). */
 export function githubIdentity(cfg: { clientId: string; clientSecret: string; http: HttpClient }): IdentityProvider {

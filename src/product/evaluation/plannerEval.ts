@@ -1,13 +1,13 @@
-import type { MonitoringResult, SourceConnection, TraceStep, Watch, WatchTemplateId } from '../types';
-import { defaultBriefSchedule, defaultWatches, watchFromTemplate } from '../catalog';
-import { defaultConnections } from '../integrations/adapters';
-import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, defaultWorld, RELEASES_481, type World } from '../integrations/world';
-import { runMonitoring } from '../engine/monitor';
-import { ApprovalRequiredError, executeAction } from '../agent/actions';
-import { BUDGET } from '../agent/investigator';
-import { createModelPlanner, type PlannerClient } from '../agent/planner';
-import { ck, universal, type AdversarialCheck } from './adversarial';
-import { PLANNER_DOUBLES } from './plannerDoubles';
+import type { MonitoringResult, SourceConnection, TraceStep, Watch, WatchTemplateId } from '../types.js';
+import { defaultBriefSchedule, defaultWatches, watchFromTemplate } from '../catalog.js';
+import { defaultConnections } from '../integrations/adapters.js';
+import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, defaultWorld, RELEASES_481, type World } from '../integrations/world.js';
+import { runMonitoring } from '../engine/monitor.js';
+import { ApprovalRequiredError, executeAction } from '../agent/actions.js';
+import { BUDGET } from '../agent/investigator.js';
+import { createModelPlanner, type PlannerClient } from '../agent/planner.js';
+import { ck, universal, type AdversarialCheck } from './adversarial.js';
+import { PLANNER_DOUBLES } from './plannerDoubles.js';
 
 /**
  * Model-planning evaluation: the model proposes, policy disposes. Each case drives the real

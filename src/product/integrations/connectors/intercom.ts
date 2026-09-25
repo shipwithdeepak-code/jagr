@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import type { FeedbackItem, TimeWindow } from '../../roles/types';
-import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types';
-import { requestJson } from './http';
-import { provenance } from './runtime';
-import { plainText, redactPersonalData } from './redact';
-import { ProviderUnavailableError } from '../types';
+import type { FeedbackItem, TimeWindow } from '../../roles/types.js';
+import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types.js';
+import { requestJson } from './http.js';
+import { provenance } from './runtime.js';
+import { plainText, redactPersonalData } from './redact.js';
+import { ProviderUnavailableError } from '../types.js';
 
 /**
  * Intercom — FeedbackSource: customer-started support conversations. REST API (version 2.11),

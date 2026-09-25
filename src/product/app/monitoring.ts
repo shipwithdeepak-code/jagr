@@ -1,24 +1,24 @@
-import type { EmailNotification, MonitoringResult, ScheduledJob, SourceConnection } from '../types';
-import type { Clock } from '../ports/clock';
-import type { HttpClient } from '../ports/http';
-import type { JobQueue, LeasedJob } from '../ports/jobs';
-import type { AuditEntry, Connection, Repositories, Transactor, Workspace } from '../ports/persistence';
-import type { SecretPayload, SecretStore } from '../ports/secrets';
-import { SecretNotFound } from '../ports/secrets';
-import type { ConnectorCheck } from '../integrations/connectors/types';
-import type { ImportedDataset } from '../imports/schemas';
-import type { RegisteredSource } from '../roles/types';
-import { SourceRegistry } from '../roles/registry';
-import type { World } from '../integrations/world';
-import { defaultWorld } from '../integrations/world';
-import { createRegistry } from '../integrations/adapters';
-import { buildImportedWorld, watchesForImportedData } from '../imports/world';
-import { runMonitoring } from '../engine/monitor';
-import { composeBrief } from '../engine/brief';
-import type { InvestigationPlanner } from '../agent/planner';
-import { alertMessage, briefMessage, deliver, type ChannelFactory } from './notifications';
-import { uniqueId } from './ids';
-import { LeaseLost } from '../ports/jobs';
+import type { EmailNotification, MonitoringResult, ScheduledJob, SourceConnection } from '../types.js';
+import type { Clock } from '../ports/clock.js';
+import type { HttpClient } from '../ports/http.js';
+import type { JobQueue, LeasedJob } from '../ports/jobs.js';
+import type { AuditEntry, Connection, Repositories, Transactor, Workspace } from '../ports/persistence.js';
+import type { SecretPayload, SecretStore } from '../ports/secrets.js';
+import { SecretNotFound } from '../ports/secrets.js';
+import type { ConnectorCheck } from '../integrations/connectors/types.js';
+import type { ImportedDataset } from '../imports/schemas.js';
+import type { RegisteredSource } from '../roles/types.js';
+import { SourceRegistry } from '../roles/registry.js';
+import type { World } from '../integrations/world.js';
+import { defaultWorld } from '../integrations/world.js';
+import { createRegistry } from '../integrations/adapters.js';
+import { buildImportedWorld, watchesForImportedData } from '../imports/world.js';
+import { runMonitoring } from '../engine/monitor.js';
+import { composeBrief } from '../engine/brief.js';
+import type { InvestigationPlanner } from '../agent/planner.js';
+import { alertMessage, briefMessage, deliver, type ChannelFactory } from './notifications.js';
+import { uniqueId } from './ids.js';
+import { LeaseLost } from '../ports/jobs.js';
 
 /**
  * Server-side monitoring — the same engine the browser runs, driven by the job queue and persisted

@@ -1,12 +1,12 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import type { ProviderId } from '../src/product/types';
-import type { Role } from '../src/product/roles/types';
-import type { Connection, Repositories, Workspace } from '../src/product/ports/persistence';
-import { WriteConflict } from '../src/product/ports/persistence';
-import type { SecretPayload, SecretRef, SecretStore } from '../src/product/ports/secrets';
-import { SecretNotFound } from '../src/product/ports/secrets';
-import type { Clock } from '../src/product/ports/clock';
-import type { Env } from './runtime';
+import type { ProviderId } from '../src/product/types.js';
+import type { Role } from '../src/product/roles/types.js';
+import type { Connection, Repositories, Workspace } from '../src/product/ports/persistence.js';
+import { WriteConflict } from '../src/product/ports/persistence.js';
+import type { SecretPayload, SecretRef, SecretStore } from '../src/product/ports/secrets.js';
+import { SecretNotFound } from '../src/product/ports/secrets.js';
+import type { Clock } from '../src/product/ports/clock.js';
+import type { Env } from './runtime.js';
 
 /**
  * Single-tenant dogfood mode: one workspace, owned by the identities in JAGR_OWNER_IDENTITIES, whose

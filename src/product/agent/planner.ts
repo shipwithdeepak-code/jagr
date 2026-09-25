@@ -1,8 +1,8 @@
-import type { ToolName } from '../types';
-import { overclaimingSentences } from '../engine/language';
-import { TOOL_NAMES } from './tools';
-import type { PlannerFailureCode, PlannerProposal } from './plannerSchema';
-import type { PlannerInput, PlannerOption } from './plannerPrompt';
+import type { ToolName } from '../types.js';
+import { overclaimingSentences } from '../engine/language.js';
+import { TOOL_NAMES } from './tools.js';
+import type { PlannerFailureCode, PlannerProposal } from './plannerSchema.js';
+import type { PlannerInput, PlannerOption } from './plannerPrompt.js';
 
 /**
  * Constrained model planning — the policy side.
@@ -14,9 +14,9 @@ import type { PlannerInput, PlannerOption } from './plannerPrompt';
  * tool option is ever executed.
  */
 
-export * from './plannerPrompt';
-export { parseProposal, parseProposal as parsePlan, PlannerProposalSchema, PLAN_JSON_SCHEMA, type PlannerOutcome, type PlannerProposal, type PlannerFailureCode, type PlannerSource } from './plannerSchema';
-export { createModelPlanner, createPlannerManager, providerFromClient, createHttpPlannerProvider, type InvestigationPlanner, type LLMPlannerProvider, type PlannerClient } from './plannerManager';
+export * from './plannerPrompt.js';
+export { parseProposal, parseProposal as parsePlan, PlannerProposalSchema, PLAN_JSON_SCHEMA, type PlannerOutcome, type PlannerProposal, type PlannerFailureCode, type PlannerSource } from './plannerSchema.js';
+export { createModelPlanner, createPlannerManager, providerFromClient, createHttpPlannerProvider, type InvestigationPlanner, type LLMPlannerProvider, type PlannerClient } from './plannerManager.js';
 
 // ─────────────────────────────────────────────────────────────
 // Deterministic policy validator — the hard boundary

@@ -1,4 +1,4 @@
-import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time';
+import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time.js';
 import type {
   AgentHypothesis,
   Area,
@@ -13,17 +13,17 @@ import type {
   TraceStep,
   Watch,
   EvidenceProvenance,
-} from '../types';
-import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '../catalog';
-import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { ChangeRecord, FeedbackItem, Provenance, SourceId, WorkItem } from '../roles/types';
-import { isSourceId } from '../roles/types';
-import type { SourceRegistry } from '../roles/registry';
-import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate';
-import { feedbackNoun } from '../engine/detect';
-import type { ChangeScan, MetricResult, ToolOutcome, Toolbox } from './tools';
-import { FAILURE_LABEL, HYPOTHESIS_ID, validatePlan, type InvestigationPlanner, type PlannerInput, type PlannerOption } from './planner';
-import type { PlannerOutcome, PlannerProposal } from './plannerSchema';
+} from '../types.js';
+import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '../catalog.js';
+import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters.js';
+import type { ChangeRecord, FeedbackItem, Provenance, SourceId, WorkItem } from '../roles/types.js';
+import { isSourceId } from '../roles/types.js';
+import type { SourceRegistry } from '../roles/registry.js';
+import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate.js';
+import { feedbackNoun } from '../engine/detect.js';
+import type { ChangeScan, MetricResult, ToolOutcome, Toolbox } from './tools.js';
+import { FAILURE_LABEL, HYPOTHESIS_ID, validatePlan, type InvestigationPlanner, type PlannerInput, type PlannerOption } from './planner.js';
+import type { PlannerOutcome, PlannerProposal } from './plannerSchema.js';
 
 /**
  * The investigation loop:

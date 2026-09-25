@@ -1,4 +1,4 @@
-import type { SqlClient } from './sql';
+import type { SqlClient } from './sql.js';
 
 /**
  * Schema, as ordered migrations. Workspace data is stored as JSON documents keyed by

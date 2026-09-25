@@ -1,12 +1,12 @@
-import type { ActionDecision, BriefSchedule, EmailNotification, MonitoringResult, SourceConnection, Watch } from '../types';
-import type { ImportedDataset } from '../imports/schemas';
-import type { Actor, Connection, Decision, MetricDefinitionRecord, NotificationRecord, Repositories, Transactor, Workspace } from '../ports/persistence';
-import type { Clock } from '../ports/clock';
-import { BUILTIN_SOURCE_ROLES } from '../catalog';
-import { isSourceId } from '../roles/types';
-import { hashString } from '../lib/rng';
-import { EXPORT_FORMAT, EXPORT_VERSION, WorkspaceExportV1Schema, type ExportApproval, type ExportConnection, type ExportNotification, type WorkspaceExportV1 } from './v1';
-import { findSensitive, redactEmails, type Finding } from './scan';
+import type { ActionDecision, BriefSchedule, EmailNotification, MonitoringResult, SourceConnection, Watch } from '../types.js';
+import type { ImportedDataset } from '../imports/schemas.js';
+import type { Actor, Connection, Decision, MetricDefinitionRecord, NotificationRecord, Repositories, Transactor, Workspace } from '../ports/persistence.js';
+import type { Clock } from '../ports/clock.js';
+import { BUILTIN_SOURCE_ROLES } from '../catalog.js';
+import { isSourceId } from '../roles/types.js';
+import { hashString } from '../lib/rng.js';
+import { EXPORT_FORMAT, EXPORT_VERSION, WorkspaceExportV1Schema, type ExportApproval, type ExportConnection, type ExportNotification, type WorkspaceExportV1 } from './v1.js';
+import { findSensitive, redactEmails, type Finding } from './scan.js';
 
 /**
  * Workspace export and import.

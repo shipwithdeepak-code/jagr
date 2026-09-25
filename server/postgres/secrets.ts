@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { SecretPayload, SecretRef, SecretStore } from '../../src/product/ports/secrets';
-import { SecretNotFound, SecretVersionConflict } from '../../src/product/ports/secrets';
-import { open, seal, type KeyProvider } from '../crypto/keys';
-import type { SqlClient } from './sql';
+import type { SecretPayload, SecretRef, SecretStore } from '../../src/product/ports/secrets.js';
+import { SecretNotFound, SecretVersionConflict } from '../../src/product/ports/secrets.js';
+import { open, seal, type KeyProvider } from '../crypto/keys.js';
+import type { SqlClient } from './sql.js';
 
 /**
  * Encrypted secret store (Postgres). Envelope encryption: every secret gets its own random data key

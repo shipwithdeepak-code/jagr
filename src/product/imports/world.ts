@@ -1,8 +1,8 @@
-import type { ProviderId, SourceConnection, Watch } from '../types';
-import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '../integrations/types';
-import { METRIC_DEFS, type World } from '../integrations/world';
-import { signalsForSources } from '../catalog';
-import type { ImportedDataset, MetricRow } from './schemas';
+import type { ProviderId, SourceConnection, Watch } from '../types.js';
+import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '../integrations/types.js';
+import { METRIC_DEFS, type World } from '../integrations/world.js';
+import { signalsForSources } from '../catalog.js';
+import type { ImportedDataset, MetricRow } from './schemas.js';
 
 /**
  * The bring-your-own-data adapter: user imports → the same `World` the engine investigates.

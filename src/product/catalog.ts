@@ -1,6 +1,6 @@
-import type { Area, BriefSchedule, ProviderId, SignalKey, Watch, WatchSignal, WatchTemplateId } from './types';
-import type { Role, SourceId } from './roles/types';
-import { isSourceId } from './roles/types';
+import type { Area, BriefSchedule, ProviderId, SignalKey, Watch, WatchSignal, WatchTemplateId } from './types.js';
+import type { Role, SourceId } from './roles/types.js';
+import { isSourceId } from './roles/types.js';
 
 export const AREA_LABEL: Record<Area, string> = { checkout: 'Checkout', signup: 'Signup', search: 'Search', stability: 'App stability', general: 'General' };
 

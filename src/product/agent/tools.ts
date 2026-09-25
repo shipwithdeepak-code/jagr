@@ -1,10 +1,10 @@
-import type { Area, ToolName, Watch } from '../types';
-import type { SourceRegistry } from '../roles/registry';
-import type { ChangeRecord, FeedbackItem, MetricSeries, Role, SegmentSeries, SourceHealth, SourceId, WorkItem } from '../roles/types';
-import { healthOf } from '../roles/types';
-import { ProviderUnavailableError } from '../integrations/types';
-import { labelOf, type ProviderLabels } from '../integrations/adapters';
-import { negativeFeedback, problemItems, readMetric, withWatchThreshold, type MetricReading } from '../engine/detect';
+import type { Area, ToolName, Watch } from '../types.js';
+import type { SourceRegistry } from '../roles/registry.js';
+import type { ChangeRecord, FeedbackItem, MetricSeries, Role, SegmentSeries, SourceHealth, SourceId, WorkItem } from '../roles/types.js';
+import { healthOf } from '../roles/types.js';
+import { ProviderUnavailableError } from '../integrations/types.js';
+import { labelOf, type ProviderLabels } from '../integrations/adapters.js';
+import { negativeFeedback, problemItems, readMetric, withWatchThreshold, type MetricReading } from '../engine/detect.js';
 
 /**
  * The agent's tools — one per evidence ROLE. Every source access the investigator makes goes

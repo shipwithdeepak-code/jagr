@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import type { ChangeRecord, TimeWindow } from '../../roles/types';
-import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types';
-import { requestJson } from './http';
-import { provenance } from './runtime';
-import { redactPersonalData } from './redact';
-import { ProviderUnavailableError } from '../types';
+import type { ChangeRecord, TimeWindow } from '../../roles/types.js';
+import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types.js';
+import { requestJson } from './http.js';
+import { provenance } from './runtime.js';
+import { redactPersonalData } from './redact.js';
+import { ProviderUnavailableError } from '../types.js';
 
 /**
  * GitHub — ChangeSource: deployments (actual timing) and releases (reported timing). REST API,

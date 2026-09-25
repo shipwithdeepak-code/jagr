@@ -1,7 +1,7 @@
-import type { ConnectionType } from '../app/connections';
-import type { ConnectorDescriptor } from './connectors/types';
-import { CONNECTORS } from './connectors/index';
-import { SlackConfig } from './channels/slack';
+import type { ConnectionType } from '../app/connections.js';
+import type { ConnectorDescriptor } from './connectors/types.js';
+import { CONNECTORS } from './connectors/index.js';
+import { SlackConfig } from './channels/slack.js';
 
 /**
  * The connection types this build offers (Connection.provider → type): every connector, plus the

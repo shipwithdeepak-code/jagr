@@ -1,4 +1,4 @@
-import type { SourceConnection, SourceRef } from '../types';
+import type { SourceConnection, SourceRef } from '../types.js';
 import type {
   ChangeRecord,
   ChangeSource,
@@ -14,8 +14,8 @@ import type {
   TimeWindow,
   WorkItem,
   WorkItemSource,
-} from '../roles/types';
-import type { IntegrationAdapter, IssueRecord, MetricSeries as NativeSeries, ReleaseRecord, ReviewRecord } from './types';
+} from '../roles/types.js';
+import type { IntegrationAdapter, IssueRecord, MetricSeries as NativeSeries, ReleaseRecord, ReviewRecord } from './types.js';
 
 /**
  * Bridge: a native adapter (records shaped like its own API) → role-based sources.

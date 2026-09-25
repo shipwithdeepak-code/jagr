@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { BriefSchedule, EmailNotification, Watch, WatchInvestigation } from '../types';
-import type { ImportedDataset } from '../imports/schemas';
-import type { Actor, Connection, MetricDefinitionRecord } from '../ports/persistence';
+import type { BriefSchedule, EmailNotification, Watch, WatchInvestigation } from '../types.js';
+import type { ImportedDataset } from '../imports/schemas.js';
+import type { Actor, Connection, MetricDefinitionRecord } from '../ports/persistence.js';
 
 /**
  * Jagr Workspace Export v1 — the portable representation of one workspace.

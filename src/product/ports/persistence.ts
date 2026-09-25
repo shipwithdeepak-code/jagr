@@ -1,7 +1,7 @@
-import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, MorningBriefDoc, ProviderId, Watch, WatchInvestigation } from '../types';
-import type { ImportedDataset } from '../imports/schemas';
-import type { Role } from '../roles/types';
-import type { SecretRef } from './secrets';
+import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, MorningBriefDoc, ProviderId, Watch, WatchInvestigation } from '../types.js';
+import type { ImportedDataset } from '../imports/schemas.js';
+import type { Role } from '../roles/types.js';
+import type { SecretRef } from './secrets.js';
 
 /**
  * Persistence port — the workspace's durable state, as domain records.

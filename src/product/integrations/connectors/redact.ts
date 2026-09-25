@@ -1,1 +1,1 @@
-export { plainText, redactPersonalData } from '../../lib/redact';
+export { plainText, redactPersonalData } from '../../lib/redact.js';

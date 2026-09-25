@@ -1,7 +1,7 @@
-import { createRng, hashString } from '../lib/rng';
-import { addMinutes } from '../lib/time';
-import type { ProviderId } from '../types';
-import type { Capability, IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from './types';
+import { createRng, hashString } from '../lib/rng.js';
+import { addMinutes } from '../lib/time.js';
+import type { ProviderId } from '../types.js';
+import type { Capability, IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from './types.js';
 
 /**
  * A fixture "world": what Jira, GA4, App Store Connect and Google Play would return for one

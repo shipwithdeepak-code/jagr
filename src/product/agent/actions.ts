@@ -1,7 +1,7 @@
-import type { ActionDecision, ActionKind, ActionRisk, AgentHypothesis, AttentionLevel, ProposedAction, WatchInvestigation } from '../types';
-import { AREA_LABEL } from '../catalog';
-import type { ChangeRecord, WorkItem } from '../roles/types';
-import { atLeast } from '../engine/attention';
+import type { ActionDecision, ActionKind, ActionRisk, AgentHypothesis, AttentionLevel, ProposedAction, WatchInvestigation } from '../types.js';
+import { AREA_LABEL } from '../catalog.js';
+import type { ChangeRecord, WorkItem } from '../roles/types.js';
+import { atLeast } from '../engine/attention.js';
 
 /**
  * Risk-based autonomy.

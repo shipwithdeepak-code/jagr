@@ -1,7 +1,7 @@
-import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types';
-import type { Decision, Membership, Repositories, Workspace } from '../ports/persistence';
-import type { ImportedDataset } from '../imports/schemas';
-import { connectionView, type ConnectionView } from '../connections/model';
+import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types.js';
+import type { Decision, Membership, Repositories, Workspace } from '../ports/persistence.js';
+import type { ImportedDataset } from '../imports/schemas.js';
+import { connectionView, type ConnectionView } from '../connections/model.js';
 
 /**
  * A server workspace as the browser sees it: everything the product UI renders, and nothing it must

@@ -1,4 +1,4 @@
-import type { BriefSchedule, ISO, MonitoringFrequency, ScheduledJob, Watch } from './types';
+import type { BriefSchedule, ISO, MonitoringFrequency, ScheduledJob, Watch } from './types.js';
 
 /**
  * Deterministic scheduler.

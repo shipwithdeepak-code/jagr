@@ -1,7 +1,7 @@
-import type { Area } from '../types';
-import type { FeedbackItem, WorkItem } from '../roles/types';
-import { isNegativeFeedback } from '../roles/types';
-import { classifyText, ISSUE_BASELINE_PER_3H, NEGATIVE_REVIEW_BASELINE_PER_6H } from '../catalog';
+import type { Area } from '../types.js';
+import type { FeedbackItem, WorkItem } from '../roles/types.js';
+import { isNegativeFeedback } from '../roles/types.js';
+import { classifyText, ISSUE_BASELINE_PER_3H, NEGATIVE_REVIEW_BASELINE_PER_6H } from '../catalog.js';
 
 /** The fields detection needs from any metric series (role records and fixtures alike). */
 interface SeriesLike {

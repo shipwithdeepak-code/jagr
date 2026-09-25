@@ -1,5 +1,5 @@
-import type { SourceConnection } from '../types';
-import type { MetricDefinition, MetricKey, RegisteredSource, Role, SourceId } from './types';
+import type { SourceConnection } from '../types.js';
+import type { MetricDefinition, MetricKey, RegisteredSource, Role, SourceId } from './types.js';
 
 /**
  * SourceRegistry — resolves "which sources can answer this role?" for a workspace.

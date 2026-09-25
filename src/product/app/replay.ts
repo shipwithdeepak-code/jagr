@@ -1,5 +1,5 @@
-import type { ActionDecision, EvidenceItem, ISO, WatchInvestigation } from '../types';
-import { defaultReplayPass, replayFrames, replayPasses, type ReplayFrame, type ReplayPass } from '../view/replay';
+import type { ActionDecision, EvidenceItem, ISO, WatchInvestigation } from '../types.js';
+import { defaultReplayPass, replayFrames, replayPasses, type ReplayFrame, type ReplayPass } from '../view/replay.js';
 
 /**
  * Investigation replay as product data. Built ONLY from the stored investigation (its trace, its

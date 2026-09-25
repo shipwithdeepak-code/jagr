@@ -1,8 +1,8 @@
-import type { Area } from '../types';
-import type { IssueRecord, ReleaseRecord, ReviewRecord } from '../integrations/types';
-import type { ChangeKind, ChangeTiming } from '../roles/types';
-import { classifyText } from '../catalog';
-import { parseFile, type RawRow } from './parse';
+import type { Area } from '../types.js';
+import type { IssueRecord, ReleaseRecord, ReviewRecord } from '../integrations/types.js';
+import type { ChangeKind, ChangeTiming } from '../roles/types.js';
+import { classifyText } from '../catalog.js';
+import { parseFile, type RawRow } from './parse.js';
 
 /**
  * Bring-your-own-data: five kinds of product evidence, validated row by row and normalised into the

@@ -1,12 +1,12 @@
-import type { Area, AttentionLevel, MonitoringResult, ProviderId, SourceConnection, Watch, WatchTemplateId } from '../types';
-import { defaultBriefSchedule, watchFromTemplate } from '../catalog';
-import { defaultConnections, resolveRef } from '../integrations/adapters';
-import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, RELEASES_481, t, type World, type WorldSpec } from '../integrations/world';
-import type { IssueRecord, ReviewRecord } from '../integrations/types';
-import { runMonitoring } from '../engine/monitor';
-import { atLeast } from '../engine/attention';
-import { hasCausalOverclaim } from '../engine/language';
-import { dailyOccurrences, planJobs, watchRunTimes } from '../scheduler';
+import type { Area, AttentionLevel, MonitoringResult, ProviderId, SourceConnection, Watch, WatchTemplateId } from '../types.js';
+import { defaultBriefSchedule, watchFromTemplate } from '../catalog.js';
+import { defaultConnections, resolveRef } from '../integrations/adapters.js';
+import { buildWorld, CHECKOUT_ISSUES, CHECKOUT_REVIEWS, RELEASES_481, t, type World, type WorldSpec } from '../integrations/world.js';
+import type { IssueRecord, ReviewRecord } from '../integrations/types.js';
+import { runMonitoring } from '../engine/monitor.js';
+import { atLeast } from '../engine/attention.js';
+import { hasCausalOverclaim } from '../engine/language.js';
+import { dailyOccurrences, planJobs, watchRunTimes } from '../scheduler.js';
 
 /**
  * Golden evaluation set. Each case is a night of raw fixture data plus the ground truth a PM

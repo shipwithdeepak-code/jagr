@@ -1,5 +1,5 @@
-import type { ActionDecision, ISO, ProviderId, TraceStep, WatchInvestigation } from '../types';
-import { traceWithDecisions } from '../agent/decisions';
+import type { ActionDecision, ISO, ProviderId, TraceStep, WatchInvestigation } from '../types.js';
+import { traceWithDecisions } from '../agent/decisions.js';
 
 /**
  * Investigation replay — the stored trace, one recorded step at a time. Nothing is re-run: every

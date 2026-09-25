@@ -1,5 +1,5 @@
-import type { Area, ISO, ProviderId, SourceConnection, SourceLink, SourceRef } from '../types';
-import type { ChangeKind, ChangeTiming } from '../roles/types';
+import type { Area, ISO, ProviderId, SourceConnection, SourceLink, SourceRef } from '../types.js';
+import type { ChangeKind, ChangeTiming } from '../roles/types.js';
 
 /**
  * Normalised records. Every provider maps its own API into these shapes, so the watch engine

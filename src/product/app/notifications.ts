@@ -1,13 +1,13 @@
-import type { ActionDecision, EmailNotification, MorningBriefDoc, Watch, WatchInvestigation } from '../types';
-import { briefView } from '../view/brief';
-import type { Clock } from '../ports/clock';
-import type { HttpClient } from '../ports/http';
-import type { DeliveryTarget, NotificationChannel, NotificationMessage } from '../ports/notify';
-import type { Connection, NotificationRecord, Repositories, Workspace } from '../ports/persistence';
-import { uniqueId } from './ids';
-import type { SecretPayload, SecretStore } from '../ports/secrets';
-import { redactPersonalData } from '../lib/redact';
-import type { ConnectorCheck } from '../integrations/connectors/types';
+import type { ActionDecision, EmailNotification, MorningBriefDoc, Watch, WatchInvestigation } from '../types.js';
+import { briefView } from '../view/brief.js';
+import type { Clock } from '../ports/clock.js';
+import type { HttpClient } from '../ports/http.js';
+import type { DeliveryTarget, NotificationChannel, NotificationMessage } from '../ports/notify.js';
+import type { Connection, NotificationRecord, Repositories, Workspace } from '../ports/persistence.js';
+import { uniqueId } from './ids.js';
+import type { SecretPayload, SecretStore } from '../ports/secrets.js';
+import { redactPersonalData } from '../lib/redact.js';
+import type { ConnectorCheck } from '../integrations/connectors/types.js';
 
 /**
  * Outbound notification delivery — vendor-neutral. The engine decides WHAT to tell people (alerts by

@@ -1,13 +1,13 @@
-import type { SourceConnection } from '../../types';
-import type { Connection } from '../../ports/persistence';
-import type { RegisteredSource, Provenance, SourceMode } from '../../roles/types';
-import type { ConnectorFactory } from '../../app/monitoring';
-import type { ConnectorCheck, ConnectorDescriptor, ReadStamp } from './types';
-import { restrictHosts } from './http';
-import { ConnectorConfigError } from './errors';
-import type { SecretPayload } from '../../ports/secrets';
-import type { HttpClient } from '../../ports/http';
-import type { Clock } from '../../ports/clock';
+import type { SourceConnection } from '../../types.js';
+import type { Connection } from '../../ports/persistence.js';
+import type { RegisteredSource, Provenance, SourceMode } from '../../roles/types.js';
+import type { ConnectorFactory } from '../../app/monitoring.js';
+import type { ConnectorCheck, ConnectorDescriptor, ReadStamp } from './types.js';
+import { restrictHosts } from './http.js';
+import { ConnectorConfigError } from './errors.js';
+import type { SecretPayload } from '../../ports/secrets.js';
+import type { HttpClient } from '../../ports/http.js';
+import type { Clock } from '../../ports/clock.js';
 
 /** Provenance for a record read live from a connector. */
 export function provenance(stamp: ReadStamp, externalId: string, observedAt: string, url?: string): Provenance {

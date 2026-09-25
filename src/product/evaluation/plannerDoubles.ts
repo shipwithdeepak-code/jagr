@@ -1,4 +1,4 @@
-import type { PlannerClient, PlannerInput, PlannerOption } from '../agent/planner';
+import type { PlannerClient, PlannerInput, PlannerOption } from '../agent/planner.js';
 
 /**
  * Scripted test planners. NOT models — deterministic stand-ins that produce the kinds of output a

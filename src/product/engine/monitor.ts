@@ -1,4 +1,4 @@
-import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time';
+import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time.js';
 import type {
   AgentHypothesis,
   Area,
@@ -17,25 +17,25 @@ import type {
   SourceConnection,
   Watch,
   WatchInvestigation,
-} from '../types';
-import { AREA_LABEL, DEMO_RECIPIENT, metricKeyOf, signalMeta } from '../catalog';
-import { createRegistry, labelOf, labelsFrom, SimulatedEmailChannel, type ProviderLabel } from '../integrations/adapters';
-import { ProviderUnavailableError } from '../integrations/types';
-import type { SourceRegistry } from '../roles/registry';
-import type { SourceId } from '../roles/types';
-import { isSourceId } from '../roles/types';
-import { assumptionsOf } from '../evidence/assumptions';
-import type { World } from '../integrations/world';
-import { planJobs } from '../scheduler';
-import { ATTENTION_RANK, assessAttention } from './attention';
-import { composeBrief } from './brief';
-import { areasPresent, feedbackNoun, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect';
-import { changePhrase, reason } from './investigate';
-import { createToolbox } from '../agent/tools';
-import { checkRolloutBeforeAction, runInvestigation, sourceDirectory } from '../agent/investigator';
-import type { InvestigationPlanner } from '../agent/planner';
-import { proposeActions } from '../agent/actions';
-import { composeAlert, decideNotification } from './notify';
+} from '../types.js';
+import { AREA_LABEL, DEMO_RECIPIENT, metricKeyOf, signalMeta } from '../catalog.js';
+import { createRegistry, labelOf, labelsFrom, SimulatedEmailChannel, type ProviderLabel } from '../integrations/adapters.js';
+import { ProviderUnavailableError } from '../integrations/types.js';
+import type { SourceRegistry } from '../roles/registry.js';
+import type { SourceId } from '../roles/types.js';
+import { isSourceId } from '../roles/types.js';
+import { assumptionsOf } from '../evidence/assumptions.js';
+import type { World } from '../integrations/world.js';
+import { planJobs } from '../scheduler.js';
+import { ATTENTION_RANK, assessAttention } from './attention.js';
+import { composeBrief } from './brief.js';
+import { areasPresent, feedbackNoun, fmtMagnitude, readIssues, readMetric, readReviews, withWatchThreshold, type DetectionStatus } from './detect.js';
+import { changePhrase, reason } from './investigate.js';
+import { createToolbox } from '../agent/tools.js';
+import { checkRolloutBeforeAction, runInvestigation, sourceDirectory } from '../agent/investigator.js';
+import type { InvestigationPlanner } from '../agent/planner.js';
+import { proposeActions } from '../agent/actions.js';
+import { composeAlert, decideNotification } from './notify.js';
 
 /**
  * The monitoring loop:

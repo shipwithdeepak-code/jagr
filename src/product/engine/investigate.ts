@@ -1,9 +1,9 @@
-import { fmtTime, minutesBetween } from '../lib/time';
-import type { Area, DetectedSignal, EvidenceItem, Hypothesis, ProviderId, SourceLink } from '../types';
-import { AREA_LABEL, signalMeta } from '../catalog';
-import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { ChangeKind, ChangeRecord, ChangeTiming, FeedbackItem, MetricSeries, WorkItem } from '../roles/types';
-import { fmtMagnitude, type MetricReading } from './detect';
+import { fmtTime, minutesBetween } from '../lib/time.js';
+import type { Area, DetectedSignal, EvidenceItem, Hypothesis, ProviderId, SourceLink } from '../types.js';
+import { AREA_LABEL, signalMeta } from '../catalog.js';
+import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters.js';
+import type { ChangeKind, ChangeRecord, ChangeTiming, FeedbackItem, MetricSeries, WorkItem } from '../roles/types.js';
+import { fmtMagnitude, type MetricReading } from './detect.js';
 
 /**
  * Correlation and write-up. Evidence is gathered by the agent (src/product/agent/investigator.ts);

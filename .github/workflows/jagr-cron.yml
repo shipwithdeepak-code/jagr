@@ -1,0 +1,43 @@
+# Drives Jagr's scheduler from outside Vercel (Vercel Hobby allows a Cron Job at most once a day).
+# It only calls the existing endpoint: /api/cron/tick enqueues due watch runs and briefs and drains the job
+# queue. The scheduler catches up on missed slots, so a late or skipped trigger never loses a run.
+#
+# Setup (repository → Settings → Secrets and variables → Actions):
+#   variable JAGR_APP_URL   e.g. https://jagr.vercel.app
+#   secret   CRON_SECRET    the same value as the Vercel environment variable CRON_SECRET
+# Until both are set, the workflow skips (it never fails for lack of configuration).
+name: Jagr scheduler tick
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: jagr-cron
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call /api/cron/tick
+        env:
+          JAGR_APP_URL: ${{ vars.JAGR_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$JAGR_APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::JAGR_APP_URL (variable) or CRON_SECRET (secret) is not set; skipping."
+            exit 0
+          fi
+          status=$(curl -sS -o body.json -w '%{http_code}' --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" "${JAGR_APP_URL%/}/api/cron/tick")
+          # The response holds counts only (no workspace data, no secrets).
+          cat body.json; echo
+          if [ "$status" != "200" ]; then
+            echo "::error::/api/cron/tick answered $status"
+            exit 1
+          fi

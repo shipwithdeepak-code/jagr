@@ -1,4 +1,4 @@
-import type { ActionRisk, AttentionLevel } from '../types';
+import type { ActionRisk, AttentionLevel } from '../types.js';
 
 /**
  * NotificationChannel port — outbound messages. The message is domain-level; each channel renders

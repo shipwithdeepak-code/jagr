@@ -1,10 +1,10 @@
-import type { MonitoringResult, SourceConnection, WatchInvestigation } from '../types';
-import { defaultBriefSchedule } from '../catalog';
-import { defaultConnections } from '../integrations/adapters';
-import { runMonitoring } from '../engine/monitor';
-import { evalStatus, type AdversarialReport, type Dimension, type EvalStatus } from '../evaluation/adversarial';
-import { GOLDEN_CASES, metricMeetsTarget, type Check, type GoldenReport, type Metric } from '../evaluation/golden';
-import { ADVERSARIAL_CASES } from '../evaluation/adversarial';
+import type { MonitoringResult, SourceConnection, WatchInvestigation } from '../types.js';
+import { defaultBriefSchedule } from '../catalog.js';
+import { defaultConnections } from '../integrations/adapters.js';
+import { runMonitoring } from '../engine/monitor.js';
+import { evalStatus, type AdversarialReport, type Dimension, type EvalStatus } from '../evaluation/adversarial.js';
+import { GOLDEN_CASES, metricMeetsTarget, type Check, type GoldenReport, type Metric } from '../evaluation/golden.js';
+import { ADVERSARIAL_CASES } from '../evaluation/adversarial.js';
 
 /**
  * The Evaluation Lab's view of the existing suites. Nothing is scored here: every number is a count

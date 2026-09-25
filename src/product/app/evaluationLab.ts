@@ -1,8 +1,8 @@
-import type { ISO } from '../types';
-import { runGoldenSuite } from '../evaluation/golden';
-import { runAdversarialSuite } from '../evaluation/adversarial';
-import { runPlannerSuite, type PlannerCaseResult } from '../evaluation/plannerEval';
-import { labDimensions, labScenarios, type LabDimension, type LabScenario } from '../view/evaluation';
+import type { ISO } from '../types.js';
+import { runGoldenSuite } from '../evaluation/golden.js';
+import { runAdversarialSuite } from '../evaluation/adversarial.js';
+import { runPlannerSuite, type PlannerCaseResult } from '../evaluation/plannerEval.js';
+import { labDimensions, labScenarios, type LabDimension, type LabScenario } from '../view/evaluation.js';
 
 /**
  * The Evaluation Lab as product data: the existing golden and adversarial suites, run through the

@@ -13,6 +13,19 @@ export const config = { maxDuration: 60 };
 let app: ReturnType<typeof createApp> | undefined;
 
 export default async function handler(req: IncomingMessage & { body?: unknown }, res: ServerResponse) {
-  app ??= createApp(await productionRuntime(process.env));
+  if (!app) {
+    try {
+      app = createApp(await productionRuntime(process.env));
+    } catch (e) {
+      // Missing configuration or an unreachable database. Answer, rather than crash the function; the
+      // browser then shows "no Jagr server" as it does for static hosting. The message names env vars only.
+      console.error(`jagr: server unavailable: ${(e as Error).message.slice(0, 200)}`);
+      res.statusCode = 503;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('cache-control', 'no-store');
+      res.end(JSON.stringify({ error: 'The Jagr server is not configured or its database is unavailable.' }));
+      return;
+    }
+  }
   await serveApi(app, req, res);
 }

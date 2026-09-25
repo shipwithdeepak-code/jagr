@@ -1,8 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import type { Clock } from '../src/product/ports/clock';
-import type { Membership, Repositories, Session, User } from '../src/product/ports/persistence';
-import type { ApiRequest } from './http/types';
-import { randomToken } from './identity/pkce';
+import type { Clock } from '../src/product/ports/clock.js';
+import type { Membership, Repositories, Session, User } from '../src/product/ports/persistence.js';
+import type { ApiRequest } from './http/types.js';
+import { randomToken } from './identity/pkce.js';
 
 /**
  * Sessions, OAuth state and CSRF.

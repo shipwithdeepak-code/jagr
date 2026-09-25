@@ -1,10 +1,10 @@
-import type { Connector } from '../../app/monitoring';
-import type { ConnectorDescriptor } from './types';
-import { checkConnector, connectorFactory } from './runtime';
-import { amplitudeConnector } from './amplitude';
-import { githubConnector } from './github';
-import { jiraConnector } from './jira';
-import { intercomConnector } from './intercom';
+import type { Connector } from '../../app/monitoring.js';
+import type { ConnectorDescriptor } from './types.js';
+import { checkConnector, connectorFactory } from './runtime.js';
+import { amplitudeConnector } from './amplitude.js';
+import { githubConnector } from './github.js';
+import { jiraConnector } from './jira.js';
+import { intercomConnector } from './intercom.js';
 
 /**
  * The connectors this build ships. The composition root registers them; a connection whose provider
@@ -17,4 +17,4 @@ export function connectorsFrom(list: ConnectorDescriptor<unknown>[]): Record<str
   return Object.fromEntries(list.map((d) => [d.id, { build: connectorFactory(d), check: (conn, ctx) => checkConnector(d, conn, ctx) } satisfies Connector]));
 }
 
-export type { ConnectorDescriptor, ConnectorContext, ConnectorCheck } from './types';
+export type { ConnectorDescriptor, ConnectorContext, ConnectorCheck } from './types.js';

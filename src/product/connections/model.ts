@@ -1,7 +1,7 @@
-import type { ConnectionState, ISO } from '../types';
-import type { Connection } from '../ports/persistence';
-import type { Role } from '../roles/types';
-import { findSensitive } from '../export/scan';
+import type { ConnectionState, ISO } from '../types.js';
+import type { Connection } from '../ports/persistence.js';
+import type { Role } from '../roles/types.js';
+import { findSensitive } from '../export/scan.js';
 
 /**
  * The connections domain — what a workspace knows about each of its connections, as the product

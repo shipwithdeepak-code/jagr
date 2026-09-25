@@ -1,5 +1,5 @@
-import type { BriefItem, EmailNotification, MorningBriefDoc, SchedulerLogEntry, Watch, WatchInvestigation } from '../types';
-import { ATTENTION_RANK, atLeast } from './attention';
+import type { BriefItem, EmailNotification, MorningBriefDoc, SchedulerLogEntry, Watch, WatchInvestigation } from '../types.js';
+import { ATTENTION_RANK, atLeast } from './attention.js';
 
 /**
  * The morning brief summarises investigations, not metrics: what needs attention, what was

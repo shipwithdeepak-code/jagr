@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ApiRequest, ApiResponse } from './types';
+import type { ApiRequest, ApiResponse } from './types.js';
 
 /**
  * Node http adapter for the Jagr API (the Vite dev server and Vercel functions both hand us Node's

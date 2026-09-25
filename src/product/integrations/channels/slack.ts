@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { ChannelFactory } from '../../app/notifications';
-import type { NotificationChannel, NotificationMessage } from '../../ports/notify';
-import type { HttpClient } from '../../ports/http';
-import type { Clock } from '../../ports/clock';
-import { restrictHosts, requestJson } from '../connectors/http';
-import { ConnectorConfigError } from '../connectors/errors';
-import type { ConnectorCheck } from '../connectors/types';
-import { redactPersonalData } from '../../lib/redact';
+import type { ChannelFactory } from '../../app/notifications.js';
+import type { NotificationChannel, NotificationMessage } from '../../ports/notify.js';
+import type { HttpClient } from '../../ports/http.js';
+import type { Clock } from '../../ports/clock.js';
+import { restrictHosts, requestJson } from '../connectors/http.js';
+import { ConnectorConfigError } from '../connectors/errors.js';
+import type { ConnectorCheck } from '../connectors/types.js';
+import { redactPersonalData } from '../../lib/redact.js';
 
 /**
  * Slack — outbound only. Renders a NotificationMessage as Block Kit and posts it with

@@ -1,5 +1,5 @@
-import type { AttentionLevel, DetectedSignal } from '../types';
-import { signalMeta } from '../catalog';
+import type { AttentionLevel, DetectedSignal } from '../types.js';
+import { signalMeta } from '../catalog.js';
 
 /**
  * Attention model — "only interrupt me when it matters".

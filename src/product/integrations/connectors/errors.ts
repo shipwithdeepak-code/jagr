@@ -1,5 +1,5 @@
-import type { ProviderId } from '../../types';
-import { ProviderUnavailableError } from '../types';
+import type { ProviderId } from '../../types.js';
+import { ProviderUnavailableError } from '../types.js';
 
 /** The provider rejected the credential (401/403): the connection needs reconnecting. */
 export class ConnectorAuthError extends ProviderUnavailableError {

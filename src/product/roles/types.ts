@@ -1,5 +1,5 @@
-import type { Area, ChannelId, ISO, ProviderId, SourceConnection, SourceRef } from '../types';
-import { CHANNEL_IDS } from '../types';
+import type { Area, ChannelId, ISO, ProviderId, SourceConnection, SourceRef } from '../types.js';
+import { CHANNEL_IDS } from '../types.js';
 
 /**
  * Role-based sources — the only way the investigation engine reaches product evidence.

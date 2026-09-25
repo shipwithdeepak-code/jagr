@@ -1,7 +1,7 @@
-import type { ProviderId } from '../../types';
-import type { HttpClient, HttpRequest, HttpResponse } from '../../ports/http';
-import { ProviderUnavailableError } from '../types';
-import { ConnectorAuthError, ConnectorRateLimited } from './errors';
+import type { ProviderId } from '../../types.js';
+import type { HttpClient, HttpRequest, HttpResponse } from '../../ports/http.js';
+import { ProviderUnavailableError } from '../types.js';
+import { ConnectorAuthError, ConnectorRateLimited } from './errors.js';
 
 /**
  * HTTP for connectors: host allow-listing, timeouts, and error classification. Error messages name

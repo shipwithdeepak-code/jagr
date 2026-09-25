@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { ChangeRecord, WorkItem } from '../../roles/types';
-import type { ConnectorDescriptor, ReadStamp } from './types';
-import { basicAuth, requestJson } from './http';
-import { provenance } from './runtime';
-import { redactPersonalData } from './redact';
-import { JiraCloudAdapter } from '../jiraCloud';
-import type { IssueRecord } from '../types';
-import { ProviderUnavailableError } from '../types';
+import type { ChangeRecord, WorkItem } from '../../roles/types.js';
+import type { ConnectorDescriptor, ReadStamp } from './types.js';
+import { basicAuth, requestJson } from './http.js';
+import { provenance } from './runtime.js';
+import { redactPersonalData } from './redact.js';
+import { JiraCloudAdapter } from '../jiraCloud.js';
+import type { IssueRecord } from '../types.js';
+import { ProviderUnavailableError } from '../types.js';
 
 /**
  * Jira Cloud — WorkItemSource (issues) and ChangeSource (released project versions), built on the

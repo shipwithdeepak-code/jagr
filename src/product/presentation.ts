@@ -1,4 +1,4 @@
-import type { WatchInvestigation } from './types';
+import type { WatchInvestigation } from './types.js';
 
 /** Presentation helpers shared by the Overview and the investigation page. Pure, no UI imports. */
 

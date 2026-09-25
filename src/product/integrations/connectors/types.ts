@@ -1,10 +1,10 @@
 import type { z } from 'zod';
-import type { ISO, SourceConnection } from '../../types';
-import type { Clock } from '../../ports/clock';
-import type { HttpClient } from '../../ports/http';
-import type { Connection } from '../../ports/persistence';
-import type { SecretPayload } from '../../ports/secrets';
-import type { RegisteredSource, Role, SourceId } from '../../roles/types';
+import type { ISO, SourceConnection } from '../../types.js';
+import type { Clock } from '../../ports/clock.js';
+import type { HttpClient } from '../../ports/http.js';
+import type { Connection } from '../../ports/persistence.js';
+import type { SecretPayload } from '../../ports/secrets.js';
+import type { RegisteredSource, Role, SourceId } from '../../roles/types.js';
 
 /**
  * The connector contract. A connector turns one workspace connection (non-secret config + a

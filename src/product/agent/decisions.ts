@@ -1,5 +1,5 @@
-import type { ActionDecision, ProposedAction, TraceStep, WatchInvestigation } from '../types';
-import { ApprovalRequiredError, executeAction } from './actions';
+import type { ActionDecision, ProposedAction, TraceStep, WatchInvestigation } from '../types.js';
+import { ApprovalRequiredError, executeAction } from './actions.js';
 
 /**
  * Human decisions live outside the monitoring result (so a re-run never forgets them) and are

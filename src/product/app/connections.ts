@@ -1,11 +1,11 @@
-import type { ProviderId } from '../types';
-import type { Actor, Connection, Workspace } from '../ports/persistence';
-import type { SecretPayload } from '../ports/secrets';
-import type { Role } from '../roles/types';
-import { SecretNotFound } from '../ports/secrets';
-import { connectionView, type ConnectionView } from '../connections/model';
-import { checkConnection, type MonitoringDeps } from './monitoring';
-import { uniqueId } from './ids';
+import type { ProviderId } from '../types.js';
+import type { Actor, Connection, Workspace } from '../ports/persistence.js';
+import type { SecretPayload } from '../ports/secrets.js';
+import type { Role } from '../roles/types.js';
+import { SecretNotFound } from '../ports/secrets.js';
+import { connectionView, type ConnectionView } from '../connections/model.js';
+import { checkConnection, type MonitoringDeps } from './monitoring.js';
+import { uniqueId } from './ids.js';
 
 /**
  * Connection lifecycle — connect / configure, test, reconnect, disconnect — for credentials a workspace

@@ -6,7 +6,7 @@
  * Kept separate from the demo-night model in src/domain so the original replay keeps working.
  */
 
-import type { ChangeKind, ChangeTiming } from './roles/types';
+import type { ChangeKind, ChangeTiming } from './roles/types.js';
 
 export type ISO = string;
 

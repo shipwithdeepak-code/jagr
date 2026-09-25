@@ -1,10 +1,10 @@
-import { fmtTime } from '../lib/time';
-import type { EmailButton, EmailNotification, Watch, WatchInvestigation } from '../types';
-import { DEMO_RECIPIENT, EMAIL_FROM } from '../catalog';
-import { PROVIDERS } from '../integrations/adapters';
-import type { ProviderId } from '../types';
-import { ATTENTION_RANK, atLeast } from './attention';
-import { isSourceId } from '../roles/types';
+import { fmtTime } from '../lib/time.js';
+import type { EmailButton, EmailNotification, Watch, WatchInvestigation } from '../types.js';
+import { DEMO_RECIPIENT, EMAIL_FROM } from '../catalog.js';
+import { PROVIDERS } from '../integrations/adapters.js';
+import type { ProviderId } from '../types.js';
+import { ATTENTION_RANK, atLeast } from './attention.js';
+import { isSourceId } from '../roles/types.js';
 
 /**
  * Notification policy and email composition. The email is a decision surface:

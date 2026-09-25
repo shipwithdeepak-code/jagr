@@ -1,10 +1,10 @@
-import type { SourceConnection, SourceLink, SourceRef } from '../types';
-import { classifyText } from '../catalog';
-import { PROVIDERS } from './adapters';
-import { ProviderUnavailableError, type Capability, type IntegrationAdapter, type IssueRecord, type MetricSeries, type ReleaseRecord, type ReviewRecord, type SourceEvent, type TimeWindow } from './types';
+import type { SourceConnection, SourceLink, SourceRef } from '../types.js';
+import { classifyText } from '../catalog.js';
+import { PROVIDERS } from './adapters.js';
+import { ProviderUnavailableError, type Capability, type IntegrationAdapter, type IssueRecord, type MetricSeries, type ReleaseRecord, type ReviewRecord, type SourceEvent, type TimeWindow } from './types.js';
 
-import type { HttpClient, HttpRequest } from '../ports/http';
-import { requestJson } from './connectors/http';
+import type { HttpClient, HttpRequest } from '../ports/http.js';
+import { requestJson } from './connectors/http.js';
 /**
  * A real Jira Cloud connector (REST API v3) behind the same IntegrationAdapter contract as the
  * simulated sources.
