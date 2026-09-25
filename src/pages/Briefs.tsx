@@ -1,15 +1,18 @@
-import { Inbox, Mail, Moon } from 'lucide-react';
+import { ArrowRight, ChevronRight, Inbox, Mail, Moon, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { MorningBriefDoc } from '@/product/types';
 import { useProduct } from '@/state/productContext';
 import { fmtDate, fmtTime } from '@/lib/time';
 import { AttentionBadge, EmailPreview } from '@/components/product';
-import { Card, cx, EmptyState, Eyebrow, PageHeader, Tabs, Toggle } from '@/components/ui';
+import { Button, Card, cx, EmptyState, Eyebrow, PageHeader, Tabs, Toggle } from '@/components/ui';
+import { AttentionBanner, LoadingState, StatusBadge } from '@/components/primitives';
+import { briefView } from '@/product/view/brief';
+import { nativeMetricSignal } from '@/product/integrations/bridge';
 
 const TIMEZONES = ['UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata'];
 
 export function BriefsPage() {
-  const { state, setBrief } = useProduct();
+  const { state, setBrief, running, runMonitoring, mode } = useProduct();
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') as 'briefs' | 'outbox') ?? 'briefs';
   const r = state.result;
@@ -36,7 +39,44 @@ export function BriefsPage() {
       {tab === 'briefs' ? (
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
           <div className="space-y-4">
-            {r?.briefs.length ? r.briefs.map((b) => <BriefDoc key={b.id} brief={b} />) : <EmptyState icon={Moon} title="No brief yet">The brief is generated at {state.brief.time} after overnight monitoring.</EmptyState>}
+            {r?.briefs.length ? (
+              <>
+                <BriefDocument brief={r.briefs.at(-1)!} />
+                {r.briefs.length > 1 && (
+                  <details className="group rounded-xl border border-line bg-surface">
+                    <summary className="interactive flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-3 text-[13px] font-medium hover:bg-subtle/60 [&::-webkit-details-marker]:hidden">
+                      <ChevronRight size={14} aria-hidden className="text-ink-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+                      Earlier briefs <span className="num font-normal text-ink-3">{r.briefs.length - 1}</span>
+                    </summary>
+                    <div className="space-y-4 border-t border-line p-4">
+                      {r.briefs.slice(0, -1).reverse().map((b) => (
+                        <BriefDocument key={b.id} brief={b} compact />
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </>
+            ) : running ? (
+              <LoadingState label="Jagr is monitoring — the brief is written when the run finishes." />
+            ) : (
+              <EmptyState
+                icon={Moon}
+                title="No brief yet"
+                action={
+                  mode && (mode !== 'imported' || state.watches.length > 0) ? (
+                    <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring()}>
+                      Run monitoring
+                    </Button>
+                  ) : (
+                    <Link to="/watches?new=1" className="inline-flex h-8.5 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas">
+                      Create a watch
+                    </Link>
+                  )
+                }
+              >
+                The brief is written at {state.brief.time} {state.brief.timezone}, after monitoring runs. It lists what needs your attention — and what stayed quiet. Run monitoring to write one now.
+              </EmptyState>
+            )}
           </div>
           <Card className="h-fit">
             <Eyebrow className="mb-3">Brief schedule</Eyebrow>
@@ -82,46 +122,97 @@ export function BriefsPage() {
   );
 }
 
-export function BriefDoc({ brief }: { brief: MorningBriefDoc }) {
+/** The morning brief, as a PM reads it: what needs attention, then what stayed quiet. */
+export function BriefDocument({ brief, compact = false }: { brief: MorningBriefDoc; compact?: boolean }) {
+  const { state, mode, importedWorld } = useProduct();
+  const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
+  const view = briefView(brief, {
+    investigations: state.result?.investigations ?? [],
+    watches: state.watches,
+    decisions: state.decisions,
+    evaluable: importedMetrics ? (key) => !key.startsWith('metric:') || importedMetrics.has(key) : undefined,
+  });
   return (
-    <Card>
-      <Eyebrow>
-        {fmtDate(brief.generatedAt)} · {fmtTime(brief.generatedAt)} · covers {fmtTime(brief.window.start)}–{fmtTime(brief.window.end)}
-      </Eyebrow>
-      <h2 className="mt-2 text-[26px] font-semibold tracking-[-0.02em]">Good morning.</h2>
-      <p className="mt-1 text-[16px] text-ink-2">{brief.headline}</p>
+    <article aria-label={`Morning brief, ${fmtDate(view.generatedAt)}`} className={cx('rounded-2xl border border-line bg-surface shadow-card', compact ? 'p-4' : 'px-5 py-6 sm:px-8 sm:py-8')}>
+      <p className="num text-[12px] text-ink-3">
+        {fmtDate(view.generatedAt)} · {fmtTime(view.generatedAt)} UTC · covers {fmtTime(view.window.start)}–{fmtTime(view.window.end)}
+      </p>
+      {!compact && <h2 className="mt-3 text-[30px] leading-tight font-semibold tracking-[-0.025em] sm:text-[34px]">Good morning.</h2>}
+      <p className={cx('text-ink-2', compact ? 'mt-1 text-[15px] font-medium text-ink' : 'mt-1.5 text-[17px]')}>{view.headline}</p>
 
-      {brief.items.length > 0 && (
-        <div className="mt-5 space-y-2">
-          {brief.items.map((it) => (
-            <Link key={it.investigationId} to={`/investigations/w/${it.investigationId}`} className="block rounded-xl border border-line p-4 hover:border-line-strong">
-              <div className="flex flex-wrap items-center gap-2">
-                <AttentionBadge level={it.attention} />
-                <span className="text-[15px] font-semibold">{it.title}</span>
-                <span className="ml-auto text-[12px] text-ink-3">{it.emailedAt ? `Emailed ${fmtTime(it.emailedAt)}` : 'New in this brief'}</span>
-              </div>
-              <p className="mt-1.5 text-[13px] text-ink-2">{it.summary}</p>
-              <p className="mt-1 text-[12px] text-ink-3">From {it.watchNames.join(' + ')} · {it.status.toLowerCase()}</p>
-            </Link>
+      {view.items.length > 0 && (
+        <ol className={cx('stagger space-y-4', compact ? 'mt-4' : 'mt-7')}>
+          {view.items.map((it, i) => (
+            <li key={it.investigationId} style={{ ['--i' as string]: i }}>
+              <AttentionBanner level={it.attention}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-ink-3">
+                  <StatusBadge kind="attention" value={it.attention} size="md" />
+                  <span>{it.watchNames.join(' + ')}</span>
+                  <span>{it.emailedAt ? `Emailed ${fmtTime(it.emailedAt)} UTC` : 'New in this brief'}</span>
+                </div>
+                <h3 className="mt-2.5 text-[19px] leading-snug font-semibold tracking-[-0.01em]">{it.headline}</h3>
+                {!compact && (
+                  <dl className="mt-4 grid gap-x-6 gap-y-3 text-[13px] sm:grid-cols-[150px_minmax(0,1fr)]">
+                    <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase sm:pt-0.5">What changed</dt>
+                    <dd className="text-ink">{it.whatChanged}</dd>
+                    <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase sm:pt-0.5">What Jagr found</dt>
+                    <dd>
+                      {it.found.length ? (
+                        <ul className="space-y-1 text-ink">
+                          {it.found.map((f) => (
+                            <li key={f}>{f}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-ink-2">Nothing in other sources corroborates it yet.</span>
+                      )}
+                    </dd>
+                    <dt className="text-[11px] font-semibold tracking-[0.08em] text-high uppercase sm:pt-0.5">Uncertainty</dt>
+                    <dd className="text-ink-2">{it.uncertainty}</dd>
+                    <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase sm:pt-0.5">Recommended next step</dt>
+                    <dd className="font-medium text-ink">{it.next}</dd>
+                  </dl>
+                )}
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <Link to={`/investigations/w/${it.investigationId}`} className="interactive inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:underline">
+                    Open investigation <ArrowRight size={13} aria-hidden />
+                  </Link>
+                  {it.approvalsWaiting > 0 && (
+                    <Link to={`/investigations/w/${it.investigationId}#actions`} className="interactive text-[12.5px] font-medium text-high hover:underline">
+                      {it.approvalsWaiting} approval{it.approvalsWaiting === 1 ? '' : 's'} waiting
+                    </Link>
+                  )}
+                </div>
+              </AttentionBanner>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
 
-      <div className="mt-5 rounded-xl bg-subtle px-4 py-3">
-        <Eyebrow className="mb-1">Quiet</Eyebrow>
-        <p className="text-[13.5px]">
-          {brief.quiet.note}
-          {brief.quiet.watchNames.length > 0 && <span className="text-ink-3"> ({brief.quiet.watchNames.join(', ')})</span>}
+      <section aria-label="Quiet" className={cx('rounded-xl border border-dashed border-line-strong bg-canvas/60 px-4 py-4', compact ? 'mt-4' : 'mt-6')}>
+        <p className="text-[11px] font-semibold tracking-[0.08em] text-ok uppercase">Quiet</p>
+        <p className="mt-1.5 text-[14px] text-ink">
+          {view.quiet.signals > 0 ? (
+            <>
+              <span className="num font-semibold">{view.quiet.signals}</span> monitored signal{view.quiet.signals === 1 ? '' : 's'} showed no meaningful change.
+            </>
+          ) : view.items.length ? (
+            'Every monitored signal is part of something reported above.'
+          ) : (
+            'Nothing was monitored in this window.'
+          )}
         </p>
-        {brief.deduplicated.map((d) => (
+        {view.quiet.watches.length > 0 && <p className="mt-1 text-[12.5px] text-ink-2">Quiet watches: {view.quiet.watches.join(', ')}.</p>}
+        {view.deduplicated.map((d) => (
           <p key={d.watchName} className="mt-1 text-[12.5px] text-ink-2">
-            {d.watchName}: its findings were linked to “{d.linkedTo}” instead of reported twice.
+            {d.watchName}: its findings were linked to “{d.linkedTo}” instead of being reported twice.
           </p>
         ))}
-      </div>
-      <p className="mt-3 text-[12px] text-ink-3">
-        {brief.stats.watchRuns} watch runs · {brief.stats.sourcesChecked} sources · {brief.stats.emailsSent} {brief.stats.emailsSent === 1 ? 'email' : 'emails'} sent overnight · {brief.stats.dismissed} fluctuations dismissed
+      </section>
+
+      <p className="num mt-4 text-[12px] text-ink-3">
+        {view.stats.watchRuns} watch runs · {view.stats.sourcesChecked} sources · {view.stats.emailsSent} {view.stats.emailsSent === 1 ? 'email' : 'emails'} sent · {view.stats.dismissed} fluctuation{view.stats.dismissed === 1 ? '' : 's'} dismissed without interrupting you
       </p>
-    </Card>
+    </article>
   );
 }

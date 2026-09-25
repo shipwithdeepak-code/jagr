@@ -74,7 +74,11 @@ export function SourcesOverview({ views }: { views: SourceView[] }) {
 }
 
 /** Sources grouped by state, most actionable first. `extra` adds per-source content (e.g. simulation controls). */
-export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; extra?: (v: SourceView) => ReactNode; onAction?: (v: SourceView, action: SourceActionId) => void }) {
+/**
+ * `onAction` is the seam for server workspaces (connect / test / reconnect / disconnect via the
+ * connection lifecycle API). Without it every action renders disabled, with its reason.
+ */
+export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; extra?: (v: SourceView) => ReactNode; onAction?: (source: SourceView, action: SourceActionId) => void }) {
   return (
     <div className="space-y-8">
       {groupSources(views).map((g) => (
@@ -85,7 +89,7 @@ export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; 
             </h2>
             <p className="mt-0.5 text-[12.5px] text-ink-3">{GROUP_HINT[g.group]}</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="stagger grid gap-3 md:grid-cols-2">
             {g.sources.map((v, i) => (
               <SourceCard key={v.id} view={v} index={i} extra={extra?.(v)} onAction={onAction} />
             ))}
@@ -96,14 +100,15 @@ export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; 
   );
 }
 
-export function SourceCard({ view: v, extra, index = 0, onAction }: { view: SourceView; extra?: ReactNode; index?: number; onAction?: (v: SourceView, action: SourceActionId) => void }) {
+export function SourceCard({ view: v, extra, index = 0, onAction }: { view: SourceView; extra?: ReactNode; index?: number; onAction?: (source: SourceView, action: SourceActionId) => void }) {
   const Icon = PROVIDER_ICON[v.id];
   const health = healthText(v);
   const reasonsId = useId();
-  const unavailable = v.actions.filter((a) => !a.available);
+  const enabled = (a: SourceView['actions'][number]) => a.available && !!onAction;
+  const unavailable = v.actions.filter((a) => !enabled(a));
   const reasons = [...new Set(unavailable.map((a) => a.reason))];
   return (
-    <article className="stagger flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 shadow-card" style={{ ['--i' as string]: index }} aria-label={`${v.name} — ${SOURCE_GROUP_LABEL[v.group]}`}>
+    <article className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 shadow-card" style={{ ['--i' as string]: index }} aria-label={`${v.name} — ${SOURCE_GROUP_LABEL[v.group]}`}>
       <div className="flex items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-subtle text-ink-2">
           <Icon size={16} aria-hidden />
@@ -141,7 +146,7 @@ export function SourceCard({ view: v, extra, index = 0, onAction }: { view: Sour
         <div className="mt-auto pt-3">
           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
             {v.actions.map((a) => (
-              <Button key={a.id} size="sm" variant={a.id === 'reconnect' || a.id === 'connect' ? 'primary' : 'secondary'} disabled={!a.available || !onAction} aria-describedby={!a.available ? reasonsId : undefined} onClick={a.available && onAction ? () => onAction(v, a.id) : undefined}>
+              <Button key={a.id} size="sm" variant={a.id === 'reconnect' || a.id === 'connect' ? 'primary' : 'secondary'} disabled={!enabled(a)} aria-describedby={!enabled(a) ? reasonsId : undefined} onClick={enabled(a) ? () => onAction!(v, a.id) : undefined}>
                 {a.label}
               </Button>
             ))}

@@ -235,52 +235,6 @@ export function InvestigationTimeline({ entries }: { entries: TimelineEntry[] })
 }
 
 // ─────────────────────────────────────────────────────────────
-// TraceEvent — one step the agent took
-// ─────────────────────────────────────────────────────────────
-
-export const TRACE_KIND_LABEL: Record<string, string> = {
-  signal: 'Signal',
-  plan: 'Plan',
-  hypothesis: 'Hypotheses',
-  gap: 'Gap',
-  planner: 'Planner',
-  tool_call: 'Tool',
-  result: 'Result',
-  assessment: 'Assessment',
-  uncertainty: 'Uncertainty',
-  stop: 'Stop',
-  attention: 'Attention',
-  action: 'Action',
-  approval: 'Approval',
-  notify: 'Notify',
-  recheck: 'Re-check',
-  human: 'Human',
-};
-
-export function TraceEvent({ time, kind, title, children, tone = 'neutral', meta }: { time?: string; kind: string; title: ReactNode; children?: ReactNode; tone?: 'neutral' | 'accent' | 'ok' | 'warn' | 'crit'; meta?: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[56px_92px_1fr] gap-x-3 border-b border-line px-4 py-2.5 text-[12.5px] last:border-b-0 max-sm:grid-cols-[48px_1fr]">
-      <span className="num pt-px font-mono text-[11.5px] text-ink-3">{time ? fmtTime(time, true) : ''}</span>
-      <span className="max-sm:col-start-2 max-sm:row-start-1">
-        <span
-          className={cx(
-            'inline-flex h-5 items-center rounded px-1.5 text-[10px] font-semibold tracking-wide uppercase',
-            tone === 'accent' ? 'bg-accent-soft text-accent' : tone === 'ok' ? 'bg-ok-soft text-ok' : tone === 'warn' ? 'bg-high-soft text-high' : tone === 'crit' ? 'bg-crit-soft text-crit' : 'bg-subtle text-ink-2',
-          )}
-        >
-          {TRACE_KIND_LABEL[kind] ?? kind}
-        </span>
-      </span>
-      <div className="min-w-0 max-sm:col-span-2 max-sm:mt-1">
-        <div className="text-ink">{title}</div>
-        {children && <div className="mt-1 space-y-1 text-ink-2">{children}</div>}
-        {meta && <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3">{meta}</div>}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
 // Loading / empty
 // ─────────────────────────────────────────────────────────────
 

@@ -36,9 +36,11 @@ function InvestigationTraces() {
   if (!inv) {
     return (
       <>
-        <PageHeader title="Agent Trace" description="Every step Jagr takes on your watches: plan, tool call, result, what changed, why it stopped, and every human decision." />
-        <EmptyState icon={ScrollText} title={running ? 'Jagr is running monitoring…' : 'No investigations yet'}>
-          When a watch detects something, the investigation — every tool call and why — appears here.
+        <PageHeader title="Agent Trace" description="An audit trail of every investigation: what Jagr detected, what it checked, what came back, what it concluded — and every human decision." />
+        <EmptyState icon={ScrollText} title={running ? 'Jagr is running monitoring…' : 'Nothing to audit yet'}>
+          {running
+            ? 'Investigations appear here as soon as a watch opens one.'
+            : 'The trail starts when a watch detects a meaningful change and Jagr opens an investigation. Run monitoring from the Overview to check your watches now.'}
         </EmptyState>
       </>
     );
@@ -48,7 +50,7 @@ function InvestigationTraces() {
     <>
       <PageHeader
         title="Agent Trace"
-        description={`${invs.length} investigations · ${calls} tool calls last night. TIME · AGENT STEP · TOOL · INPUT · RESULT · WHY · WHAT CHANGED — recorded as Jagr worked, not summarised afterwards.`}
+        description={`${invs.length} investigation${invs.length === 1 ? '' : 's'} · ${calls} tool calls in the last monitoring run. Each line is a step Jagr recorded as it worked — what it did, which source it asked, what came back. Open Details for the query, the planner’s summary and the validator’s verdict.`}
       />
       <div className="mb-3">
         <PlannerModeLine info={state.result?.planner} />

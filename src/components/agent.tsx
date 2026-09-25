@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, CircleSlash, Lock, ShieldAlert, Wrench, X } from 'lucide-react';
-import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, PlannerDecision, PlannerRunInfo, SourceConnection, TraceStep, WatchInvestigation } from '@/product/types';
+import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, PlannerRunInfo, SourceConnection, TraceStep, WatchInvestigation } from '@/product/types';
 import { HYPOTHESIS_ID } from '@/product/agent/planner';
-import { StatusBadge, strengthOf, TraceEvent } from './primitives';
+import { StatusBadge, strengthOf } from './primitives';
 import type { EffectiveAction } from '@/product/agent/decisions';
 import { hypothesisLabel } from '@/product/agent/investigator';
 import { confidenceBand } from '@/product/engine/monitor';
@@ -11,6 +11,7 @@ import { useProduct } from '@/state/productContext';
 import { useToast } from './toast';
 import { Badge, Button, Card, cx, Eyebrow, Mono, type Tone } from './ui';
 import { AttentionBadge, attentionRoute, ProviderName } from './product';
+import { AuditTrail } from './auditTrail';
 
 // ─────────────────────────────────────────────────────────────
 // Source label
@@ -51,8 +52,8 @@ function groupPasses(steps: TraceStep[]): Pass[] {
 }
 
 /**
- * The agent's work, step by step: TIME · STEP · TOOL · INPUT · RESULT · WHY · WHAT CHANGED.
- * Tool calls and their results are folded into one row so input and output read together.
+ * The agent's work, pass by pass, as a readable audit trail (see AuditTrail): what Jagr did, with
+ * which source, what came back, and what changed — with details on demand.
  */
 export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps: TraceStep[]; connections: SourceConnection[]; defaultOpen?: number[] }) {
   const passes = useMemo(() => groupPasses(steps), [steps]);
@@ -92,9 +93,7 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
             </button>
             {isOpen && (
               <div className="border-t border-line">
-                {foldCalls(p.steps).map((row) => (
-                  <TraceRow key={row.step.id} step={row.step} result={row.result} source={conn(row.step.source)} />
-                ))}
+                <AuditTrail steps={p.steps} stateOf={conn} />
                 {p.rechecks.length > 0 && (
                   <div className="border-t border-dashed border-line px-4 py-2 text-[12px] text-ink-3">
                     {p.rechecks.length} later re-check{p.rechecks.length === 1 ? '' : 's'} ({[...new Set(p.rechecks.map((r) => fmtTime(r.at)))].join(', ')}) re-read the sources and found nothing that changed the assessment — recorded, not repeated.
@@ -107,111 +106,6 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
         );
       })}
     </div>
-  );
-}
-
-/** The planner decision: who proposed, what, why (a summary, not hidden reasoning), and what policy did with it. */
-function PlannerRow({ step, d }: { step: TraceStep; d: PlannerDecision }) {
-  const model = d.type === 'LLM';
-  const who = model ? (d.plannerLabel.startsWith('Scripted test planner') ? 'Scripted test planner' : 'Model') : d.type === 'DETERMINISTIC' ? 'Deterministic' : 'Deterministic fallback';
-  return (
-    <TraceEvent
-      time={step.at}
-      kind="planner"
-      tone={d.validator === 'REJECTED' || (model && d.failure) ? 'warn' : model ? 'accent' : 'neutral'}
-      title={
-        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span>{d.proposedTool ? <>Plan: <code className="font-mono text-[12px]">{d.proposedTool}</code></> : 'No usable plan'}</span>
-          <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase', d.validator === 'APPROVED' ? 'bg-ok-soft text-ok' : d.validator === 'REJECTED' ? 'bg-crit-soft text-crit' : 'bg-subtle text-ink-3')}>
-            Validator · {d.validator === 'NOT_RUN' ? 'not run' : d.validator.toLowerCase()}
-          </span>
-        </span>
-      }
-      meta={
-        <>
-          <span className="font-medium text-ink-2">{who}</span>
-          <span>{d.plannerLabel}{d.model ? ` · ${d.model}` : ''}</span>
-          {typeof d.latencyMs === 'number' && !d.cached && <span className="num">{d.latencyMs} ms</span>}
-          {d.cached && <span>reused plan (identical state)</span>}
-          {d.hypothesesAffected && <span className="font-mono">{d.hypothesesAffected.join(' ')}</span>}
-        </>
-      }
-    >
-      {d.evidenceGap && (
-        <p>
-          <span className="text-ink-3">Gap</span> {d.evidenceGap}
-        </p>
-      )}
-      {d.reason && <p>{d.reason}</p>}
-      {d.rejection && <p className="text-crit">{d.rejection.reason}</p>}
-      {d.failure && <p className="text-ink-3">{d.failure.detail}</p>}
-      {d.providerFallback && (
-        <p className="font-medium text-high">
-          {d.failure ? `Primary planner (${d.providerFallback.from}) and fallback provider (${d.plannerLabel}) both unavailable.` : `Primary planner unavailable (${d.providerFallback.from}). Fallback provider used.`}
-        </p>
-      )}
-    </TraceEvent>
-  );
-}
-
-function foldCalls(steps: TraceStep[]): { step: TraceStep; result?: TraceStep }[] {
-  const rows: { step: TraceStep; result?: TraceStep }[] = [];
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i];
-    const next = steps[i + 1];
-    if (s.kind === 'tool_call' && next?.kind === 'result') {
-      rows.push({ step: s, result: next });
-      i++;
-    } else rows.push({ step: s });
-  }
-  return rows;
-}
-
-const KIND_TONE: Partial<Record<TraceStep['kind'], 'neutral' | 'accent' | 'ok' | 'warn' | 'crit'>> = { signal: 'crit', gap: 'warn', approval: 'warn', human: 'ok', stop: 'neutral', attention: 'neutral' };
-
-function TraceRow({ step, result, source }: { step: TraceStep; result?: TraceStep; source?: SourceConnection['state'] }) {
-  if (step.kind === 'planner' && step.planner) return <PlannerRow step={step} d={step.planner} />;
-  const changed = (result?.changed ?? step.changed)?.filter((c) => !c.startsWith('No change'));
-  if (step.kind === 'tool_call') {
-    const failed = !!result?.status && result.status !== 'ok';
-    return (
-      <TraceEvent
-        time={step.at}
-        kind="tool_call"
-        tone={failed ? 'warn' : 'neutral'}
-        title={
-          <span className="inline-flex flex-wrap items-baseline gap-x-2">
-            <code className="font-mono text-[12px] text-ink">{step.tool}()</code>
-            <span className="text-[12px] text-ink-3">{step.input}</span>
-          </span>
-        }
-        meta={
-          <>
-            {step.source && <ProviderName provider={step.source} short />}
-            {step.sources?.map((p) => <ProviderName key={p} provider={p} short />)}
-            <SourceStateTag state={failed ? (result?.status === 'error' ? 'error' : 'unavailable') : source} />
-          </>
-        }
-      >
-        {result && <p className={cx('font-medium', failed ? 'text-high' : 'text-ink')}>{result.title}</p>}
-        {changed && changed.length > 0 && (
-          <p className="text-[11.5px] font-medium text-accent">
-            {changed.map((c) => (
-              <span key={c} className="block">
-                → {c}
-              </span>
-            ))}
-          </p>
-        )}
-      </TraceEvent>
-    );
-  }
-  return (
-    <TraceEvent time={step.at} kind={step.kind} tone={KIND_TONE[step.kind] ?? 'neutral'} title={<span className={cx((step.kind === 'stop' || step.kind === 'attention' || step.kind === 'human') && 'font-medium')}>{step.title}</span>}>
-      {step.detail && <p>{step.detail}</p>}
-      {step.result && <p className="text-ink-3">{step.result}</p>}
-      {step.why && step.kind !== 'result' && <p className="text-ink-3">{step.why}</p>}
-    </TraceEvent>
   );
 }
 

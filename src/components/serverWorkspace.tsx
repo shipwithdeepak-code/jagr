@@ -152,7 +152,7 @@ export function ServerSources() {
   }, []);
 
   const byId = Object.fromEntries(srv.connections.filter((c) => isSourceId(c.source as SourceId)).map((c) => [c.source, c])) as Partial<Record<SourceId, ConnectionView>>;
-  const views = sourceViews(product.state.connections, { asOf: new Date().toISOString(), server: byId, manage });
+  const views = sourceViews(product.state.connections, { asOf: new Date().toISOString(), server: byId, canManage: manage });
   const channels = srv.connections.filter((c) => c.kind === 'channel');
   const present = new Set(srv.connections.map((c) => c.provider));
   const addable = types.filter((t) => !present.has(t.provider));
