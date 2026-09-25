@@ -81,11 +81,16 @@ export interface SourceViewOptions {
    * POST /api/workspaces/:id/connections/:id/check. The browser-local workspace passes nothing.
    */
   server?: Partial<Record<SourceId, ConnectionView>>;
+  /** Server workspaces: whether the member may change connections (owner or admin). */
+  canManage?: boolean;
 }
 
-const NO_OAUTH = 'Connecting from this page (OAuth) isn’t built yet. Live connectors run on a Jagr server, with credentials the workspace owner configures there.';
-const NO_ENDPOINT = 'There is no endpoint for this yet. The workspace owner changes it in the server configuration.';
-const BROWSER_ONLY = 'Testing runs on the Jagr server. This workspace lives in your browser, so there is no server connection to test.';
+// Reasons follow the connection lifecycle API (docs/CONNECTORS.md): connect, test, reconnect and
+// disconnect exist on the Jagr server, for server workspaces only.
+const BROWSER_CONNECT = 'Live connections belong to a server workspace. Move this workspace to an account; an owner or admin then connects the source with its API key. Nothing is connected from a browser-only workspace.';
+const BROWSER_LOCAL = 'This workspace lives in your browser, so there is no server connection to test or change.';
+const ENV_MANAGED = 'Managed by the deployment environment (owner credentials): it can be tested here, not changed.';
+const OWNERS_ONLY = 'Only workspace owners and admins can change connections.';
 
 function groupOf(conn: SourceConnection, stale: boolean, view?: ConnectionView): SourceGroup {
   if (view) return view.health === 'stale' ? 'stale' : view.health === 'needs_reconnect' ? 'needs_reconnect' : view.status;
@@ -138,12 +143,20 @@ function impactOf(group: SourceGroup, freshAsOf?: ISO): string {
   }
 }
 
-function actionsFor(group: SourceGroup, view: ConnectionView | undefined): SourceAction[] {
+function actionsFor(group: SourceGroup, view: ConnectionView | undefined, canManage: boolean): SourceAction[] {
+  const change = (id: SourceActionId, label: string, what: string): SourceAction =>
+    !view
+      ? { id, label, available: false, reason: id === 'connect' ? BROWSER_CONNECT : BROWSER_LOCAL }
+      : view.managedBy === 'environment'
+        ? { id, label, available: false, reason: ENV_MANAGED }
+        : !canManage
+          ? { id, label, available: false, reason: OWNERS_ONLY }
+          : { id, label, available: true, reason: what };
   const test: SourceAction = view && view.managedBy !== 'none'
     ? { id: 'test', label: 'Test', available: true, reason: 'Probes the stored credential now and records the outcome on the connection.' }
-    : { id: 'test', label: 'Test', available: false, reason: BROWSER_ONLY };
-  const reconnect: SourceAction = { id: 'reconnect', label: 'Reconnect', available: false, reason: NO_ENDPOINT };
-  const disconnect: SourceAction = { id: 'disconnect', label: 'Disconnect', available: false, reason: NO_ENDPOINT };
+    : { id: 'test', label: 'Test', available: false, reason: BROWSER_LOCAL };
+  const reconnect = change('reconnect', 'Reconnect', 'Replaces the stored credential and tests it immediately.');
+  const disconnect = change('disconnect', 'Disconnect', 'Deletes the stored credential. Past investigations keep the source’s name; monitoring reports it as a gap.');
   switch (group) {
     case 'connected':
     case 'stale':
@@ -153,7 +166,7 @@ function actionsFor(group: SourceGroup, view: ConnectionView | undefined): Sourc
     case 'needs_reconnect':
       return [reconnect, test, disconnect];
     case 'not_configured':
-      return [{ id: 'connect', label: 'Connect', available: false, reason: NO_OAUTH }];
+      return [change('connect', 'Connect', 'Connect with an API key; Jagr tests it before saving.')];
     case 'imported':
     case 'simulated':
       return [];
@@ -200,7 +213,7 @@ export function sourceViews(connections: SourceConnection[], opts: SourceViewOpt
       lastCheckLabel: lastCheck ? (group === 'imported' ? 'Last imported' : view?.lastSuccessfulCheckAt ? 'Last successful check' : group === 'stale' || view?.lastSyncAt ? 'Last successful sync' : 'Last status change') : undefined,
       impact: impactOf(group, conn.freshAsOf),
       // Simulated and imported sources have no live connection to test, reconnect or disconnect.
-      actions: conn.state === 'simulated' || conn.state === 'imported' ? [] : actionsFor(group, view),
+      actions: conn.state === 'simulated' || conn.state === 'imported' ? [] : actionsFor(group, view, opts.canManage ?? false),
     });
   }
   return views.sort((a, b) => SOURCE_GROUPS.indexOf(a.group) - SOURCE_GROUPS.indexOf(b.group));

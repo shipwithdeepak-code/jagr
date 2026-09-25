@@ -59,6 +59,20 @@ describe('Sources view-model', () => {
     expect(v.lastCheck).toBe('2026-09-24T08:00:00.000Z');
     expect(v.lastCheckLabel).toBe('Last successful check');
     expect(v.actions.find((a) => a.id === 'test')!.available).toBe(true);
+    // Environment-managed: tested, never changed — whatever the member's role.
+    expect(v.actions.find((a) => a.id === 'disconnect')!.available).toBe(false);
+    expect(v.actions.find((a) => a.id === 'disconnect')!.reason).toMatch(/deployment environment/);
+  });
+
+  it('workspace-managed server connections: owners and admins may change them, members may only test', () => {
+    const conns: SourceConnection[] = [{ provider: 'github', state: 'needs_reconnect', detail: '', updatedAt: ASOF }];
+    const record: Connection = { id: 'conn-gh', workspaceId: 'ws1', source: 'github', provider: 'github', roles: ['changes'], authKind: 'api_key', state: 'needs_reconnect', detail: 'Token rejected', config: {}, updatedAt: ASOF };
+    const server = { github: connectionView(record, ASOF) };
+    const member = sourceViews(conns, { asOf: ASOF, server })[0];
+    expect(member.actions.map((a) => [a.id, a.available])).toEqual([['reconnect', false], ['test', true], ['disconnect', false]]);
+    expect(member.actions[0].reason).toMatch(/owners and admins/);
+    const owner = sourceViews(conns, { asOf: ASOF, server, canManage: true })[0];
+    expect(owner.actions.every((a) => a.available)).toBe(true);
   });
 
   it('a server view that reports stale groups the source as STALE', () => {
