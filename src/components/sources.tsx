@@ -124,7 +124,7 @@ export function SourceCard({ view: v, extra, index = 0, onAction }: { view: Sour
 
       <dl className="mt-3 grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[12.5px]">
         <dt className="text-ink-3">Account</dt>
-        <dd className="min-w-0 break-words text-ink">{v.account ?? (v.state === 'imported' ? 'Your uploaded files' : v.state === 'simulated' ? 'None — fixture data' : 'Not reported in this build')}</dd>
+        <dd className="min-w-0 break-words text-ink">{v.account ?? (v.state === 'imported' ? 'Your uploaded files' : v.state === 'simulated' ? 'None — fixture data' : v.state === 'not_configured' ? '—' : 'Not reported in this build')}</dd>
         <dt className="text-ink-3">Health</dt>
         <dd className={cx('font-medium', health.tone)}>{health.text}</dd>
         <dt className="text-ink-3">Freshness</dt>

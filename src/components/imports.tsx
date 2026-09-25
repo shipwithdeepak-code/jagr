@@ -29,7 +29,11 @@ export function ImportedSources() {
       .map((d) => d.importedAt)
       .sort()
       .at(-1);
-  const views = sourceViews(state.connections, { asOf: importedWorld?.world?.end ?? state.clock, lastImport: (id) => lastImport(id) });
+  // Channels the upload model has no slot for (e.g. Play Store) are not the user's concern here — as on the Overview.
+  const views = sourceViews(
+    state.connections.filter((c) => !(c.state === 'not_configured' && !c.label)),
+    { asOf: importedWorld?.world?.end ?? state.clock, lastImport: (id) => lastImport(id) },
+  );
 
   const onFile = async (file: File) => {
     setReading(true);
