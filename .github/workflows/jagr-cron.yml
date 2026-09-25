@@ -1,6 +1,8 @@
 # Drives Jagr's scheduler from outside Vercel (Vercel Hobby allows a Cron Job at most once a day).
-# It only calls the existing endpoint: /api/cron/tick enqueues due watch runs and briefs and drains the job
-# queue. The scheduler catches up on missed slots, so a late or skipped trigger never loses a run.
+# Every 15 minutes it only calls the existing endpoint: /api/cron/tick enqueues the watch runs and briefs that
+# fell due since the previous tick and drains the job queue. Missed watch slots are not replayed one by one:
+# after a late or skipped trigger, only each watch's latest due slot is scheduled. GitHub change monitoring
+# reads the last 6 hours on every run, so changes made during a gap are still seen.
 #
 # Setup (repository → Settings → Secrets and variables → Actions):
 #   variable JAGR_APP_URL   e.g. https://jagr.vercel.app

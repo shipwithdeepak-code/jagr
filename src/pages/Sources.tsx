@@ -1,4 +1,4 @@
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Info } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import type { ConnectionState, ProviderId, RecordKind } from '@/product/types';
 import { externalUrl, PROVIDERS, resolveRef } from '@/product/integrations/adapters';
@@ -8,14 +8,12 @@ import { useProduct } from '@/state/productContext';
 import { fmtDateTime } from '@/lib/time';
 import { ConnectionBadge, ProviderName } from '@/components/product';
 import { SeriesChart } from '@/components/charts';
-import { Badge, Button, Card, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';
+import { Badge, Button, Card, cx, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { ImportedSources } from '@/components/imports';
-import { StatusBadge } from '@/components/primitives';
-import { SourceGroups, SourcesOverview } from '@/components/sources';
+import { SourceGroups } from '@/components/sources';
 import { sourceViews, type SourceGroup } from '@/product/view/sources';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
-import { WorkspaceTransfer } from '@/components/workspaceTransfer';
 import { ServerSources } from '@/components/serverWorkspace';
 
 
@@ -30,7 +28,6 @@ export function SourcesPage() {
           actions={<WorkspaceDataBadge />}
         />
         <ServerSources />
-        <WorkspaceTransfer />
       </>
     );
   }
@@ -43,7 +40,6 @@ export function SourcesPage() {
           actions={<WorkspaceDataBadge />}
         />
         <ImportedSources />
-        <WorkspaceTransfer />
       </>
     );
   }
@@ -60,7 +56,7 @@ function SampleSources() {
     <>
       <PageHeader
         title="Sources"
-        description="The tools you already use. Jagr reads them through one normalised adapter interface, so a Jira issue, a GA4 metric and an App Store review can be correlated as evidence."
+        description="The tools Jagr reads. A Jira issue, an analytics metric and an app review become evidence in one model, so an investigation can correlate them."
         actions={
           <>
             <WorkspaceDataBadge />
@@ -68,27 +64,20 @@ function SampleSources() {
           </>
         }
       />
-      <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
-        <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
-        <div className="text-ink-2">
-          <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. Live connectors (Amplitude, GitHub, Jira Cloud, Intercom, and Slack for outbound alerts) run on a Jagr server in single-tenant mode, with credentials held server-side — never in this browser app. Connecting them from this page (OAuth) is not built yet. You can simulate an outage, an error or a stale sync to see how Jagr reports gaps instead of guessing.
-        </div>
+      <div className="mb-8 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-[13px]">
+        <Info size={15} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
+        <p className="text-ink-2">
+          <span className="font-medium text-ink">This local workspace reads sample data.</span> Every source below is simulated, and every fact from it is labelled simulated. To connect GitHub, Jira, Amplitude, Intercom or Slack, use a server workspace — <Link to="/settings#workspace" className="font-medium text-accent hover:underline">sign in</Link>. Credentials are stored encrypted on the server, never in this browser.
+        </p>
       </div>
-      <SourcesOverview views={views} />
       <SourceGroups
         views={views}
         extra={(v) => {
           const watchers = state.watches.filter((w) => w.sources.includes(v.id)).map((w) => w.name);
           return (
             <>
-              <p className="mt-2 text-[12px] text-ink-3">
-                {watchers.length ? `Used by ${watchers.join(', ')}` : 'Not used by any watch'} · production connector: {PROVIDERS[v.id].realApi}
-              </p>
-              {v.id === 'jira' && (
-                <p className="mt-2 text-[12px] text-ink-3">
-                  <span className="font-medium text-ink-2">Real connector: implemented, not configured here.</span> It needs server-side credentials — an API token can’t safely live in a browser app — so this browser build uses simulated Jira data. Jira release dates are day-precision; minute-level timing comes from the stores.
-                </p>
-              )}
+              <p className="text-[13px] text-ink-2">{watchers.length ? `Used by ${watchers.join(', ')}` : 'Not used by any watch'}</p>
+              <p className="text-[13px] text-ink-3">Live connector: {PROVIDERS[v.id].realApi}</p>
               <SimulationControls id={v.id} group={v.group} />
             </>
           );
@@ -96,22 +85,17 @@ function SampleSources() {
       />
       {email && (
         <section aria-labelledby="channels-h" className="mt-8">
-          <h2 id="channels-h" className="text-[13px] font-semibold tracking-tight">
-            Delivery channel
+          <h2 id="channels-h" className="text-[16px] font-semibold tracking-tight">
+            Alerts
           </h2>
-          <p className="mt-0.5 mb-3 text-[12.5px] text-ink-3">Where Jagr sends alerts and the morning brief. Not an evidence source.</p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-[12.5px]">
-            <span className="font-medium text-ink">{PROVIDERS.email.name}</span>
-            <StatusBadge kind="source" value={email.state} />
-            <span className="min-w-0 break-words text-ink-3">{email.detail}</span>
+          <p className="mt-0.5 mb-3 text-[13px] text-ink-2">Where Jagr delivers alerts and the morning brief. Not an evidence source.</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-4 py-3 text-[13px]">
+            <span className="font-medium text-ink">In Jagr</span>
+            <span className="min-w-0 break-words text-ink-2">Alerts are shown in Jagr. This local workspace delivers nowhere else.</span>
             <SimulationControls id="email" group={email.state === 'simulated' ? 'simulated' : email.state === 'unavailable' ? 'unavailable' : email.state === 'error' ? 'error' : 'simulated'} inline />
           </div>
         </section>
       )}
-      <p className="mt-6 text-[12.5px] text-ink-3">
-        The demo-night replay uses its own adapters — see <Link to="/integrations" className="text-accent hover:underline">demo integrations</Link>.
-      </p>
-      <WorkspaceTransfer />
     </>
   );
 }
@@ -136,20 +120,20 @@ export function SourceRecordPage() {
 
   return (
     <>
-      <button onClick={() => history.back()} className="mb-4 inline-flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink">
+      <button onClick={() => history.back()} className="mb-4 inline-flex items-center gap-1 text-[13px] text-ink-3 hover:text-ink">
         <ArrowLeft size={13} /> Back
       </button>
       <PageHeader
         eyebrow={
           <div className="flex items-center gap-2">
-            <ProviderName provider={ref.provider} className="text-[12.5px] font-medium text-ink-2" />
+            <ProviderName provider={ref.provider} className="text-[13px] font-medium text-ink-2" />
             <Badge>{ref.kind}</Badge>
             <ConnectionBadge state={conn.state} />
           </div>
         }
         title={title(ref.kind, rec)}
       />
-      <div className="mb-5 rounded-xl border border-dashed border-info/50 bg-info-soft/40 px-4 py-3 text-[13px]">
+      <div className="mb-5 rounded-lg border border-dashed border-info/50 bg-info-soft/40 px-4 py-3 text-[13px]">
         <span className="font-semibold text-info">Simulated record.</span> <span className="text-ink-2">This is fixture data shown inside Jagr. With a live connector, this link opens</span>{' '}
         <Mono className="break-all text-ink">{externalUrl(ref)}</Mono>
       </div>
@@ -179,17 +163,20 @@ function SimulationControls({ id, group, inline = false }: { id: ProviderId; gro
     group !== 'unavailable' && { label: 'Simulate outage', run: () => set('unavailable', 'Connection timed out (simulated outage)', 'outage') },
     group !== 'error' && { label: 'Simulate error', run: () => set('error', '401 — token expired (simulated)', 'error') },
   ].filter((b): b is { label: string; run: () => void } => !!b);
+  // Failure modes are a way to see how Jagr reports gaps — useful, but not the first thing on the page.
   return (
-    <div className={inline ? 'ml-auto flex flex-wrap gap-1.5' : 'mt-3 border-t border-dashed border-line pt-3'}>
-      {!inline && <div className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Simulation</div>}
-      <div className="flex flex-wrap gap-1.5">
+    <details className={cx('group', inline ? 'ml-auto' : 'mt-2')}>
+      <summary className="interactive inline-flex cursor-pointer list-none items-center gap-1 rounded text-[13px] text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={12} aria-hidden className="transition-transform group-open:rotate-90 motion-reduce:transition-none" /> Test failure modes
+      </summary>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
         {buttons.map((b) => (
           <Button key={b.label} size="sm" variant="ghost" onClick={b.run}>
             {b.label}
           </Button>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 

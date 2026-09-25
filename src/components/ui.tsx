@@ -11,7 +11,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { ConfidenceBand, InvestigationStatus, RiskLevel, Severity, SourceKind } from '@/domain/types';
 import { SOURCE_LABELS } from '@/domain/defaults';
@@ -34,7 +34,7 @@ export function Button({
       {...rest}
       className={clsx(
         'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-[background,border,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' ? 'h-7 px-2.5 text-[12.5px]' : 'h-8.5 px-3 text-[13px]',
+        size === 'sm' ? 'h-7 px-2.5 text-[13px]' : 'h-8.5 px-3 text-[13px]',
         variant === 'primary' && 'bg-ink text-canvas shadow-card hover:opacity-90',
         variant === 'secondary' && 'border border-line bg-surface text-ink shadow-card hover:border-line-strong hover:bg-subtle',
         variant === 'ghost' && 'text-ink-2 hover:bg-subtle hover:text-ink',
@@ -64,7 +64,7 @@ export type Tone = keyof typeof TONE;
 
 export function Badge({ tone = 'neutral', children, dot, className }: { tone?: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   return (
-    <span className={clsx('inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 text-[11.5px] font-medium', TONE[tone], className)}>
+    <span className={clsx('inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-[12px] font-medium', TONE[tone], className)}>
       {dot && <span className="size-1.5 rounded-full bg-current" />}
       {children}
     </span>
@@ -101,7 +101,7 @@ export function InvestigationStatusBadge({ status }: { status: InvestigationStat
 
 export function SimulationBadge({ label = 'Simulation' }: { label?: string }) {
   return (
-    <span className="inline-flex h-5 items-center gap-1 rounded-md border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-ink-3">
+    <span className="inline-flex h-5 items-center gap-1 rounded border border-dashed border-line-strong px-1.5 text-[12px] font-medium text-ink-3">
       {label}
     </span>
   );
@@ -109,7 +109,7 @@ export function SimulationBadge({ label = 'Simulation' }: { label?: string }) {
 
 // ── Surfaces ────────────────────────────────────────────────
 export function Card({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
-  return <div className={clsx('rounded-xl border border-line bg-surface shadow-card', padded && 'p-4 sm:p-5', className)}>{children}</div>;
+  return <div className={clsx('rounded-lg border border-line bg-surface', padded && 'p-4 sm:p-5', className)}>{children}</div>;
 }
 
 export function SectionTitle({ children, action, hint, id }: { children: ReactNode; action?: ReactNode; hint?: ReactNode; id?: string }) {
@@ -117,7 +117,7 @@ export function SectionTitle({ children, action, hint, id }: { children: ReactNo
     <div id={id} className="mb-3 flex scroll-mt-20 items-end justify-between gap-3">
       <div>
         <h2 className="text-[13px] font-semibold tracking-tight text-ink">{children}</h2>
-        {hint && <p className="mt-0.5 text-[12.5px] text-ink-3">{hint}</p>}
+        {hint && <p className="mt-0.5 text-[13px] text-ink-3">{hint}</p>}
       </div>
       {action}
     </div>
@@ -125,7 +125,7 @@ export function SectionTitle({ children, action, hint, id }: { children: ReactNo
 }
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={clsx('text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3', className)}>{children}</div>;
+  return <div className={clsx('text-[12px] font-medium text-ink-3', className)}>{children}</div>;
 }
 
 export function PageHeader({ title, description, actions, eyebrow }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
@@ -133,8 +133,8 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: Re
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {eyebrow && <div className="mb-1.5">{eyebrow}</div>}
-        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">{title}</h1>
-        {description && <p className="mt-1 max-w-2xl text-[13.5px] text-ink-2">{description}</p>}
+        <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+        {description && <p className="mt-1 max-w-2xl text-[14px] text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -145,7 +145,7 @@ export function Stat({ label, value, hint, tone }: { label: string; value: React
   return (
     <div className="min-w-0">
       <div className="truncate text-[12px] text-ink-3">{label}</div>
-      <div className={clsx('tabular mt-0.5 text-[22px] font-semibold tracking-tight', tone === 'crit' ? 'text-crit' : tone === 'high' ? 'text-high' : tone === 'ok' ? 'text-ok' : 'text-ink')}>{value}</div>
+      <div className={clsx('tabular mt-0.5 text-[20px] font-semibold tracking-tight', tone === 'crit' ? 'text-crit' : tone === 'high' ? 'text-high' : tone === 'ok' ? 'text-ok' : 'text-ink')}>{value}</div>
       {hint && <div className="mt-0.5 text-[12px] text-ink-3">{hint}</div>}
     </div>
   );
@@ -153,8 +153,8 @@ export function Stat({ label, value, hint, tone }: { label: string; value: React
 
 export function EmptyState({ icon: Icon, title, children, action }: { icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center">
-      <div className="mb-3 grid size-10 place-items-center rounded-xl border border-line bg-surface text-ink-2 shadow-card">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center">
+      <div className="mb-3 grid size-10 place-items-center rounded-lg border border-line bg-surface text-ink-2 shadow-card">
         <Icon size={18} />
       </div>
       <div className="text-[14px] font-semibold text-ink">{title}</div>
@@ -202,19 +202,62 @@ export function Select<T extends string>({ value, onChange, options, label, clas
 }
 
 // ── Overlays ────────────────────────────────────────────────
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A modal surface's keyboard contract: focus moves inside on open (the first field, else the first
+ * control), Tab and Shift+Tab stay inside, Escape closes, and focus returns to whatever opened it.
+ */
+export function useDialogFocus(open: boolean, onClose: () => void, ref: RefObject<HTMLElement | null>) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const box = ref.current;
+    const first = box?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? box?.querySelector<HTMLElement>(FOCUSABLE);
+    (first ?? box)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        close.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !ref.current) return;
+      const items = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const [a, z] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && document.activeElement === a) {
+        e.preventDefault();
+        z.focus();
+      } else if (!e.shiftKey && document.activeElement === z) {
+        e.preventDefault();
+        a.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [open, ref]);
+}
+
 export function Drawer({ open, onClose, title, children, width = 'max-w-xl', subtitle }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; width?: string }) {
-  useEscape(open, onClose);
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogFocus(open, onClose, ref);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" onClick={onClose} />
-      <div className={clsx('animate-slide-in absolute inset-y-0 right-0 flex w-full flex-col border-l border-line bg-surface shadow-pop', width)}>
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className="absolute inset-0 bg-black/25" onClick={onClose} />
+      <div ref={ref} tabIndex={-1} className={clsx('animate-slide-in absolute inset-y-0 right-0 flex w-full flex-col border-l border-line bg-surface shadow-pop outline-none', width)}>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold tracking-tight">{title}</div>
-            {subtitle && <div className="mt-0.5 text-[12.5px] text-ink-3">{subtitle}</div>}
+            <h2 id={titleId} className="text-[16px] font-semibold tracking-tight">{title}</h2>
+            {subtitle && <div className="mt-0.5 text-[13px] text-ink-3">{subtitle}</div>}
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-ink-3 hover:bg-subtle hover:text-ink" aria-label="Close">
+          <button onClick={onClose} className="rounded p-1 text-ink-3 hover:bg-subtle hover:text-ink" aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -225,33 +268,22 @@ export function Drawer({ open, onClose, title, children, width = 'max-w-xl', sub
   );
 }
 
-export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode }) {
-  useEscape(open, onClose);
+export function Modal({ open, onClose, title, children, footer, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (open) ref.current?.querySelector<HTMLElement>('button, [href], input, select')?.focus();
-  }, [open]);
+  const titleId = useId();
+  useDialogFocus(open, onClose, ref);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div ref={ref} className="animate-fade-up relative w-full max-w-md rounded-xl border border-line bg-surface p-5 shadow-pop">
-        <div className="text-[15px] font-semibold tracking-tight">{title}</div>
-        <div className="mt-2 text-[13.5px] text-ink-2">{children}</div>
-        {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
+      <div ref={ref} tabIndex={-1} className={clsx('animate-fade-up relative w-full rounded-xl border border-line bg-surface p-5 shadow-pop outline-none', wide ? 'max-w-lg' : 'max-w-md')}>
+        <h2 id={titleId} className="text-[16px] font-semibold tracking-tight">{title}</h2>
+        <div className="mt-2 text-[14px] text-ink-2">{children}</div>
+        {footer && <div className="mt-5 flex flex-wrap justify-end gap-2">{footer}</div>}
       </div>
     </div>,
     document.body,
   );
-}
-
-function useEscape(open: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
 }
 
 // ── Tabs ────────────────────────────────────────────────────
@@ -265,7 +297,7 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
           aria-selected={value === it.value}
           onClick={() => onChange(it.value)}
           className={clsx(
-            'h-7 rounded-md px-2.5 text-[12.5px] font-medium transition-colors',
+            'h-7 whitespace-nowrap rounded px-2.5 text-[13px] font-medium transition-colors',
             value === it.value ? 'bg-surface text-ink shadow-card' : 'text-ink-2 hover:text-ink',
           )}
         >
@@ -299,7 +331,7 @@ export function SourceChip({ source, className }: { source: SourceKind; classNam
 
 export function ConfidenceMeter({ value, band, size = 'md' }: { value?: number; band?: ConfidenceBand; size?: 'sm' | 'md' }) {
   if (value === undefined || band === 'insufficient') {
-    return <span className="text-[12.5px] font-medium text-med">Insufficient evidence</span>;
+    return <span className="text-[13px] font-medium text-med">Insufficient evidence</span>;
   }
   const pct = Math.round(value * 100);
   const color = band === 'high' ? 'bg-ink' : band === 'medium' ? 'bg-ink-2' : 'bg-high';
@@ -308,7 +340,7 @@ export function ConfidenceMeter({ value, band, size = 'md' }: { value?: number; 
       <span className={clsx('relative overflow-hidden rounded-full bg-muted', size === 'sm' ? 'h-1.5 w-14' : 'h-1.5 w-24')}>
         <span className={clsx('absolute inset-y-0 left-0 rounded-full', color)} style={{ width: `${pct}%` }} />
       </span>
-      <span className="tabular text-[12.5px] font-semibold text-ink">{pct}%</span>
+      <span className="tabular text-[13px] font-semibold text-ink">{pct}%</span>
       {band && size === 'md' && <span className="text-[12px] capitalize text-ink-3">{band}</span>}
     </span>
   );

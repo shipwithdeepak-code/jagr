@@ -175,7 +175,7 @@ export function EvidenceGraph({ inv, onSelect, selectedId }: { inv: Investigatio
           </g>
         )}
       </svg>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-3">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-3">
         <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-ok" /> Supports selected hypothesis</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed border-crit" /> Contradicts</span>
         <span>Click evidence to inspect source data · click a hypothesis to see what it rests on</span>

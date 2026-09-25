@@ -12,7 +12,7 @@ export function Logo() {
   return (
     <div className="flex items-center gap-2">
       <LogoMark />
-      <span className="text-[14px] font-semibold tracking-tight text-ink">JAGR</span>
+      <span className="text-[14px] font-semibold tracking-tight text-ink">Jagr</span>
     </div>
   );
 }

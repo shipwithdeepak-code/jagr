@@ -2,7 +2,6 @@ import { addMinutes, addSeconds, fmtTime, minutesBetween } from '../lib/time.js'
 import type {
   AgentHypothesis,
   Area,
-  AttentionLevel,
   ProposedAction,
   TraceStep,
   BriefSchedule,
@@ -110,16 +109,33 @@ interface ObservedChange {
 /** How far back each run reads changes (as for feedback); deployment ids deduplicate repeat sightings. */
 const CHANGE_LOOKBACK_MIN = 360;
 
+/** What one change source returned on a run (a source that could not be read is a gap instead). */
+interface ChangeRead {
+  source: SourceId;
+  deployments: number;
+  releases: number;
+}
+
+/**
+ * A changes-only watch inspects no signal, so "within normal range" would claim a check that never
+ * happened: say what was read instead.
+ */
+function changeReadSummary(reads: ChangeRead[], P: (p: ProviderId) => ProviderLabel): string {
+  const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  return reads.map((r) => `${P(r.source).name}: ${plural(r.deployments, 'deployment')}, ${plural(r.releases, 'release')} in the last ${CHANGE_LOOKBACK_MIN / 60}h`).join(' · ');
+}
+
 async function observe(
   reg: SourceRegistry,
   watch: Watch,
   at: string,
   worldStart: string,
   P: (p: ProviderId) => ProviderLabel,
-): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[] }> {
+): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[]; changeReads: ChangeRead[] }> {
   const findings: Finding[] = [];
   const failedDeployments: ObservedChange[] = [];
   const shipped: ObservedChange[] = [];
+  const changeReads: ChangeRead[] = [];
   const gaps = new Set<ProviderId>();
   const among = watch.sources.filter((p): p is SourceId => p !== 'email');
   const read = async (source: SourceId, fn: () => Promise<void>) => {
@@ -139,6 +155,7 @@ async function observe(
       for (const s of reg.withRole('changes', among)) {
         await read(s.id, async () => {
           const records = await s.changes!.getChanges({ window: { start: addMinutes(at, -CHANGE_LOOKBACK_MIN), end: at } });
+          changeReads.push({ source: s.id, deployments: records.filter((r) => r.kind === 'deploy').length, releases: records.filter((r) => r.kind === 'release').length });
           for (const record of records) {
             if (record.kind === 'deploy' && record.status === 'failed') failedDeployments.push({ source: s.id, record });
             else if ((record.kind === 'deploy' && record.status === 'success') || record.kind === 'release') shipped.push({ source: s.id, record });
@@ -200,7 +217,7 @@ async function observe(
       }
     }
   }
-  return { findings, gaps: [...gaps], failedDeployments, shipped };
+  return { findings, gaps: [...gaps], failedDeployments, shipped, changeReads };
 }
 
 /** Group findings that describe one problem: same area (or an area-specific watch) and onsets within 2 hours. */
@@ -275,7 +292,8 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
 
     const watch = o.watches.find((w) => w.id === job.watchId)!;
     const at = job.at;
-    const { findings, gaps, failedDeployments, shipped: seen } = await observe(reg, watch, at, o.world.start, P);
+    const { findings, gaps, failedDeployments, shipped: seen, changeReads } = await observe(reg, watch, at, o.world.start, P);
+    const changesOnly = watch.signals.every((sig) => signalMeta(sig.key).kind === 'changes');
     for (const c of seen) shipped.set(c.record.id, c);
     const touched = new Set<string>();
     const sent: string[] = [];
@@ -545,7 +563,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
     for (const inv of investigations.filter((i) => i.watchId === watch.id && isDeploymentFailure(i) && OPEN.includes(i.status) && i.deployment)) {
       const d = inv.deployment!;
       // A later successful deployment on the same target closes the deployment failure (outcome only).
-      const success = seen.find((c) => c.source === d.source && c.record.kind === 'deploy' && c.record.status === 'success' && changeTarget(c.record) === d.target && c.record.at > d.at);
+      const success = seen.find((c) => c.source === d.source && c.record.kind === 'deploy' && c.record.status === 'success' && sameTarget(c.record, d.target) && c.record.at > d.at);
       if (success) {
         closeDeploymentFailure(inv, success, at, P(success.source));
         continue;
@@ -608,7 +626,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       watchId: watch.id,
       scheduledAt: at,
       outcome: [
-        findings.length ? `${findings.length} signal${findings.length === 1 ? '' : 's'} outside normal range` : 'All signals within normal range',
+        changesOnly ? changeReadSummary(changeReads, P) || (gaps.length ? '' : 'No change source to read') : findings.length ? `${findings.length} signal${findings.length === 1 ? '' : 's'} outside normal range` : 'All signals within normal range',
         failedDeployments.length ? `${failedDeployments.length} failed deployment${failedDeployments.length === 1 ? '' : 's'} reported` : '',
         gaps.length ? `${gaps.map((g) => P(g).name).join(', ')} unavailable` : '',
         sent.length ? `${sent.length} email sent` : '',
@@ -638,12 +656,20 @@ function shippedChange(c: ObservedChange): NonNullable<MorningBriefDoc['shipped'
 export const isDeploymentFailure = (inv: WatchInvestigation) => !!inv.deployment || inv.dedupeKey.startsWith(DEPLOY_KEY);
 
 /**
- * The change stream a deployment belongs to: its title with the version removed, so successive
- * deployments of the same target (e.g. the same environment and repository) compare equal.
+ * The change stream a deployment belongs to (e.g. the same environment and repository): the target the
+ * source reports, or, for a record without one, its title with the version removed.
  */
-export function changeTarget(r: Pick<ChangeRecord, 'title' | 'version'>): string {
+export function changeTarget(r: Pick<ChangeRecord, 'title' | 'version' | 'target'>): string {
+  return r.target ?? legacyChangeTarget(r);
+}
+
+/** How targets were derived before sources reported them; still matches failures recorded that way. */
+function legacyChangeTarget(r: Pick<ChangeRecord, 'title' | 'version'>): string {
   return r.version ? r.title.split(r.version).join('') : r.title;
 }
+
+/** Whether a change record continues the stream a deployment failure was recorded on. */
+const sameTarget = (r: ChangeRecord, target: string) => changeTarget(r) === target || legacyChangeTarget(r) === target;
 
 const DEPLOY_UNKNOWN_CAUSE = 'Why the deployment failed — the deployment record does not say (build, tests or infrastructure).';
 const DEPLOY_UNKNOWN_IMPACT = 'Whether users or product metrics are affected — the deployment record does not show it.';
@@ -744,10 +770,6 @@ function closeDeploymentFailure(inv: WatchInvestigation, success: ObservedChange
     source: success.source,
     refs: [r.ref],
   });
-}
-
-export function highestAttention(invs: WatchInvestigation[]): AttentionLevel | undefined {
-  return invs.reduce<AttentionLevel | undefined>((m, i) => (!m || ATTENTION_RANK[i.attention] > ATTENTION_RANK[m] ? i.attention : m), undefined);
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Check, Pause, Play, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { AttentionLevel, MonitoringFrequency, NotificationPolicy, ProviderId, Watch, WatchTemplateId } from '@/product/types';
@@ -8,16 +8,18 @@ import { metricKeyOf as nativeMetricKey, nativeMetricSignal } from '@/product/in
 import type { SignalKey } from '@/product/types';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { METRIC_DEFS } from '@/product/integrations/world';
-import { canLeaveSourceStep, connectionsPending, initialWizardSources, wizardSourceRows } from '@/product/view/watchWizard';
-import { FREQUENCY_LABEL, nextRunAt, toCron } from '@/product/scheduler';
+import { canLeaveSourceStep, connectionsPending, initialWizardSources, sourceStepBlocker, templateAvailability, wizardSourceRows } from '@/product/view/watchWizard';
+import { FREQUENCY_LABEL, toCron } from '@/product/scheduler';
+import { watchCardStatus } from '@/product/view/watchCard';
 import { useProduct } from '@/state/productContext';
-import { fmtTime } from '@/lib/time';
+import { fmtDateTime, fmtTime } from '@/lib/time';
 import { AttentionBadge, ConnectionBadge, ProviderName } from '@/components/product';
-import { Badge, Button, Card, cx, Drawer, Eyebrow, Mono, PageHeader, Toggle , EmptyState } from '@/components/ui';
+import { Button, cx, Drawer, EmptyState, Mono, PageHeader, Toggle, useDialogFocus } from '@/components/ui';
+import { investigationTitle } from '@/product/view/investigation';
 import { useToast } from '@/components/toast';
 
 export function WatchesPage() {
-  const { state, setWatchStatus, mode, importedWorld } = useProduct();
+  const { state, setWatchStatus, mode, importedWorld, location, server } = useProduct();
   // Imported data renames channels ("Feedback", not "App Store reviews") and may lack some metrics.
   const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
   const signalLabel = (key: SignalKey) => signalMeta(key).label;
@@ -25,130 +27,135 @@ export function WatchesPage() {
   const [logFor, setLogFor] = useState<Watch | null>(null);
   const wizardOpen = params.get('new') === '1';
   const r = state.result;
+  const sourceName = (p: ProviderId) => state.connections.find((c) => c.provider === p)?.label?.short ?? PROVIDERS[p].short;
 
   return (
     <>
       <PageHeader
         title="Watches"
-        description="A watch is a standing question Jagr answers on a schedule: which signals matter, where to look, how often to check, and when it's worth interrupting you."
+        description="A watch is a standing question Jagr answers on a schedule: which signals matter, where to look, how often to check, and when it’s worth interrupting you."
         actions={
           <Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>
-            Create Watch
+            Create watch
           </Button>
         }
       />
       {state.watches.length === 0 && (
-        <EmptyState icon={Plus} title="Create your first watch." action={<Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>Create watch</Button>}>
+        <EmptyState icon={Plus} title="Create your first watch" action={<Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>Create watch</Button>}>
           A watch is a standing question — e.g. “Is checkout healthy?” Jagr answers it over your data and opens an investigation when something meaningful changes.
         </EmptyState>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
-        {state.watches.map((w) => {
-          const invs = r?.investigations.filter((i) => i.watchIds.includes(w.id) && i.status !== 'DISMISSED') ?? [];
-          const runs = r?.log.filter((l) => l.watchId === w.id).length ?? 0;
-          const next = nextRunAt(w, state.clock, r?.window.start ?? '2026-09-23T18:00:00.000Z');
-          return (
-            <Card key={w.id} className={w.status === 'paused' ? 'opacity-70' : ''}>
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[15px] font-semibold tracking-tight">{w.name}</span>
-                    <Badge tone={w.status === 'active' ? 'ok' : 'neutral'} dot>
-                      {w.status === 'active' ? 'Active' : 'Paused'}
-                    </Badge>
+      {state.watches.length > 0 && (
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+          {state.watches.map((w) => {
+            const invs = r?.investigations.filter((i) => i.watchIds.includes(w.id) && i.status !== 'DISMISSED' && i.status !== 'RESOLVED') ?? [];
+            const status = watchCardStatus(w, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt });
+            const ran = location === 'server' ? !!status.lastRun : !!r;
+            const top = invs[0];
+            const health =
+              w.status === 'paused'
+                ? { label: 'Paused', dot: 'bg-line-strong' }
+                : top
+                  ? { label: 'Needs attention', dot: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' }
+                  : ran
+                    ? { label: 'Healthy', dot: 'bg-ok' }
+                    : { label: 'Not run yet', dot: 'bg-line-strong' };
+            const signals = w.signals
+              .filter((sg) => sg.key !== 'changes')
+              // One line per channel: with imported data both store review signals read "Customer feedback".
+              .filter((sg, i, all) => mode !== 'imported' || all.findIndex((x) => signalLabel(x.key) === signalLabel(sg.key) && x.area === sg.area) === i);
+            return (
+              <li key={w.id} className={cx('px-4 py-4 sm:px-5', w.status === 'paused' && 'opacity-75')}>
+                <div className="grid gap-x-6 gap-y-3 md:grid-cols-[minmax(0,1fr)_240px]">
+                  <div className="min-w-0">
+                    <h2 className="text-[16px] font-semibold tracking-tight">{w.name}</h2>
+                    <p className="text-[13px] text-ink-2">{w.description}</p>
+                    <p className="mt-1.5 text-[13px] text-ink-2">
+                      {w.sources.map(sourceName).join(', ')}
+                      <span className="text-ink-3"> · </span>
+                      {FREQUENCY_LABEL[w.schedule.frequency]}
+                      {w.schedule.frequency === 'daily' ? ` at ${w.schedule.dailyAt}` : ''} ({w.timezone})
+                      <span className="text-ink-3"> · </span>
+                      {w.notificationPolicy.interruptAt === 'CRITICAL' ? 'Interrupts for CRITICAL only' : `Interrupts at ${w.notificationPolicy.interruptAt} and above`}
+                    </p>
+                    {invs.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {invs.map((i) => (
+                          <li key={i.id}>
+                            <Link to={i.jagrPath} className="inline-flex items-center gap-2 text-[13px] hover:underline">
+                              <AttentionBadge level={i.attention} /> {investigationTitle(i)}
+                              {i.watchId !== w.id && <span className="text-ink-3">(shared with {state.watches.find((x) => x.id === i.watchId)?.name ?? 'another watch'})</span>}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  <p className="mt-0.5 text-[12.5px] text-ink-2">{w.description}</p>
+                  <dl className="grid grid-cols-[auto_1fr] content-start gap-x-3 gap-y-1 text-[13px]">
+                    <dt className="text-ink-3">State</dt>
+                    <dd className="flex items-center gap-1.5">
+                      <span aria-hidden className={cx('size-2 rounded-full', health.dot)} /> {health.label}
+                    </dd>
+                    <dt className="text-ink-3">Last run</dt>
+                    <dd className="num">
+                      {location === 'server' ? (status.lastRun ? `${fmtDateTime(status.lastRun.scheduledAt)} UTC` : 'Not run yet') : r ? `${status.runs.length} checks in the last window` : 'Not run yet'}
+                    </dd>
+                    <dt className="text-ink-3">Next run</dt>
+                    <dd className="num">{status.nextRun ? `${fmtTime(status.nextRun)} UTC` : '—'}</dd>
+                  </dl>
                 </div>
-                <Button size="sm" variant="ghost" icon={w.status === 'active' ? Pause : Play} onClick={() => setWatchStatus(w.id, w.status === 'active' ? 'paused' : 'active')}>
-                  {w.status === 'active' ? 'Pause' : 'Resume'}
-                </Button>
-              </div>
-              <dl className="mt-3 grid grid-cols-[90px_1fr] gap-x-3 gap-y-1.5 text-[12.5px]">
-                <dt className="text-ink-3">Sources</dt>
-                <dd className="flex flex-wrap gap-x-3 gap-y-1">
-                  {w.sources.map((p) => (
-                    <ProviderName key={p} provider={p} short />
-                  ))}
-                </dd>
-                <dt className="text-ink-3">Signals</dt>
-                <dd>
-                  <ul className="space-y-0.5">
-                    {w.signals
-                      .filter((s) => s.key !== 'changes')
-                      // One line per channel: with imported data both store review signals read "Customer feedback".
-                      .filter((s, i, all) => mode !== 'imported' || all.findIndex((x) => signalLabel(x.key) === signalLabel(s.key) && x.area === s.area) === i)
-                      .map((s) => {
-                        const missing = importedMetrics && signalMeta(s.key).kind === 'metric' && !importedMetrics.has(s.key);
-                        if (missing) {
-                          return (
-                            <li key={s.key + (s.area ?? '')} className="text-ink-3">
-                              {signalMeta(s.key).label} — not in your imported data, skipped
-                            </li>
-                          );
-                        }
-                        const metric = metricKeyOf(s.key);
+                {location === 'server' && status.lastRun && <p className="mt-2 text-[13px] text-ink-2">{status.lastRun.outcome}</p>}
+                {!invs.length && ran && location !== 'server' && <p className="mt-2 text-[13px] text-ink-3">{status.quiet}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <details className="group min-w-0 flex-1">
+                    <summary className="interactive inline-flex cursor-pointer list-none items-center gap-1 rounded text-[13px] font-medium text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+                      <ArrowRight size={12} aria-hidden className="transition-transform group-open:rotate-90 motion-reduce:transition-none" /> What it checks
+                    </summary>
+                    <ul className="mt-2 space-y-0.5 border-l border-line pl-3 text-[13px]">
+                      {signals.map((sg) => {
+                        const missing = importedMetrics && signalMeta(sg.key).kind === 'metric' && !importedMetrics.has(sg.key);
+                        if (missing) return <li key={sg.key + (sg.area ?? '')} className="text-ink-3">{signalMeta(sg.key).label} — not in your imported data, skipped</li>;
+                        const metric = metricKeyOf(sg.key);
                         const rule = metric ? ruleText(metric, w.thresholds) : null;
                         const custom = !!metric && w.thresholds?.[metric] !== undefined;
                         return (
-                          <li key={s.key + (s.area ?? '')}>
-                            {signalLabel(s.key)}
-                            {s.area && signalMeta(s.key).kind !== 'metric' ? (s.area === '*' ? ' · every area' : ` · ${s.area}`) : ''}
-                            {rule && (
-                              <span className="text-ink-3">
-                                {' '}
-                                — {rule}
-                                {custom && <span className="ml-1 rounded bg-accent-soft px-1 text-[11px] font-medium text-accent">custom</span>}
-                              </span>
-                            )}
+                          <li key={sg.key + (sg.area ?? '')}>
+                            {signalLabel(sg.key)}
+                            {sg.area && signalMeta(sg.key).kind !== 'metric' ? (sg.area === '*' ? ' · every area' : ` · ${sg.area}`) : ''}
+                            {rule && <span className="text-ink-2"> — {rule}{custom && ' (custom)'}</span>}
                           </li>
                         );
                       })}
-                    {w.signals.some((s) => s.key === 'changes') && <li className="text-ink-3">Recent releases, as context</li>}
-                  </ul>
-                </dd>
-                <dt className="text-ink-3">Schedule</dt>
-                <dd>
-                  {FREQUENCY_LABEL[w.schedule.frequency]}
-                  {w.schedule.frequency === 'daily' ? ` at ${w.schedule.dailyAt}` : ''} · {w.timezone} · <Mono className="text-ink-3">{toCron(w)}</Mono>
-                </dd>
-                <dt className="text-ink-3">Interrupt</dt>
-                <dd>
-                  {w.notificationPolicy.interruptAt === 'CRITICAL' ? 'CRITICAL only' : `${w.notificationPolicy.interruptAt} and above`} · brief {w.notificationPolicy.morningBrief ? `includes ${w.notificationPolicy.briefMin}+` : 'off'}
-                </dd>
-                <dt className="text-ink-3">Next check</dt>
-                <dd>{next ? fmtTime(next) : '—'}</dd>
-              </dl>
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-[12.5px]">
-                {invs.length ? (
-                  invs.map((i) => (
-                    <Link key={i.id} to={i.jagrPath} className="inline-flex items-center gap-1.5 hover:underline">
-                      <AttentionBadge level={i.attention} /> {i.title}
-                      {i.watchId !== w.id && <span className="text-ink-3">(linked)</span>}
-                    </Link>
-                  ))
-                ) : (
-                  <span className="text-ink-3">{r ? 'No meaningful changes last night' : 'Not run yet'}</span>
-                )}
-                <button onClick={() => setLogFor(w)} className="ml-auto text-[12px] font-medium text-accent hover:underline">
-                  {runs} runs · log
-                </button>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+                      {w.signals.some((sg) => sg.key === 'changes') && <li className="text-ink-2">{w.signals.every((sg) => sg.key === 'changes') ? 'Failed deployments; successful deployments and releases as brief context' : 'Recent releases, as context'}</li>}
+                      <li className="text-ink-3">
+                        Morning brief: {w.notificationPolicy.morningBrief ? `includes ${w.notificationPolicy.briefMin} and above` : 'off'} · schedule <Mono className="text-ink-3">{toCron(w)}</Mono>
+                      </li>
+                    </ul>
+                  </details>
+                  <Button size="sm" variant="ghost" onClick={() => setLogFor(w)}>
+                    Run log <span className="num text-ink-3">{status.runs.length}</span>
+                  </Button>
+                  <Button size="sm" variant="ghost" icon={w.status === 'active' ? Pause : Play} onClick={() => setWatchStatus(w.id, w.status === 'active' ? 'paused' : 'active')}>
+                    {w.status === 'active' ? 'Pause' : 'Resume'}
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-      <Drawer open={!!logFor} onClose={() => setLogFor(null)} title={logFor ? `${logFor.name} — run log` : ''} subtitle="Every scheduled check from the last monitoring window">
+      <Drawer open={!!logFor} onClose={() => setLogFor(null)} title={logFor ? `${logFor.name} — run log` : ''} subtitle={location === 'server' ? 'Recent monitoring runs of this watch' : 'Every scheduled check from the last monitoring window'}>
         {logFor && (
-          <ul className="divide-y divide-line text-[12.5px]">
-            {(r?.log.filter((l) => l.watchId === logFor.id) ?? []).map((l) => (
-              <li key={l.jobId} className="grid grid-cols-[52px_1fr] gap-3 py-2">
-                <span className="tabular font-mono text-ink-3">{fmtTime(l.scheduledAt)}</span>
-                <span className={l.emailIds.length ? 'font-medium text-high' : l.investigationIds.length ? '' : 'text-ink-3'}>
+          <ul className="divide-y divide-line text-[13px]">
+            {watchCardStatus(logFor, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }).runs.map((l) => (
+              <li key={l.jobId} className={cx('grid gap-3 py-2', location === 'server' ? 'grid-cols-[120px_1fr]' : 'grid-cols-[72px_1fr]')}>
+                <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)} UTC`}</span>
+                <span className={l.emailIds.length ? 'font-medium text-ink' : l.investigationIds.length ? '' : 'text-ink-2'}>
                   {l.outcome}
                   {l.investigationIds.map((id) => (
                     <Link key={id} to={`/investigations/w/${id}`} className="ml-2 text-accent hover:underline">
-                      {id}
+                      Open
                     </Link>
                   ))}
                 </span>
@@ -184,7 +191,7 @@ const FREQS: MonitoringFrequency[] = ['15m', '30m', '1h', '4h', 'daily'];
 const INTERRUPT: { value: NotificationPolicy['interruptAt']; label: string; hint: string }[] = [
   { value: 'CRITICAL', label: 'Only when it’s critical', hint: 'Severe customer or production impact. Everything else waits for the brief.' },
   { value: 'HIGH', label: 'When it matters (recommended)', hint: 'Cross-source degradation of a core funnel, once confirmed — plus anything critical.' },
-  { value: 'MEDIUM', label: 'Any persistent change', hint: 'Also single-source changes. Expect more emails.' },
+  { value: 'MEDIUM', label: 'Any persistent change', hint: 'Also single-source changes. Expect more alerts.' },
 ];
 
 function CreateWatchWizard({ onClose }: { onClose: () => void }) {
@@ -221,15 +228,25 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
     if (!pending) setSources(usable(tpl.sources));
   }, [pending]);
 
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(true, onClose, dialog);
 
   const rows = wizardSourceRows(tpl.sources, state.connections, { location });
+  const availability = templateAvailability(tpl.sources, state.connections, { location });
   const invalidThreshold = metrics.some((id) => thresholds[id] !== undefined && thresholds[id] !== '' && !(Number(thresholds[id]) > 0));
-  const canNext = (step !== 2 || canLeaveSourceStep(sources, rows)) && (step !== 1 || !invalidThreshold);
+  // Every disabled Next says why, next to the button.
+  const blocker =
+    step === 0 && availability.status === 'unavailable'
+      ? `${tpl.name} needs a source this workspace does not have.`
+      : step === 0 && availability.status === 'loading'
+        ? 'Waiting for this workspace’s connections to load.'
+        : step === 1 && invalidThreshold
+          ? 'Fix the highlighted threshold.'
+          : step === 2
+            ? sourceStepBlocker(sources, rows)
+            : undefined;
+  const canNext = !blocker && (step !== 2 || canLeaveSourceStep(sources, rows));
+  const duplicateName = state.watches.some((w) => w.name.trim().toLowerCase() === name.trim().toLowerCase());
 
   const finish = () => {
     const id = `w-${template}-${Date.now().toString(36)}`;
@@ -251,11 +268,11 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Create watch">
-      <div className="animate-fade-up flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="create-watch-title">
+      <div ref={dialog} tabIndex={-1} className="animate-fade-up flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-pop outline-none">
         <div className="flex items-center justify-between border-b border-line px-5 py-3">
-          <div className="text-[14px] font-semibold">{created ? 'Watch created' : 'Create Watch'}</div>
-          <button onClick={onClose} className="rounded-md p-1 text-ink-3 hover:bg-subtle" aria-label="Close">
+          <div id="create-watch-title" className="text-[14px] font-semibold">{created ? 'Watch created' : 'Create watch'}</div>
+          <button onClick={onClose} className="rounded p-1 text-ink-3 hover:bg-subtle" aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -272,13 +289,13 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               <div className="mx-auto grid size-10 place-items-center rounded-full bg-ok-soft text-ok">
                 <Check size={18} />
               </div>
-              <div className="mt-3 text-[18px] font-semibold">Watch created.</div>
-              <p className="mt-1 text-[13.5px] text-ink-2">
+              <div className="mt-3 text-[20px] font-semibold">Watch created.</div>
+              <p className="mt-1 text-[14px] text-ink-2">
                 <span className="font-medium text-ink">{created.name}</span> checks {created.sources.map((p) => state.connections.find((c) => c.provider === p)?.label?.short ?? PROVIDERS[p].short).join(', ')} {FREQUENCY_LABEL[created.schedule.frequency].toLowerCase()}, interrupts you at {created.notificationPolicy.interruptAt === 'CRITICAL' ? 'CRITICAL only' : `${created.notificationPolicy.interruptAt}+`}, and {created.notificationPolicy.morningBrief ? 'reports in the morning brief' : 'stays out of the brief'}.
               </p>
-              <p className="mt-2 text-[12.5px] text-ink-3">Cron equivalent: <Mono>{toCron(created)}</Mono> ({created.timezone})</p>
+              <p className="mt-2 text-[13px] text-ink-3">Cron equivalent: <Mono>{toCron(created)}</Mono> ({created.timezone})</p>
               {created.thresholds && Object.keys(created.thresholds).length > 0 && (
-                <p className="mt-1 text-[12.5px] text-ink-2">
+                <p className="mt-1 text-[13px] text-ink-2">
                   Custom thresholds:{' '}
                   {Object.keys(created.thresholds)
                     .map((id) => `${METRIC_RULE.get(id)?.name ?? id} ${ruleText(id, created.thresholds)}`)
@@ -289,30 +306,54 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <>
-              <h2 className="text-[18px] font-semibold tracking-tight">{STEPS[step]}</h2>
+              <h2 className="text-[20px] font-semibold tracking-tight">{STEPS[step]}</h2>
               {step === 0 && (
                 <div className="mt-4">
                   <div className="grid gap-2 sm:grid-cols-2">
                     {WIZARD_TEMPLATES.map((id) => {
                       const t = WATCH_TEMPLATES.find((x) => x.id === id)!;
+                      const a = templateAvailability(t.sources, state.connections, { location });
                       return (
-                        <button key={id} onClick={() => setTemplate(id)} className={cx('rounded-xl border p-3 text-left transition-colors', template === id ? 'border-ink bg-subtle' : 'border-line hover:border-line-strong')}>
-                          <div className="text-[13.5px] font-semibold">{t.name}</div>
-                          <div className="mt-0.5 text-[12px] text-ink-3">{t.example}</div>
+                        <button key={id} type="button" aria-pressed={template === id} onClick={() => setTemplate(id)} className={cx('rounded-lg border p-3 text-left transition-colors', template === id ? 'border-ink bg-subtle' : 'border-line hover:border-line-strong')}>
+                          <div className="text-[14px] font-semibold">{t.name}</div>
+                          <div className="mt-0.5 text-[13px] text-ink-3">{t.example}</div>
+                          {a.status === 'unavailable' && <div className="mt-1 text-[12px] font-medium text-ink-2">Needs {a.missing.map((p) => PROVIDERS[p].short).join(' or ')}</div>}
                         </button>
                       );
                     })}
                   </div>
-                  <label className="mt-4 block text-[12.5px] text-ink-3">
+                  {availability.status === 'unavailable' && (
+                    <div role="status" className="mt-4 rounded-lg border border-line bg-canvas p-4">
+                      <p className="text-[14px] font-medium">{availability.missing.map((p) => PROVIDERS[p].name).join(' or ')} required</p>
+                      <p className="mt-0.5 text-[13px] text-ink-2">
+                        This watch needs a {availability.missing.map((p) => PROVIDERS[p].short).join(' or ')} connection.
+                        {location === 'server' ? '' : ' Live connections belong to server workspaces.'}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link to={location === 'server' ? '/sources' : '/settings#workspace'} onClick={onClose} className="interactive inline-flex h-8 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas hover:opacity-90">
+                          {location === 'server' ? `Connect ${PROVIDERS[availability.missing[0]].short}` : 'Sign in to a server workspace'}
+                        </Link>
+                        <Button size="sm" onClick={() => setTemplate(WIZARD_TEMPLATES.find((id) => templateAvailability(WATCH_TEMPLATES.find((x) => x.id === id)!.sources, state.connections, { location }).status === 'ready') ?? 'checkout_health')}>
+                          Choose another watch
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  <label className="mt-4 block text-[13px] text-ink-3">
                     Name
-                    <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink" />
+                    <input value={name} onChange={(e) => setName(e.target.value)} aria-describedby={duplicateName ? 'watch-name-dup' : undefined} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink" />
                   </label>
+                  {duplicateName && (
+                    <p id="watch-name-dup" className="mt-1 text-[13px] text-ink-2">
+                      A watch called “{name.trim()}” already exists. A different name keeps them apart in alerts and the brief.
+                    </p>
+                  )}
                 </div>
               )}
               {step === 1 && (
                 <div className="mt-4 space-y-2">
                   {metrics.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-line-strong p-4 text-[13px] text-ink-2">
+                    <p className="rounded-lg border border-dashed border-line-strong p-4 text-[13px] text-ink-2">
                       {tpl.signals.every((s) => s.key === 'changes')
                         ? `${tpl.name} reports a deployment the source marks as failed. Successful deployments and releases are listed as context in the morning brief — never as findings. There are no thresholds to set.`
                         : mode === 'imported' && tpl.signals.some((s) => signalMeta(s.key).kind === 'metric')
@@ -325,8 +366,8 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                       const v = thresholds[id] ?? '';
                       const bad = v !== '' && !(Number(v) > 0);
                       return (
-                        <div key={id} className={cx('rounded-xl border p-3', bad ? 'border-crit' : 'border-line')}>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13.5px]">
+                        <div key={id} className={cx('rounded-lg border p-3', bad ? 'border-crit' : 'border-line')}>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[14px]">
                             <span className="font-medium">{def.name}</span>
                             <span className="text-ink-2">{verbOf(id)} more than</span>
                             <label className="inline-flex items-center gap-1">
@@ -353,7 +394,9 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                       );
                     })
                   )}
-                  <p className="pt-1 text-[12px] text-ink-3">A change must also hold for most of an hour and sit well outside normal variation before Jagr investigates. “Usual level” is the metric’s baseline from previous nights (or, for imported data, the earliest part of your upload). Who gets interrupted is set two steps from now.</p>
+                  {metrics.length > 0 && (
+                    <p className="pt-1 text-[13px] text-ink-3">A change must also hold for most of an hour and sit well outside normal variation before Jagr investigates. “Usual level” is the metric’s baseline from previous nights (or, for imported data, the earliest part of your upload). Who gets interrupted is set two steps from now.</p>
+                  )}
                 </div>
               )}
               {step === 2 && (
@@ -363,9 +406,9 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                     const on = sources.includes(p);
                     const ready = r.status === 'ready';
                     return (
-                      <label key={p} className={cx('flex items-center gap-3 rounded-xl border p-3', ready ? 'cursor-pointer' : 'cursor-not-allowed opacity-70', on ? 'border-ink' : 'border-line')}>
+                      <label key={p} className={cx('flex items-center gap-3 rounded-lg border p-3', ready ? 'cursor-pointer' : 'cursor-not-allowed opacity-70', on ? 'border-ink' : 'border-line')}>
                         <input type="checkbox" checked={on} disabled={!ready} onChange={(e) => setSources(e.target.checked ? [...sources, p] : sources.filter((x) => x !== p))} className="size-4 accent-[var(--ink)]" />
-                        <ProviderName provider={p} className="text-[13.5px] font-medium" />
+                        <ProviderName provider={p} className="text-[14px] font-medium" />
                         <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-3">
                           {r.status === 'loading' ? (
                             'Loading connection…'
@@ -403,23 +446,23 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               {step === 3 && (
                 <div className="mt-4 space-y-2">
                   {FREQS.map((f) => (
-                    <label key={f} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border p-3', frequency === f ? 'border-ink' : 'border-line')}>
+                    <label key={f} className={cx('flex cursor-pointer items-center gap-3 rounded-lg border p-3', frequency === f ? 'border-ink' : 'border-line')}>
                       <input type="radio" checked={frequency === f} onChange={() => setFrequency(f)} className="accent-[var(--ink)]" />
-                      <span className="text-[13.5px] font-medium">{FREQUENCY_LABEL[f]}</span>
+                      <span className="text-[14px] font-medium">{FREQUENCY_LABEL[f]}</span>
                       {f === 'daily' && frequency === 'daily' && <input type="time" value={dailyAt} onChange={(e) => setDailyAt(e.target.value || '07:00')} className="ml-auto h-8 rounded-lg border border-line bg-surface px-2 text-[13px]" />}
                       {f === '30m' && <span className="ml-auto text-[12px] text-ink-3">Recommended for funnels</span>}
                     </label>
                   ))}
-                  <p className="pt-1 text-[12px] text-ink-3">This is the monitoring schedule. The morning brief runs on its own schedule ({state.brief.time} {state.brief.timezone}); critical findings email immediately from whichever run finds them.</p>
+                  <p className="pt-1 text-[13px] text-ink-3">This is the monitoring schedule. The morning brief runs on its own schedule ({state.brief.time} {state.brief.timezone}); critical findings alert you immediately from whichever run finds them.</p>
                 </div>
               )}
               {step === 4 && (
                 <div className="mt-4 space-y-2">
                   {INTERRUPT.map((o) => (
-                    <label key={o.value} className={cx('flex cursor-pointer items-start gap-3 rounded-xl border p-3', interruptAt === o.value ? 'border-ink' : 'border-line')}>
+                    <label key={o.value} className={cx('flex cursor-pointer items-start gap-3 rounded-lg border p-3', interruptAt === o.value ? 'border-ink' : 'border-line')}>
                       <input type="radio" checked={interruptAt === o.value} onChange={() => setInterruptAt(o.value)} className="mt-1 accent-[var(--ink)]" />
                       <span>
-                        <span className="block text-[13.5px] font-medium">{o.label}</span>
+                        <span className="block text-[14px] font-medium">{o.label}</span>
                         <span className="block text-[12px] text-ink-3">{o.hint}</span>
                       </span>
                     </label>
@@ -428,7 +471,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                     {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as AttentionLevel[]).map((l) => (
                       <span key={l} className="inline-flex items-center gap-1">
                         <AttentionBadge level={l} />
-                        {l === 'LOW' ? 'never emails' : l === 'MEDIUM' ? 'brief' : l === 'HIGH' ? 'email when confirmed' : 'email immediately'}
+                        {l === 'LOW' ? 'never alerts' : l === 'MEDIUM' ? 'morning brief' : l === 'HIGH' ? 'alert once confirmed' : 'alert immediately'}
                       </span>
                     ))}
                   </div>
@@ -436,17 +479,17 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               )}
               {step === 5 && (
                 <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between rounded-xl border border-line p-3">
+                  <div className="flex items-center justify-between rounded-lg border border-line p-3">
                     <div>
-                      <div className="text-[13.5px] font-medium">Include this watch in the morning brief</div>
+                      <div className="text-[14px] font-medium">Include this watch in the morning brief</div>
                       <div className="text-[12px] text-ink-3">
-                        Every day at {state.brief.time} ({state.brief.timezone}) — findings that didn’t warrant an email, and quiet watches.
+                        Every day at {state.brief.time} ({state.brief.timezone}) — findings that didn’t warrant an alert, and quiet watches.
                       </div>
                     </div>
                     <Toggle checked={brief} onChange={setBrief} label="Morning brief" />
                   </div>
                   {brief && (
-                    <label className="flex items-center justify-between rounded-xl border border-line p-3 text-[13.5px]">
+                    <label className="flex items-center justify-between rounded-lg border border-line p-3 text-[14px]">
                       Include findings from
                       <select value={briefMin} onChange={(e) => setBriefMin(e.target.value as NotificationPolicy['briefMin'])} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px]">
                         <option value="MEDIUM">MEDIUM and above</option>
@@ -482,10 +525,16 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               <Button variant="ghost" icon={ArrowLeft} onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>
                 {step === 0 ? 'Cancel' : 'Back'}
               </Button>
-              <div className="flex items-center gap-3">
-                <Eyebrow>
-                  Step {step + 1} of {STEPS.length}
-                </Eyebrow>
+              <div className="flex min-w-0 items-center gap-3">
+                {blocker ? (
+                  <span role="status" className="min-w-0 text-right text-[13px] text-ink-2">
+                    {blocker}
+                  </span>
+                ) : (
+                  <span className="text-[13px] text-ink-3">
+                    Step {step + 1} of {STEPS.length}
+                  </span>
+                )}
                 {step < STEPS.length - 1 ? (
                   <Button variant="primary" onClick={() => setStep(step + 1)} disabled={!canNext}>
                     Next <ArrowRight size={14} />

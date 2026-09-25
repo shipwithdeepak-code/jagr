@@ -11,7 +11,7 @@ import { LogoMark } from './Logo';
  */
 
 const PIPELINE = [
-  'PM leaves · JAGR starts',
+  'PM leaves · Jagr starts',
   'Signals arrive',
   'Detect anomalies',
   'Investigate',
@@ -129,7 +129,7 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
   ];
 
   const caption = idx < 0
-    ? { time: '6:00 PM', text: 'The PM leaves for the day. Your product doesn’t sleep. Neither does JAGR.' }
+    ? { time: '6:00 PM', text: 'The PM leaves for the day. Your product doesn’t sleep. Neither does Jagr.' }
     : finished
       ? { time: '8:00 AM', text: 'Morning brief ready. Nothing in production was changed without a human.' }
       : { time: fmt12h(clock), text: current?.action ?? '' };
@@ -143,14 +143,14 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
   const dark = mode === 'demo';
   return (
     <div className={cx('fixed inset-0 z-[80] flex flex-col', dark ? 'bg-[#0b0c0f] text-[#ececee]' : 'bg-black/40 p-3 sm:p-8')} role="dialog" aria-modal="true" aria-label="Overnight run replay">
-      <div className={cx('flex min-h-0 flex-1 flex-col', !dark && 'mx-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-line bg-surface shadow-pop')}>
+      <div className={cx('flex min-h-0 flex-1 flex-col', !dark && 'mx-auto w-full max-w-4xl overflow-hidden rounded-lg border border-line bg-surface shadow-pop')}>
         {/* Header */}
         <div className={cx('flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6', dark ? 'border-white/10' : 'border-line')}>
           <div className="flex min-w-0 items-center gap-2.5">
             <LogoMark size={20} />
             <div className="min-w-0">
               <div className="truncate text-[13px] font-semibold">{mode === 'demo' ? 'Demo night — scripted replay' : 'Demo night — overnight run'}</div>
-              <div className={cx('truncate text-[11.5px]', dark ? 'text-white/45' : 'text-ink-3')}>
+              <div className={cx('truncate text-[12px]', dark ? 'text-white/45' : 'text-ink-3')}>
                 Demo night · simulated data · replaying {run.events.length} real agent events in compressed time
               </div>
             </div>
@@ -166,12 +166,12 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
           {/* Left: clock + pipeline */}
           <div className={cx('flex flex-col gap-5 border-b p-4 sm:p-6 lg:border-r lg:border-b-0', dark ? 'border-white/10' : 'border-line', !dark && 'max-lg:hidden')}>
             <div>
-              <div className={cx('text-[11px] font-semibold uppercase tracking-[0.1em]', dark ? 'text-white/40' : 'text-ink-3')}>Simulated time</div>
+              <div className={cx('text-[12px] font-semibold uppercase tracking-[0.1em]', dark ? 'text-white/40' : 'text-ink-3')}>Simulated time</div>
               <div className="tabular mt-1 font-mono text-[44px] leading-none font-medium tracking-tight sm:text-[56px]">{fmtTime(clock)}</div>
               <div className={cx('relative mt-4 h-1 rounded-full', dark ? 'bg-white/10' : 'bg-muted')}>
                 <div className={cx('absolute inset-y-0 left-0 rounded-full transition-[width] duration-500', dark ? 'bg-white/80' : 'bg-ink')} style={{ width: `${progress * 100}%` }} />
               </div>
-              <div className={cx('mt-1.5 flex justify-between text-[11px]', dark ? 'text-white/40' : 'text-ink-3')}>
+              <div className={cx('mt-1.5 flex justify-between text-[12px]', dark ? 'text-white/40' : 'text-ink-3')}>
                 <span>18:00</span>
                 <span>08:00</span>
               </div>
@@ -181,10 +181,10 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
                 const done = i < reached || finished;
                 const active = !finished && i === activeStage;
                 return (
-                  <li key={label} className={cx('flex items-center gap-2.5 rounded-md px-2 py-1 text-[13px] transition-colors', active && (dark ? 'bg-white/[0.07]' : 'bg-subtle'))}>
+                  <li key={label} className={cx('flex items-center gap-2.5 rounded px-2 py-1 text-[13px] transition-colors', active && (dark ? 'bg-white/[0.07]' : 'bg-subtle'))}>
                     <span
                       className={cx(
-                        'grid size-4 shrink-0 place-items-center rounded-full border text-[9px]',
+                        'grid size-4 shrink-0 place-items-center rounded-full border text-[12px]',
                         done ? (dark ? 'border-white/70 bg-white/80 text-black' : 'border-ink bg-ink text-canvas') : active ? (dark ? 'border-white animate-pulse-dot' : 'border-ink animate-pulse-dot') : dark ? 'border-white/20' : 'border-line-strong',
                       )}
                     >
@@ -202,8 +202,8 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
             <div className={cx('grid grid-cols-3 gap-px border-b sm:grid-cols-5', dark ? 'border-white/10 bg-white/10' : 'border-line bg-line')}>
               {counters.map((c) => (
                 <div key={c.label} className={cx('px-4 py-3', dark ? 'bg-[#0b0c0f]' : 'bg-surface', c.label === 'Approvals requested' || c.label === 'Work created' ? 'max-sm:hidden' : '')}>
-                  <div className={cx('truncate text-[11px]', dark ? 'text-white/45' : 'text-ink-3')}>{c.label}</div>
-                  <div className="tabular text-[18px] font-semibold">{c.value}</div>
+                  <div className={cx('truncate text-[12px]', dark ? 'text-white/45' : 'text-ink-3')}>{c.label}</div>
+                  <div className="tabular text-[20px] font-semibold">{c.value}</div>
                 </div>
               ))}
             </div>
@@ -213,8 +213,8 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
               )}
               <ul className="flex flex-col">
                 {visible.map((e, i) => (
-                  <li key={e.id} className={cx('animate-fade-up grid grid-cols-[62px_86px_1fr] gap-2 border-b py-1.5 text-[12.5px] max-sm:grid-cols-[54px_1fr]', dark ? 'border-white/[0.06]' : 'border-line', i === visible.length - 1 && !finished && (dark ? 'text-white' : 'text-ink'))}>
-                    <span className={cx('tabular font-mono text-[11.5px]', dark ? 'text-white/45' : 'text-ink-3')}>{fmtTime(e.at, true)}</span>
+                  <li key={e.id} className={cx('animate-fade-up grid grid-cols-[62px_86px_1fr] gap-2 border-b py-1.5 text-[13px] max-sm:grid-cols-[54px_1fr]', dark ? 'border-white/[0.06]' : 'border-line', i === visible.length - 1 && !finished && (dark ? 'text-white' : 'text-ink'))}>
+                    <span className={cx('tabular font-mono text-[12px]', dark ? 'text-white/45' : 'text-ink-3')}>{fmtTime(e.at, true)}</span>
                     <span className="max-sm:hidden">
                       <StageChip stage={e.stage} status={e.status} dark={dark} />
                     </span>
@@ -232,7 +232,7 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
         {/* Caption */}
         <div className={cx('flex items-center gap-3 border-t px-4 py-3.5 sm:px-6', dark ? 'border-white/10' : 'border-line')}>
           <span className={cx('tabular shrink-0 font-mono text-[12px]', dark ? 'text-white/50' : 'text-ink-3')}>{caption.time}</span>
-          <span key={caption.text} className="animate-fade-up truncate text-[14px] font-medium sm:text-[15px]">{caption.text}</span>
+          <span key={caption.text} className="animate-fade-up truncate text-[14px] font-medium sm:text-[16px]">{caption.text}</span>
           {finished && (
             <button onClick={() => doneRef.current()} className={cx('ml-auto shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium', dark ? 'bg-white text-black' : 'bg-ink text-canvas')}>
               Open morning brief
@@ -250,7 +250,7 @@ function HeaderButton({ dark, onClick, label, icon: Icon, iconOnly }: { dark: bo
       onClick={onClick}
       aria-label={label}
       className={cx(
-        'inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors',
+        'inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
         dark ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-ink-2 hover:bg-subtle hover:text-ink',
       )}
     >
@@ -265,7 +265,7 @@ function StageChip({ stage, status, dark }: { stage: AgentStage; status: AgentEv
   return (
     <span
       className={cx(
-        'inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium',
+        'inline-flex h-5 items-center rounded px-1.5 text-[12px] font-medium',
         warn ? (dark ? 'bg-amber-400/15 text-amber-300' : 'bg-high-soft text-high') : dark ? 'bg-white/[0.07] text-white/65' : 'bg-subtle text-ink-2',
       )}
     >

@@ -40,21 +40,22 @@ export function ApprovalsPage() {
     <>
       <PageHeader
         title="Approvals"
-        description="Level-4 actions — production changes, payments, pricing, refunds and customer communication — are never executed by JAGR alone. They wait here with the evidence behind them."
+        description="Actions that affect production, money or customers wait here with the evidence behind them. Jagr never runs them on its own."
         actions={<Tabs value={scope} onChange={setScope} items={SCOPE_TABS} />}
       />
 
+      {scope !== 'workspace' && (
       <Card className="mb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <div className="flex items-start gap-3 md:w-1/2">
             <Lock size={16} className="mt-0.5 shrink-0 text-ink-2" />
             <div className="text-[13px] text-ink-2">
-              <span className="font-medium text-ink">Why a human is required.</span> These actions affect customers or money and some cannot be undone. JAGR can be confident about a cause and still be wrong about the right remedy. Approval here updates the simulated environment only.
+              <span className="font-medium text-ink">Why a human is required.</span> These actions affect customers or money and some cannot be undone. Jagr can be confident about a cause and still be wrong about the right remedy. Approving here updates Demo night’s simulated environment only.
             </div>
           </div>
-          <ol className="grid flex-1 grid-cols-5 gap-1 text-center text-[11px]">
+          <ol className="grid flex-1 grid-cols-5 gap-1 text-center text-[12px]">
             {AUTONOMY_LEVELS.map((l) => (
-              <li key={l.level} className={l.level === 4 ? 'rounded-md bg-high-soft px-1 py-1.5 text-high' : 'rounded-md bg-subtle px-1 py-1.5 text-ink-2'}>
+              <li key={l.level} className={l.level === 4 ? 'rounded bg-high-soft px-1 py-1.5 text-high' : 'rounded bg-subtle px-1 py-1.5 text-ink-2'}>
                 <div className="font-semibold">L{l.level}</div>
                 <div className="truncate">{l.name}</div>
               </li>
@@ -62,6 +63,7 @@ export function ApprovalsPage() {
           </ol>
         </div>
       </Card>
+      )}
 
       {showWorkspace && (
       <>
@@ -98,7 +100,7 @@ export function ApprovalsPage() {
       </SectionTitle>
       {pending.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Nothing waiting for approval" action={!state.run ? <div className="flex gap-2"><RunButtons /></div> : undefined}>
-          {state.run ? 'Every consequential action from last night has been decided.' : 'When JAGR recommends a production, payment or customer-facing action, it lands here instead of being executed.'}
+          {state.run ? 'Every consequential action from last night has been decided.' : 'When Jagr recommends a production, payment or customer-facing action, it lands here instead of being executed.'}
         </EmptyState>
       ) : (
         <div className="space-y-4">
@@ -117,8 +119,8 @@ export function ApprovalsPage() {
       </>
       )}
 
-      <p className="mt-8 text-[12.5px] text-ink-3">
-        Gates are configured in <Link to="/settings" className="text-accent hover:underline">Settings</Link>. Each gate ({Object.values(GATE_LABELS).join(', ')}) can require approval or be disabled entirely — it can never be set to execute autonomously.
+      <p className="mt-8 text-[13px] text-ink-3">
+        Workspace actions are gated by risk: HIGH and CRITICAL actions always wait for a person. Demo night’s gates ({Object.values(GATE_LABELS).join(', ')}) are configured in <Link to="/demo/settings" className="text-accent hover:underline">Demo night settings</Link> — each can require approval or be disabled, never set to run on its own.
       </p>
     </>
   );

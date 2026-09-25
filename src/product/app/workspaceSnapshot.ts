@@ -1,5 +1,5 @@
 import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types.js';
-import type { Decision, Membership, Repositories, Workspace } from '../ports/persistence.js';
+import type { AuditEntry, Decision, Membership, Repositories, Workspace } from '../ports/persistence.js';
 import type { ImportedDataset } from '../imports/schemas.js';
 import { connectionView, type ConnectionView } from '../connections/model.js';
 
@@ -24,12 +24,40 @@ export interface WorkspaceSnapshot {
   imports: ImportedDataset[];
   /** Morning briefs as composed (most recent last). */
   briefs: MorningBriefDoc[];
+  /** Recent scheduled and requested watch runs (most recent last), from the audit log. */
+  runs?: WatchRunRecord[];
   /** The time the server read this snapshot. */
   at: ISO;
 }
 
+/** One monitoring run of one watch, as the audit log recorded it. */
+export interface WatchRunRecord {
+  watchId: string;
+  at: ISO;
+  outcome: string;
+}
+
+/** The audit action a watch run is recorded under (target: the watch id). */
+export const WATCH_RUN_ACTION = 'monitor.watch';
+/** How many recent watch runs a snapshot carries. */
+const RECENT_RUNS = 100;
+const RUN_COUNTS = /^\d+ investigation\(s\), \d+ notification\(s\)(?: · )?/;
+
+/** The audit detail of a run: its counts, then the engine's outcome line(s). */
+export function runAuditDetail(investigations: number, notifications: number, outcome: string): string {
+  return `${investigations} investigation(s), ${notifications} notification(s) · ${outcome}`.slice(0, 460);
+}
+
+/** Watch runs from audit entries (entries without a watch id predate per-watch recording and are skipped). */
+export function watchRunsFromAudit(entries: AuditEntry[]): WatchRunRecord[] {
+  return entries
+    .filter((e) => e.action === WATCH_RUN_ACTION && !!e.target)
+    .slice(-RECENT_RUNS)
+    .map((e) => ({ watchId: e.target!, at: e.at, outcome: (e.detail ?? '').replace(RUN_COUNTS, '') || 'Run completed' }));
+}
+
 export async function buildSnapshot(repos: Repositories, ws: Workspace, membership: Pick<Membership, 'role' | 'canApprove'>, at: ISO): Promise<WorkspaceSnapshot> {
-  const [connections, watches, investigations, decisions, notifications, imports, briefs] = await Promise.all([
+  const [connections, watches, investigations, decisions, notifications, imports, briefs, audit] = await Promise.all([
     repos.connections.list(ws.id),
     repos.watches.list(ws.id),
     repos.investigations.list(ws.id),
@@ -37,6 +65,7 @@ export async function buildSnapshot(repos: Repositories, ws: Workspace, membersh
     repos.notifications.list(ws.id),
     ws.mode === 'imported' ? repos.imports.list(ws.id) : Promise.resolve([]),
     repos.briefs.list(ws.id),
+    ws.mode === 'connected' ? repos.audit.list(ws.id) : Promise.resolve([]),
   ]);
   return {
     workspace: { id: ws.id, name: ws.name, mode: ws.mode, createdAt: ws.createdAt, settings: ws.settings, brief: ws.brief, version: ws.version },
@@ -48,6 +77,7 @@ export async function buildSnapshot(repos: Repositories, ws: Workspace, membersh
     notifications: notifications.map((n) => ({ id: n.id, channel: n.channel, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, detail: n.detail, email: n.email })),
     imports,
     briefs: briefs.slice(-14),
+    runs: watchRunsFromAudit(audit),
     at,
   };
 }
@@ -87,6 +117,8 @@ export function productStateFromSnapshot(s: WorkspaceSnapshot, defaults: { email
   const invs = s.investigations;
   const starts = invs.map((i) => i.startedAt).sort();
   const ends = invs.map((i) => i.updatedAt).sort();
+  const runs = s.runs ?? [];
+  const log: MonitoringResult['log'] = runs.map((r) => ({ jobId: `run:${r.watchId}:${r.at}`, type: 'watch_run', watchId: r.watchId, scheduledAt: r.at, outcome: r.outcome, investigationIds: [], emailIds: [] }));
   return {
     connections,
     watches: s.watches,
@@ -95,7 +127,7 @@ export function productStateFromSnapshot(s: WorkspaceSnapshot, defaults: { email
     decisions: Object.fromEntries(s.decisions.map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d]))),
     planner: s.workspace.settings.planner,
     imports: s.imports,
-    // A quiet morning is a result too: a brief with nothing to report still renders.
-    result: invs.length || s.briefs.length ? { window: { start: starts[0] ?? s.briefs[0]?.window.start ?? s.at, end: ends[ends.length - 1] ?? s.at }, investigations: invs, emails, briefs: s.briefs, log: [], connections, actions: invs.flatMap((i) => i.actions), planner: plannerInfo(s) } : undefined,
+    // A quiet morning is a result too: a brief with nothing to report, or a run that found nothing, still renders.
+    result: invs.length || s.briefs.length || runs.length ? { window: { start: starts[0] ?? s.briefs[0]?.window.start ?? runs[0]?.at ?? s.at, end: ends[ends.length - 1] ?? s.at }, investigations: invs, emails, briefs: s.briefs, log, connections, actions: invs.flatMap((i) => i.actions), planner: plannerInfo(s) } : undefined,
   };
 }

@@ -38,6 +38,8 @@ export interface ConnectorCheck {
   account?: string;
   /** Capabilities / scopes the credential was found to have (non-secret), when the provider reports them. */
   capabilities?: string[];
+  /** The credential works, but the configuration reads nothing where data is expected (also stated in `detail`). */
+  warnings?: string[];
 }
 
 export interface ConnectorDescriptor<C = unknown> {

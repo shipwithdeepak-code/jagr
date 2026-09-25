@@ -37,9 +37,9 @@ export function SignalsPage() {
   if (!run) {
     return (
       <>
-        <PageHeader title="Signals" description="Every metric JAGR monitors, compared with the same hours on the previous 28 nights." />
+        <PageHeader title="Signals" description="Every metric Demo night’s agent monitors, compared with the same hours on the previous 28 nights." />
         <EmptyState icon={Activity} title="No readings yet" action={<div className="flex gap-2"><RunButtons /></div>}>
-          JAGR reads 42 product, payment, support and reliability metrics every 30 minutes during the watch.
+          Jagr reads 42 product, payment, support and reliability metrics every 30 minutes during the watch.
         </EmptyState>
       </>
     );
@@ -67,7 +67,7 @@ export function SignalsPage() {
               </div>
               <Card padded={false} className="overflow-x-auto">
                 <table className="w-full min-w-[760px] table-fixed text-[13px]">
-                  <thead className="border-b border-line bg-subtle/60 text-left text-[11.5px] text-ink-3">
+                  <thead className="border-b border-line bg-subtle/60 text-left text-[12px] text-ink-3">
                     <tr>
                       <th className="px-4 py-2 font-medium">Metric</th>
                       <th className="w-[130px] px-3 py-2 font-medium">Overnight</th>

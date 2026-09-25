@@ -1,0 +1,31 @@
+# Typecheck and tests on every push to main and every pull request.
+# Needs no secrets and no database: server tests run on in-process PGlite and scripted provider APIs,
+# and live evaluations (JAGR_LIVE_EVAL) are never run here. Nothing is deployed from CI; the scheduler
+# tick is a separate workflow (jagr-cron.yml).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

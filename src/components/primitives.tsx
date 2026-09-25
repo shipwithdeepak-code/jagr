@@ -14,7 +14,7 @@ import { cx } from './ui';
 // StatusBadge — one vocabulary for sources, attention, evidence strength and risk
 // ─────────────────────────────────────────────────────────────
 
-type Tone = 'crit' | 'high' | 'med' | 'ok' | 'info' | 'accent' | 'neutral' | 'faint';
+type Tone = 'crit' | 'high' | 'med' | 'ok' | 'info' | 'accent' | 'strong' | 'neutral' | 'faint';
 const TONE: Record<Tone, string> = {
   crit: 'text-crit bg-crit-soft ring-crit/25',
   high: 'text-high bg-high-soft ring-high/25',
@@ -22,6 +22,7 @@ const TONE: Record<Tone, string> = {
   ok: 'text-ok bg-ok-soft ring-ok/25',
   info: 'text-info bg-info-soft ring-info/25',
   accent: 'text-accent bg-accent-soft ring-accent/25',
+  strong: 'text-ink bg-subtle ring-line-strong',
   neutral: 'text-ink-2 bg-subtle ring-line',
   faint: 'text-ink-3 bg-transparent ring-line',
 };
@@ -42,8 +43,9 @@ const SOURCE: Record<SourceStatusValue, { label: string; tone: Tone; shape: 'dot
 };
 const ATTENTION: Record<AttentionLevel, Tone> = { LOW: 'neutral', MEDIUM: 'med', HIGH: 'high', CRITICAL: 'crit' };
 const STRENGTH: Record<StrengthValue, { label: string; tone: Tone; bars: number }> = {
-  strong: { label: 'Strong', tone: 'accent', bars: 3 },
-  moderate: { label: 'Moderate', tone: 'accent', bars: 2 },
+  // Strength is not a severity or an action: neutral ink, with the bars carrying the amount.
+  strong: { label: 'Strong', tone: 'strong', bars: 3 },
+  moderate: { label: 'Moderate', tone: 'strong', bars: 2 },
   weak: { label: 'Weak', tone: 'neutral', bars: 1 },
   ruled_out: { label: 'Ruled out', tone: 'faint', bars: 0 },
   unknown: { label: 'Unknown', tone: 'faint', bars: 0 },
@@ -63,7 +65,7 @@ type StatusProps =
   | { kind: 'risk'; value: AttentionLevel };
 
 export function StatusBadge(props: StatusProps & { className?: string; size?: 'sm' | 'md' }) {
-  const base = cx('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-semibold tracking-wide uppercase ring-1 ring-inset', props.size === 'md' ? 'h-6 px-2 text-[11px]' : 'h-5 px-1.5 text-[10px]', props.className);
+  const base = cx('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded font-semibold tracking-wide uppercase ring-1 ring-inset', props.size === 'md' ? 'h-6 px-2 text-[12px]' : 'h-5 px-1.5 text-[12px]', props.className);
   if (props.kind === 'source') {
     const s = SOURCE[props.value];
     return (
@@ -111,11 +113,11 @@ export function SectionHeader({ title, hint, action, id, count }: { title: React
   return (
     <div id={id} className="mb-3 flex scroll-mt-20 items-end justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="flex items-baseline gap-2 text-[13px] font-semibold tracking-tight text-ink">
+        <h2 className="flex items-baseline gap-2 text-[16px] font-semibold tracking-tight text-ink">
           {title}
-          {count !== undefined && <span className="num text-[12px] font-normal text-ink-3">{count}</span>}
+          {count !== undefined && <span className="num text-[13px] font-normal text-ink-3">{count}</span>}
         </h2>
-        {hint && <p className="mt-0.5 text-[12.5px] text-ink-3">{hint}</p>}
+        {hint && <p className="mt-0.5 max-w-2xl text-[13px] text-ink-2">{hint}</p>}
       </div>
       {action}
     </div>
@@ -128,8 +130,8 @@ export function SectionHeader({ title, hint, action, id, count }: { title: React
 
 export function MetricValue({ baseline, current, change, size = 'md' }: { baseline: string; current: string; change?: string; size?: 'md' | 'lg' }) {
   return (
-    <span className={cx('num inline-flex flex-wrap items-baseline gap-x-2', size === 'lg' ? 'text-[15px]' : 'text-[13px]')}>
-      <span className="text-ink-3 line-through decoration-ink-3/40">{baseline}</span>
+    <span className={cx('num inline-flex flex-wrap items-baseline gap-x-2', size === 'lg' ? 'text-[16px]' : 'text-[13px]')}>
+      <span className="text-ink-3">{baseline}</span>
       <span aria-hidden className="text-ink-3">→</span>
       <span className={cx('font-semibold text-ink', size === 'lg' && 'text-[20px] tracking-tight')}>{current}</span>
       {change && <span className="text-ink-2">{change}</span>}
@@ -144,17 +146,10 @@ export function MetricValue({ baseline, current, change, size = 'md' }: { baseli
 // AttentionBanner — the top of an investigation
 // ─────────────────────────────────────────────────────────────
 
-const BANNER: Record<AttentionLevel, string> = {
-  CRITICAL: 'border-crit/50 [--emph:var(--crit)]',
-  HIGH: 'border-high/50 [--emph:var(--high)]',
-  MEDIUM: 'border-med/40',
-  LOW: 'border-line',
-};
-
+/** Attention is carried by the badge and one rule on the left edge — no glow, no tinted frame. */
 export function AttentionBanner({ level, children }: { level: AttentionLevel; children: ReactNode }) {
-  const loud = level === 'HIGH' || level === 'CRITICAL';
   return (
-    <section aria-label={`${level} attention`} className={cx('relative overflow-hidden rounded-xl border bg-surface', BANNER[level], loud && 'attention-once')}>
+    <section aria-label={`${level} attention`} className="relative overflow-hidden rounded-lg border border-line bg-surface">
       <span aria-hidden className={cx('absolute inset-y-0 left-0 w-[3px]', level === 'CRITICAL' ? 'bg-crit' : level === 'HIGH' ? 'bg-high' : level === 'MEDIUM' ? 'bg-med' : 'bg-line-strong')} />
       <div className="px-5 py-5 sm:px-6">{children}</div>
     </section>
@@ -179,7 +174,7 @@ export function EvidenceItem({ evidence, source, state, action }: { evidence: Ev
       <span aria-hidden className={cx('mt-[7px] size-1.5 shrink-0 rounded-full', d.cls)} />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] leading-snug text-ink">{evidence.statement.replace(/^[^:]{1,40}: /, '')}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3">
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-3">
           {source}
           {state && <StatusBadge kind="source" value={state} />}
           {evidence.onsetAt && <span className="num font-mono">{fmtTime(evidence.onsetAt)} UTC</span>}
@@ -218,15 +213,15 @@ export function InvestigationTimeline({ entries }: { entries: TimelineEntry[] })
     <ol className="stagger relative">
       {entries.map((e, i) => (
         <li key={e.key} style={{ ['--i' as string]: i }} className="relative grid grid-cols-[52px_16px_1fr] gap-x-3 pb-5 last:pb-0">
-          <span className="num pt-0.5 text-right font-mono text-[11.5px] text-ink-3">{e.at ? fmtTime(e.at) : ''}</span>
+          <span className="num pt-0.5 text-right font-mono text-[12px] text-ink-3">{e.at ? fmtTime(e.at) : ''}</span>
           <span className="relative flex justify-center">
             {i < entries.length - 1 && <span aria-hidden className="absolute top-3 bottom-[-20px] w-px bg-line" />}
             <span aria-hidden className={cx('relative mt-1 size-2.5 rounded-full ring-4', DOT[e.tone])} />
           </span>
           <div className="min-w-0">
-            <div className="text-[10.5px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{e.label}</div>
-            <div className="mt-0.5 text-[13.5px] font-medium text-ink">{e.title}</div>
-            {e.detail && <div className="mt-0.5 text-[12.5px] text-ink-2">{e.detail}</div>}
+            <div className="text-[12px] font-medium text-ink-3">{e.label}</div>
+            <div className="mt-0.5 text-[14px] font-medium text-ink">{e.title}</div>
+            {e.detail && <div className="mt-0.5 text-[13px] text-ink-2">{e.detail}</div>}
           </div>
         </li>
       ))}
@@ -250,7 +245,7 @@ export function LoadingState({ label }: { label: string }) {
 /** What this is · why it's empty · what to do next. */
 export function EmptyPanel({ icon: Icon, title, why, action }: { icon?: LucideIcon; title: string; why: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+    <div className="rounded-lg border border-dashed border-line-strong px-6 py-10 text-center">
       {Icon && <Icon size={18} className="mx-auto text-ink-3" />}
       <p className="mt-2 text-[14px] font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-1 max-w-md text-[13px] text-ink-2">{why}</p>
@@ -289,7 +284,7 @@ export function SourceCoverage({ connections }: { connections: { provider: strin
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
   const usable = (counts.get('imported') ?? 0) + (counts.get('connected') ?? 0) + (counts.get('simulated') ?? 0);
   return (
-    <div className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+    <div className="mb-6 rounded-lg border border-line bg-surface px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="text-[13px] font-semibold">
           Signal coverage{' '}

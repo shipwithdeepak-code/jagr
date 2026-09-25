@@ -60,7 +60,7 @@ function InvestigationTraces() {
           <button
             key={i.id}
             onClick={() => setSelected(i.id)}
-            className={cx('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-[12.5px]', i.id === inv.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:bg-subtle')}
+            className={cx('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-[13px]', i.id === inv.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:bg-subtle')}
           >
             <AttentionBadge level={i.attention} />
             <span className="font-medium">{i.title}</span>
@@ -71,7 +71,7 @@ function InvestigationTraces() {
       <Card className="mb-3">
         <div className="flex flex-wrap items-center gap-2">
           <InvestigationStateBadge state={inv.status} />
-          <Link to={`/investigations/w/${inv.id}`} className="text-[13.5px] font-semibold hover:underline">
+          <Link to={`/investigations/w/${inv.id}`} className="text-[14px] font-semibold hover:underline">
             {inv.title}
           </Link>
           <Mono className="text-ink-3">{inv.id}</Mono>
@@ -79,7 +79,7 @@ function InvestigationTraces() {
             <AgentWorkingLine inv={inv} />
           </span>
         </div>
-        {inv.stopReason && <p className="mt-2 text-[12.5px] text-ink-2"><span className="font-medium text-ink">Last stop:</span> {inv.stopReason}</p>}
+        {inv.stopReason && <p className="mt-2 text-[13px] text-ink-2"><span className="font-medium text-ink">Last stop:</span> {inv.stopReason}</p>}
       </Card>
       <AgentTraceTimeline key={inv.id} steps={traceWithDecisions(inv, state.decisions)} connections={state.result?.connections ?? state.connections} />
     </>
@@ -141,13 +141,13 @@ function DemoNightTrace() {
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Select label="Filter by stage" value={stage} onChange={setStage} options={STAGES} />
-            <label className="inline-flex items-center gap-2 text-[12.5px] text-ink-2">
+            <label className="inline-flex items-center gap-2 text-[13px] text-ink-2">
               <input type="checkbox" checked={showRoutine} onChange={(e) => setShowRoutine(e.target.checked)} className="accent-[var(--ink)]" />
               Show {routineCount} routine events (quiet sweeps, signal collection)
             </label>
           </div>
           <Card padded={false} className="overflow-hidden">
-            <div className="hidden grid-cols-[76px_104px_1fr_210px_28px] gap-3 border-b border-line bg-subtle/60 px-4 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
+            <div className="hidden grid-cols-[76px_104px_1fr_210px_28px] gap-3 border-b border-line bg-subtle/60 px-4 py-2 text-[12px] font-medium text-ink-3 md:grid">
               <span>Time</span>
               <span>Stage</span>
               <span>Agent action · result</span>
@@ -181,7 +181,7 @@ function TraceRow({ e }: { e: AgentEvent }) {
           <span className="font-medium">{e.action}</span>
           <span className="block text-ink-2">{e.result}</span>
           {e.investigationId && (
-            <Link to={`/investigations/${e.investigationId}`} onClick={(ev) => ev.stopPropagation()} className="text-[11.5px] text-ink-3 hover:text-accent">
+            <Link to={`/investigations/${e.investigationId}`} onClick={(ev) => ev.stopPropagation()} className="text-[12px] text-ink-3 hover:text-accent">
               {e.investigationId}
             </Link>
           )}
@@ -193,7 +193,7 @@ function TraceRow({ e }: { e: AgentEvent }) {
         </span>
       </button>
       {open && (
-        <div className="grid gap-2 border-t border-dashed border-line bg-canvas/60 px-4 py-3 text-[12.5px] md:pl-[196px]">
+        <div className="grid gap-2 border-t border-dashed border-line bg-canvas/60 px-4 py-3 text-[13px] md:pl-[196px]">
           {e.input && <Field k="Input" v={e.input} />}
           {e.output && e.output !== e.result && <Field k="Output" v={e.output} />}
           {e.decision && <Field k="Decision" v={e.decision} />}
@@ -220,9 +220,9 @@ export function AuditTable({ events }: { events: AgentEvent[] }) {
   const rows = events.filter((e) => !e.routine && ['decide', 'act', 'approval', 'human', 'risk', 'hypothesis', 'confidence', 'start', 'brief'].includes(e.stage));
   if (!rows.length) return <Card><p className="text-[13px] text-ink-3">No audit events yet.</p></Card>;
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-card">
-      <table className="w-full min-w-[980px] text-left text-[12.5px]">
-        <thead className="border-b border-line bg-subtle/60 text-[11.5px] text-ink-3">
+    <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+      <table className="w-full min-w-[980px] text-left text-[13px]">
+        <thead className="border-b border-line bg-subtle/60 text-[12px] text-ink-3">
           <tr>
             {['Timestamp', 'Agent', 'Action', 'Tool', 'Input', 'Output', 'Decision', 'Risk', 'Approval'].map((h) => (
               <th key={h} className="px-3 py-2 font-medium">{h}</th>
@@ -234,7 +234,7 @@ export function AuditTable({ events }: { events: AgentEvent[] }) {
             <Fragment key={e.id}>
               <tr className={cx('border-b border-line align-top last:border-b-0', e.agent === 'you' && 'bg-accent-soft/30')}>
                 <td className="tabular px-3 py-2 font-mono whitespace-nowrap text-ink-3">{fmtTime(e.at, true)}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{e.agent === 'you' ? <Badge tone="accent">You</Badge> : <Badge>JAGR</Badge>}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{e.agent === 'you' ? <Badge tone="accent">You</Badge> : <Badge>Jagr</Badge>}</td>
                 <td className="px-3 py-2 font-medium">{e.action}</td>
                 <td className="px-3 py-2">{e.tool ? <Mono className="text-ink-2">{e.tool}</Mono> : '—'}</td>
                 <td className="max-w-[220px] px-3 py-2 text-ink-2">{e.input ?? '—'}</td>

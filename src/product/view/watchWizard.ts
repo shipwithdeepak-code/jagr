@@ -52,3 +52,28 @@ export function initialWizardSources(providers: readonly ProviderId[], connectio
 export function canLeaveSourceStep(selected: readonly ProviderId[], rows: WizardSourceRow[]): boolean {
   return selected.length > 0 && selected.every((p) => rows.find((r) => r.provider === p)?.status === 'ready');
 }
+
+/**
+ * Whether a template can be used in this workspace at all — decided on the first step, so the wizard
+ * never lets someone pick a template and then stops them three steps later without saying why.
+ *   ready       at least one of its sources can be read
+ *   loading     a server workspace's connections have not arrived yet
+ *   unavailable none of its sources is connected (or imported); `missing` names them
+ */
+export type TemplateAvailability = { status: 'ready' } | { status: 'loading' } | { status: 'unavailable'; missing: ProviderId[] };
+
+export function templateAvailability(providers: readonly ProviderId[], connections: SourceConnection[], ctx: WizardContext): TemplateAvailability {
+  const rows = wizardSourceRows(providers, connections, ctx);
+  if (rows.some((r) => r.status === 'ready' && r.state !== 'not_configured')) return { status: 'ready' };
+  if (rows.some((r) => r.status === 'loading')) return { status: 'loading' };
+  return { status: 'unavailable', missing: [...providers] };
+}
+
+/** Why the current step cannot be left — shown next to the disabled button, never a silent dead end. */
+export function sourceStepBlocker(selected: readonly ProviderId[], rows: WizardSourceRow[]): string | undefined {
+  if (canLeaveSourceStep(selected, rows)) return undefined;
+  if (rows.some((r) => r.status === 'loading')) return 'Waiting for this workspace’s connections to load.';
+  if (!rows.some((r) => r.status === 'ready' && r.state !== 'not_configured')) return 'None of this watch’s sources is connected yet.';
+  if (!selected.length) return 'Choose at least one source.';
+  return 'A selected source is not connected — clear it or connect it first.';
+}

@@ -17,9 +17,9 @@ export function IntegrationsPage() {
 
   return (
     <>
-      <PageHeader title="Integrations" description="JAGR reaches every system through a typed adapter interface. In this build each adapter is backed by deterministic simulation data." />
+      <PageHeader title="Demo night integrations" description="The original agent reaches every system through a typed adapter interface. In Demo night each adapter is backed by deterministic simulation data. Your workspace’s own sources are in Sources." />
 
-      <div className="mb-6 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
+      <div className="mb-6 flex items-start gap-3 rounded-lg border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
         <div>
           <span className="font-medium">Demo night uses simulation adapters. Production connectors would replace them.</span>{' '}
@@ -59,7 +59,7 @@ export function IntegrationsPage() {
                 <div className="text-[12px] text-ink-3">
                   Production connector candidates: <span className="text-ink-2">{i.productionCandidates.join(', ')}</span>
                 </div>
-                <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
+                <label className="flex items-center gap-2 text-[13px] text-ink-2">
                   Connected
                   <Toggle checked={connected} onChange={(v) => setStatus(i.kind, v)} label={`${i.name} connected`} />
                 </label>

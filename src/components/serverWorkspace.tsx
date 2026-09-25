@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Cloud, LogOut, Monitor, Plus, Server } from 'lucide-react';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
 import type { ConnectionView } from '@/product/connections/model';
+import { connectRequest, githubConfigFromFields, githubFieldsFromConfig, type GitHubFields } from '@/product/view/connectionForm';
 import { sourceViews, type SourceActionId, type SourceView } from '@/product/view/sources';
 import { isSourceId, type SourceId } from '@/product/roles/types';
 import { useProduct } from '@/state/productContext';
@@ -17,7 +18,7 @@ import { SourceGroups, SourcesOverview } from '@/components/sources';
  * workspace has and a browser workspace does not.
  */
 
-const inputCls = 'mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] text-ink';
+const inputCls = 'mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[14px] text-ink';
 
 /** Account and workspace location (Settings page). Absent when there is no Jagr server. */
 export function WorkspaceLocationPanel() {
@@ -31,15 +32,16 @@ export function WorkspaceLocationPanel() {
   if (session.server === null)
     return (
       <Card>
-        <SectionTitle hint="This build has no Jagr server behind it.">Where this workspace lives</SectionTitle>
-        <p className="text-[13px] text-ink-2">
-          <Monitor size={13} className="mr-1 inline" aria-hidden /> Your workspace is stored in this browser. Server workspaces — live connections, scheduled monitoring without the browser open, shared approvals — need a Jagr server (see README → Backend).
+        <p className="text-[14px] text-ink">
+          <Monitor size={14} className="mr-1.5 inline text-ink-3" aria-hidden />
+          Local workspace — stored in this browser.
         </p>
+        <p className="mt-1 text-[13px] text-ink-2">This copy of Jagr runs without a server. Server workspaces — live connections, scheduled monitoring without a browser open, shared approvals — are available where a Jagr server is deployed.</p>
       </Card>
     );
   return (
     <Card>
-      <SectionTitle hint={session.server.mode === 'single-tenant' ? 'Single-tenant deployment: only the configured owners can sign in.' : 'Sign in to use workspaces stored on this Jagr server.'}>Where this workspace lives</SectionTitle>
+      {!session.user && <p className="mb-3 text-[13px] text-ink-2">{session.server.mode === 'single-tenant' ? 'Only this deployment’s configured owners can sign in.' : 'Sign in to use workspaces stored on this Jagr server.'}</p>}
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
         {product.location === 'server' ? (
           <Badge tone="accent">
@@ -52,7 +54,7 @@ export function WorkspaceLocationPanel() {
         )}
         {session.user && <span className="text-ink-3">Signed in as {session.user.displayName}</span>}
       </div>
-      {session.error && <p className="mt-2 text-[12.5px] text-crit">{session.error}</p>}
+      {session.error && <p className="mt-2 text-[13px] text-crit">{session.error}</p>}
 
       {!session.user ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -63,7 +65,7 @@ export function WorkspaceLocationPanel() {
               </a>
             ))
           ) : (
-            <p className="text-[12.5px] text-ink-3">No sign-in provider is configured on this server.</p>
+            <p className="text-[13px] text-ink-3">No sign-in provider is configured on this server.</p>
           )}
         </div>
       ) : (
@@ -107,7 +109,7 @@ export function WorkspaceLocationPanel() {
               }
             }}
           >
-            <label className="min-w-[12rem] flex-1 text-[12.5px] text-ink-2">
+            <label className="min-w-[12rem] flex-1 text-[13px] text-ink-2">
               New server workspace
               <input className={inputCls} value={name} maxLength={80} placeholder="e.g. Checkout team" onChange={(e) => setName(e.target.value)} />
             </label>
@@ -120,7 +122,7 @@ export function WorkspaceLocationPanel() {
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-[13px]">
               <div>
                 <div className="font-medium">Allow AI planning</div>
-                <p className="text-[12.5px] text-ink-3">When off, this workspace never sends evidence to an AI provider; the deterministic planner runs instead.</p>
+                <p className="text-[13px] text-ink-3">When off, this workspace never sends evidence to an AI provider; the deterministic planner runs instead.</p>
               </div>
               <Toggle label="Allow AI planning" checked={product.server.settings.aiEgressAllowed} disabled={product.server.role === 'member'} onChange={(v) => void product.server!.setAiEgressAllowed(v)} />
             </div>
@@ -146,7 +148,7 @@ export function ServerSources() {
   const srv = product.server!;
   const manage = srv.role === 'owner' || srv.role === 'admin';
   const [types, setTypes] = useState<ConnectionTypeInfo[]>([]);
-  const [form, setForm] = useState<{ type: ConnectionTypeInfo; view?: ConnectionView; reconnect?: boolean } | undefined>();
+  const [form, setForm] = useState<{ type: ConnectionTypeInfo; view?: ConnectionView; mode: FormMode } | undefined>();
   useEffect(() => {
     void serverApi.connectionTypes().then(setTypes, () => setTypes([]));
   }, []);
@@ -159,15 +161,15 @@ export function ServerSources() {
 
   const act = async (view: ConnectionView | undefined, action: SourceActionId, type?: ConnectionTypeInfo) => {
     const t = type ?? types.find((x) => x.provider === view?.provider);
-    if (action === 'connect' || action === 'reconnect') {
-      if (t) setForm({ type: t, view, reconnect: action === 'reconnect' });
+    if (action === 'connect' || action === 'reconnect' || action === 'configure') {
+      if (t) setForm({ type: t, view, mode: action });
       return;
     }
     if (!view) return;
     try {
       if (action === 'test') {
         const r = await serverApi.testConnection(srv.workspaceId, view.id);
-        toast({ tone: r.check.state === 'connected' ? 'success' : 'warning', title: `${view.displayName}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
+        toast({ tone: r.check.state === 'connected' && !r.check.warnings?.length ? 'success' : 'warning', title: `${view.displayName}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
       } else if (action === 'disconnect') {
         if (!window.confirm(`Disconnect ${view.displayName}? The stored credential is deleted; investigations will record it as not configured.`)) return;
         await serverApi.disconnect(srv.workspaceId, view.id);
@@ -187,7 +189,7 @@ export function ServerSources() {
           <SourceGroups views={views} onAction={(v, a) => void act(byId[v.id], a)} />
         </div>
       )}
-      {views.length === 0 && <p className="mb-6 text-[13.5px] text-ink-2">No sources are connected to this workspace yet. Connect one below — Jagr investigates only what its sources can show.</p>}
+      {views.length === 0 && <p className="mb-6 text-[14px] text-ink-2">No sources are connected to this workspace yet. Connect one below — Jagr investigates only what its sources can show.</p>}
 
       {channels.length > 0 && (
         <section className="mb-8">
@@ -199,7 +201,7 @@ export function ServerSources() {
                   <div className="font-medium">{c.displayName}</div>
                   <Badge tone={c.health === 'healthy' ? 'ok' : c.health === 'unverified' ? 'neutral' : 'high'}>{c.health.replace('_', ' ')}</Badge>
                 </div>
-                <p className="mt-1 text-[12.5px] text-ink-3">{c.account ? `${c.account} · ` : ''}{c.healthDetail}</p>
+                <p className="mt-1 text-[13px] text-ink-3">{c.account ? `${c.account} · ` : ''}{c.healthDetail}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="secondary" onClick={() => void act(c, 'test')}>Test</Button>
                   <Button size="sm" variant="secondary" disabled={!manage || c.managedBy !== 'workspace'} onClick={() => void act(c, 'reconnect')}>Reconnect</Button>
@@ -218,7 +220,7 @@ export function ServerSources() {
             {addable.map((t) => (
               <Card key={t.provider}>
                 <div className="font-medium">{t.name}</div>
-                <p className="mt-1 text-[12.5px] text-ink-3">{t.kind === 'channel' ? 'Outbound alerts and briefs' : `Provides ${t.roles.join(', ').replace('_', ' ')}`}</p>
+                <p className="mt-1 text-[13px] text-ink-3">{t.kind === 'channel' ? 'Outbound alerts and briefs' : `Provides ${t.roles.join(', ').replace('_', ' ')}`}</p>
                 <Button className="mt-3" size="sm" disabled={!manage} onClick={() => void act(undefined, 'connect', t)}>
                   Connect
                 </Button>
@@ -232,16 +234,31 @@ export function ServerSources() {
   );
 }
 
-function ConnectForm({ workspaceId, type, view, reconnect, onDone }: { workspaceId: string; type: ConnectionTypeInfo; view?: ConnectionView; reconnect?: boolean; onDone: () => void }) {
+/** connect: configuration and credential · reconnect: a new credential only · configure: configuration only (the stored credential is kept). */
+type FormMode = 'connect' | 'reconnect' | 'configure';
+
+function ConnectForm({ workspaceId, type, view, mode, onDone }: { workspaceId: string; type: ConnectionTypeInfo; view?: ConnectionView; mode: FormMode; onDone: () => void }) {
+  const reconnect = mode === 'reconnect';
+  const configure = mode === 'configure' && !!view;
   const toast = useToast();
   const [config, setConfig] = useState(() => JSON.stringify(view?.config && Object.keys(view.config).length ? view.config : type.configExample, null, 2));
+  // Known connectors get real fields; others keep the JSON configuration.
+  const structured = type.provider === 'github';
+  const [gh, setGh] = useState<GitHubFields>(() => githubFieldsFromConfig(view?.config && Object.keys(view.config).length ? view.config : undefined));
   const [cred, setCred] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setError(undefined);
     let parsed: Record<string, unknown> = {};
-    if (!reconnect) {
+    if (!reconnect && structured) {
+      const r = githubConfigFromFields(gh);
+      if ('error' in r) {
+        setError(r.error);
+        return;
+      }
+      parsed = r.config;
+    } else if (!reconnect) {
       try {
         parsed = JSON.parse(config);
       } catch {
@@ -251,8 +268,8 @@ function ConnectForm({ workspaceId, type, view, reconnect, onDone }: { workspace
     }
     setBusy(true);
     try {
-      const r = reconnect && view ? await serverApi.reconnect(workspaceId, view.id, cred) : await serverApi.connect(workspaceId, { provider: type.provider, config: parsed, credential: cred });
-      toast({ tone: r.check.state === 'connected' ? 'success' : 'warning', title: `${type.name}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
+      const r = reconnect && view ? await serverApi.reconnect(workspaceId, view.id, cred) : await serverApi.connect(workspaceId, connectRequest(type.provider, parsed, configure ? undefined : cred));
+      toast({ tone: r.check.state === 'connected' && !r.check.warnings?.length ? 'success' : 'warning', title: `${type.name}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
       setCred({});
       onDone();
     } catch (e) {
@@ -264,31 +281,54 @@ function ConnectForm({ workspaceId, type, view, reconnect, onDone }: { workspace
   return (
     <Modal
       open
+      wide
       onClose={onDone}
-      title={`${reconnect ? 'Reconnect' : 'Connect'} ${type.name}`}
+      title={`${reconnect ? 'Reconnect' : configure ? 'Edit configuration:' : 'Connect'} ${type.name}`}
       footer={
         <>
           <Button variant="secondary" onClick={onDone}>Cancel</Button>
-          <Button onClick={() => void submit()} disabled={busy || type.credentialFields.some((f) => !cred[f.key]?.trim())}>
-            {busy ? 'Testing…' : reconnect ? 'Save and test' : 'Connect and test'}
+          <Button onClick={() => void submit()} disabled={busy || (!configure && type.credentialFields.some((f) => !cred[f.key]?.trim()))}>
+            {busy ? 'Testing…' : reconnect || configure ? 'Save and test' : 'Connect and test'}
           </Button>
         </>
       }
     >
-      <p className="text-[12.5px] text-ink-3">The credential is sent once to the Jagr server, stored encrypted, and tested at once. It is never shown again or sent to this browser.</p>
-      {!reconnect && (
-        <label className="mt-3 block text-[12.5px] text-ink-2">
-          Configuration (non-secret)
+      <p className="text-[13px] text-ink-3">
+        {configure
+          ? 'Only the configuration changes: the stored credential is kept (it is never shown or sent to this browser). The connection is tested as soon as it is saved.'
+          : 'The credential is sent once to the Jagr server, stored encrypted, and tested at once. It is never shown again or sent to this browser.'}
+      </p>
+      {!reconnect && structured && (
+        <div className="mt-3 space-y-3">
+          <label className="block text-[13px] text-ink-2" htmlFor="gh-repos">
+            Repositories
+            <textarea id="gh-repos" aria-describedby="gh-repos-help" className={cx(inputCls, 'h-20 py-1.5 font-mono text-[13px]')} value={gh.repos} placeholder="owner/repo" onChange={(e) => setGh({ ...gh, repos: e.target.value })} spellCheck={false} />
+            <span id="gh-repos-help" className="mt-1 block text-[12px] text-ink-3">One per line, as owner/repo.</span>
+          </label>
+          <label className="block text-[13px] text-ink-2" htmlFor="gh-envs">
+            Deployment environments
+            <textarea id="gh-envs" aria-describedby="gh-envs-help" className={cx(inputCls, 'h-16 py-1.5 font-mono text-[13px]')} value={gh.environments} onChange={(e) => setGh({ ...gh, environments: e.target.value })} spellCheck={false} />
+            <span id="gh-envs-help" className="mt-1 block text-[12px] text-ink-3">Exactly as your deployer names them in GitHub (Vercel uses Production and Preview). The test reports how many deployments each one returns.</span>
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            <input type="checkbox" className="size-4 accent-[var(--ink)]" checked={gh.releases} onChange={(e) => setGh({ ...gh, releases: e.target.checked })} />
+            Include published releases as context
+          </label>
+        </div>
+      )}
+      {!reconnect && !structured && (
+        <label className="mt-3 block text-[13px] text-ink-2">
+          Configuration (JSON, non-secret)
           <textarea className={cx(inputCls, 'h-36 py-1.5 font-mono text-[12px]')} value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} />
         </label>
       )}
-      {type.credentialFields.map((f) => (
-        <label key={f.key} className="mt-3 block text-[12.5px] text-ink-2">
+      {!configure && type.credentialFields.map((f) => (
+        <label key={f.key} className="mt-3 block text-[13px] text-ink-2">
           {f.label}
           <input className={inputCls} type="password" autoComplete="off" value={cred[f.key] ?? ''} onChange={(e) => setCred((c) => ({ ...c, [f.key]: e.target.value }))} />
         </label>
       ))}
-      {error && <p className="mt-3 text-[12.5px] text-crit">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-[13px] text-crit">{error}</p>}
     </Modal>
   );
 }

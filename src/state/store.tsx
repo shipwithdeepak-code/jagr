@@ -150,7 +150,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           type: 'task_created',
           task: created,
           draftFingerprint: draft.fingerprint,
-          event: humanEvent(s, { action: `Created task ${task.id} from JAGR draft`, tool: 'issueTracker.createIssue', input: draft.title, output: task.id, result: `${task.id} created in simulated issue tracker`, status: 'ok', risk: 'low', approvalStatus: 'not_required', investigationId: draft.investigationId }),
+          event: humanEvent(s, { action: `Created task ${task.id} from Jagr draft`, tool: 'issueTracker.createIssue', input: draft.title, output: task.id, result: `${task.id} created in simulated issue tracker`, status: 'ok', risk: 'low', approvalStatus: 'not_required', investigationId: draft.investigationId }),
         });
         return created;
       } catch (err) {
@@ -200,7 +200,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     dispatch({
       type: 'approval_updated',
       approval: { ...a, status: 'rejected', decidedAt: at, decisionNote: note ?? 'Rejected by PM' },
-      event: humanEvent(s, { action: `Rejected: ${a.title}`, tool: 'approvals.reject', input: note, result: 'Not executed. JAGR will not retry this action for this finding.', decision: 'rejected', status: 'ok', risk: a.risk, approvalStatus: 'rejected', investigationId: a.investigationId }),
+      event: humanEvent(s, { action: `Rejected: ${a.title}`, tool: 'approvals.reject', input: note, result: 'Not executed. Jagr will not retry this action for this finding.', decision: 'rejected', status: 'ok', risk: a.risk, approvalStatus: 'rejected', investigationId: a.investigationId }),
     });
   }, []);
 
@@ -216,7 +216,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'approval_updated',
         approval: { ...a, status: 'more_evidence_requested', supplementalEvidence: merged },
-        event: humanEvent(s, { action: `Requested more evidence: ${a.title}`, tool: 'nightwatch.followUp', result: evidence.length ? `JAGR attached ${evidence.length} new observation${evidence.length === 1 ? '' : 's'}` : notes.join(' '), output: [...evidence.map((e) => e.title), ...notes].join(' · '), status: 'ok', risk: a.risk, approvalStatus: 'pending', investigationId: a.investigationId }),
+        event: humanEvent(s, { action: `Requested more evidence: ${a.title}`, tool: 'nightwatch.followUp', result: evidence.length ? `Jagr attached ${evidence.length} new observation${evidence.length === 1 ? '' : 's'}` : notes.join(' '), output: [...evidence.map((e) => e.title), ...notes].join(' · '), status: 'ok', risk: a.risk, approvalStatus: 'pending', investigationId: a.investigationId }),
       });
     },
     [adapters],

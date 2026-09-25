@@ -13,7 +13,7 @@ import { ProviderUnavailableError } from '../types.js';
  *   GET /repos/{repo}/deployments?environment=…   deployments, newest first
  *   GET /repos/{repo}/deployments/{id}/statuses   when (and whether) each deployment finished
  *   GET /repos/{repo}/releases                     published releases
- *   GET /repos/{repo}                              credential check
+ *   GET /repos/{repo}                              credential check (with each configured environment's deployments)
  *
  * Timing:
  *   - a deployment's time is its first `success` status — when the change reached the environment (`actual`);
@@ -124,6 +124,8 @@ class GitHubReader {
       // Some deployers (e.g. Vercel) send the full commit SHA as the ref: show it short, like GitHub does.
       version: /^[0-9a-f]{40}$/i.test(d.ref) ? d.ref.slice(0, 7) : d.ref,
       status,
+      // Repository and environment (as the deployment names it): the stream later deployments continue.
+      target: `${repo}:${d.environment.toLowerCase()}`,
       notes: [d.description ? redactPersonalData(d.description).slice(0, 300) : undefined, status === 'in_progress' ? 'still in progress — start time, not completion' : undefined].filter(Boolean).join(' · ') || undefined,
       ref: { provider: 'github', kind: 'release', id },
       provenance: provenance(this.stamp(), id, new Date(at).toISOString(), `https://github.com/${repo}/commit/${d.sha}`),
@@ -183,7 +185,19 @@ export const githubConnector: ConnectorDescriptor<GitHubConfig> = {
   },
   async check(ctx) {
     const r = new GitHubReader(ctx);
-    for (const repo of ctx.config.repos) await r.get<{ full_name: string }>(`/repos/${repo}`);
-    return { state: 'connected', detail: `GitHub · ${ctx.config.repos.length} repositor${ctx.config.repos.length === 1 ? 'y' : 'ies'} · ${ctx.config.environments.join(', ')}`, account: ctx.config.repos.join(', ') };
+    const reads: string[] = [];
+    const warnings: string[] = [];
+    for (const repo of ctx.config.repos) {
+      await r.get<{ full_name: string }>(`/repos/${repo}`);
+      // Read each configured environment's deployments too: a wrong environment name reads as "no deployments" forever.
+      for (const env of ctx.config.environments) {
+        const list = await r.get<unknown[]>(`/repos/${repo}/deployments?environment=${encodeURIComponent(env)}&per_page=${PER_PAGE}&page=1`);
+        if (!Array.isArray(list)) throw new ProviderUnavailableError('github', 'error', 'GitHub returned deployments Jagr could not read.');
+        if (list.length) reads.push(`${repo} ${env}: ${list.length}${list.length === PER_PAGE ? '+' : ''} deployment${list.length === 1 ? '' : 's'} found`);
+        else warnings.push(`no deployments found for environment '${env}' in ${repo}; check the environment name/configuration`);
+      }
+    }
+    const scope = `GitHub · ${ctx.config.repos.length} repositor${ctx.config.repos.length === 1 ? 'y' : 'ies'} · ${ctx.config.environments.join(', ')}`;
+    return { state: 'connected', detail: [scope, ...reads, ...warnings].join(' · '), account: ctx.config.repos.join(', '), ...(warnings.length ? { warnings } : {}) };
   },
 };

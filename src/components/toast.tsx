@@ -25,11 +25,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((t) => {
           const Icon = t.tone === 'success' ? CircleCheck : t.tone === 'warning' ? TriangleAlert : Info;
           return (
-            <div key={t.id} className="animate-fade-up pointer-events-auto flex gap-2.5 rounded-xl border border-line bg-surface p-3 shadow-pop">
+            <div key={t.id} className="animate-fade-up pointer-events-auto flex gap-2.5 rounded-lg border border-line bg-surface p-3 shadow-pop">
               <Icon size={16} className={t.tone === 'success' ? 'mt-0.5 text-ok' : t.tone === 'warning' ? 'mt-0.5 text-high' : 'mt-0.5 text-info'} />
               <div className="min-w-0">
                 <div className="text-[13px] font-medium text-ink">{t.title}</div>
-                {t.body && <div className="mt-0.5 text-[12.5px] text-ink-2">{t.body}</div>}
+                {t.body && <div className="mt-0.5 text-[13px] text-ink-2">{t.body}</div>}
               </div>
             </div>
           );

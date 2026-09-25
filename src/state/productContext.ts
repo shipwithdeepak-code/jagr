@@ -85,6 +85,8 @@ export interface ProductApi {
     canApprove: boolean;
     /** Connections as the server reports them (health, account, last check) — never credentials. */
     connections: ConnectionView[];
+    /** When the server snapshot was read (absent while loading). */
+    snapshotAt?: string;
     settings: { planner: 'deterministic' | 'llm'; aiEgressAllowed: boolean };
     loading: boolean;
     /** The last failed server call, shown until the next successful one. */

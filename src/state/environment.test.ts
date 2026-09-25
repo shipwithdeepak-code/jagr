@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/domain/types';
-import { ENVIRONMENT, ENVIRONMENT_STORAGE_KEY, environmentForPath, inScope, initialEnvironment, parseStoredEnvironment, readStoredEnvironment, storeEnvironment, taskEnvironment } from './environment';
+import { ENVIRONMENT, environmentForPath, inEnvironment, inScope, taskEnvironment } from './environment';
 import { demoReducer, initialDemoState, isWorkspaceTask, resetDemoState } from './store';
 import { llmAvailability } from './plannerConfig';
 import { createPlannerHandler } from '@/product/agent/providers/server';
@@ -17,29 +17,38 @@ import { createPlannerHandler } from '@/product/agent/providers/server';
 describe('environment semantics', () => {
   it('1 · workspace routes are the Workspace', () => {
     for (const p of ['/', '/investigations', '/investigations/w/wi-checkout-1930', '/watches', '/sources', '/sources/jira/issue/PAY-512', '/briefs']) {
-      expect(environmentForPath(p, 'demo')).toBe('workspace');
+      expect(environmentForPath(p)).toBe('workspace');
     }
   });
 
   it('2 · demo routes are Demo night', () => {
-    for (const p of ['/demo', '/signals', '/integrations', '/investigations/inv-klarna-1']) {
-      expect(environmentForPath(p, 'workspace')).toBe('demo');
+    for (const p of ['/demo', '/demo/settings', '/signals', '/integrations', '/investigations/inv-klarna-1']) {
+      expect(environmentForPath(p)).toBe('demo');
     }
   });
 
-  it('3 · Workspace → Demo night and 4 · Demo night → Workspace; shared pages keep where you came from', () => {
-    let env = environmentForPath('/');
-    expect(env).toBe('workspace');
-    env = environmentForPath('/trace', env);
-    expect(env).toBe('workspace');
-    env = environmentForPath('/demo', env);
-    expect(env).toBe('demo');
-    env = environmentForPath('/approvals', env);
-    expect(env).toBe('demo');
-    env = environmentForPath('/watches', env);
-    expect(env).toBe('workspace');
+  it('3 · the environment comes from the URL alone — nothing carries over from the previous page', () => {
+    // Regression: opening Settings after Demo night switched the whole product into Demo night.
+    for (const p of ['/settings', '/about', '/evaluations']) {
+      expect(environmentForPath(p)).toBe('workspace');
+      expect(environmentForPath(p, '?env=demo')).toBe('workspace');
+    }
+    // Shared record pages are the Workspace unless the link explicitly says Demo night.
+    for (const p of ['/approvals', '/tasks', '/trace']) {
+      expect(environmentForPath(p)).toBe('workspace');
+      expect(environmentForPath(p, '?env=demo')).toBe('demo');
+      expect(environmentForPath(p, 'open=TASK-1&env=demo')).toBe('demo');
+    }
     expect(ENVIRONMENT.workspace.home).toBe('/');
     expect(ENVIRONMENT.demo.home).toBe('/demo');
+  });
+
+  it('4 · Demo night links to shared pages keep their context; Workspace links stay plain', () => {
+    expect(inEnvironment('/approvals', 'workspace')).toBe('/approvals');
+    expect(inEnvironment('/approvals', 'demo')).toBe('/approvals?env=demo');
+    expect(inEnvironment('/tasks?open=PAY-1', 'demo')).toBe('/tasks?open=PAY-1&env=demo');
+    expect(inEnvironment('/approvals#appr-1', 'demo')).toBe('/approvals?env=demo#appr-1');
+    expect(environmentForPath('/approvals', new URL(`https://x${inEnvironment('/approvals#a', 'demo')}`).search)).toBe('demo');
   });
 
   it('12 · labels are honest: the workspace says "Simulated sources", never "Demo"; Demo night says simulated replay', () => {
@@ -128,40 +137,13 @@ describe('model configuration', () => {
   });
 });
 
-describe('environment persistence (full page reload)', () => {
-  const memory = () => {
-    const m = new Map<string, string>();
-    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m };
-  };
-
-  it('reload on Workspace stays Workspace; reload on Demo night stays Demo night (on shared pages too)', () => {
-    const s = memory();
-    storeEnvironment('workspace', s);
-    expect(initialEnvironment('/approvals', readStoredEnvironment(s))).toBe('workspace');
-    storeEnvironment('demo', s);
-    expect(s.m.get(ENVIRONMENT_STORAGE_KEY)).toBe('demo');
-    expect(initialEnvironment('/approvals', readStoredEnvironment(s))).toBe('demo');
-    expect(initialEnvironment('/tasks', readStoredEnvironment(s))).toBe('demo');
-    // A route that belongs to one environment still wins over the stored value.
-    expect(initialEnvironment('/watches', readStoredEnvironment(s))).toBe('workspace');
-    expect(initialEnvironment('/demo', 'workspace')).toBe('demo');
-  });
-
-  it('missing, invalid or unreadable stored value → Workspace', () => {
-    expect(parseStoredEnvironment(null)).toBe('workspace');
-    expect(parseStoredEnvironment(undefined)).toBe('workspace');
-    expect(parseStoredEnvironment('DEMO_NIGHT')).toBe('workspace');
-    expect(parseStoredEnvironment('{"env":"demo"}')).toBe('workspace');
-    expect(readStoredEnvironment(memory())).toBe('workspace');
-    const broken = { getItem: () => { throw new Error('SecurityError'); }, setItem: () => { throw new Error('QuotaExceeded'); } };
-    expect(readStoredEnvironment(broken)).toBe('workspace');
-    expect(() => storeEnvironment('demo', broken)).not.toThrow();
-  });
-
-  it('stores only the environment name — nothing else', () => {
-    const s = memory();
-    storeEnvironment('demo', s);
-    expect([...s.m.entries()]).toEqual([[ENVIRONMENT_STORAGE_KEY, 'demo']]);
+describe('environment on reload', () => {
+  it('a reload keeps the environment because it is in the URL, and nothing is stored', () => {
+    expect(environmentForPath('/approvals', '?env=demo')).toBe('demo');
+    expect(environmentForPath('/approvals', '')).toBe('workspace');
+    const shell = readFileSync('src/components/AppShell.tsx', 'utf8');
+    expect(shell).not.toMatch(/localStorage\.setItem\('jagr:environment'/);
+    expect(shell).toMatch(/environmentForPath\(location\.pathname, location\.search\)/);
   });
 });
 

@@ -32,7 +32,7 @@ export function CreatedByBadge({ by }: { by: Task['createdBy'] }) {
 
 export function TaskDescriptionView({ d }: { d: TaskDescription }) {
   return (
-    <div className="space-y-4 text-[13.5px]">
+    <div className="space-y-4 text-[14px]">
       <Block label="Problem">{d.problem}</Block>
       <Block label="Impact">{d.impact}</Block>
       <Block label="Evidence">
@@ -70,7 +70,7 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** A task JAGR prepared but did not file — the PM reviews and clicks Create Task. */
+/** A task Jagr prepared but did not file — the PM reviews and clicks Create Task. */
 export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: boolean }) {
   const { createTaskFromDraft, state } = useWorkspace();
   const toast = useToast();
@@ -95,12 +95,12 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
   if (created) {
     return (
       <Card className="border-ok/30">
-        <div className="flex items-center gap-2 text-[13.5px]">
+        <div className="flex items-center gap-2 text-[14px]">
           <CircleCheck size={16} className="text-ok" />
           <span className="font-medium">Task created.</span>
           <Mono>{created.id}</Mono>
           <span className="text-ink-2">{created.title}</span>
-          <Link to={`/tasks?open=${created.id}`} className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:underline">
+          <Link to={`/tasks?open=${created.id}`} className="ml-auto inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline">
             View in Tasks <ArrowRight size={12} />
           </Link>
         </div>
@@ -112,9 +112,9 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
     <Card padded={false} className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-line bg-subtle/60 px-4 py-2.5">
         <FilePlus2 size={14} className="text-ink-2" />
-        <span className="text-[12px] font-semibold tracking-wide text-ink-2 uppercase">Create {draft.kind === 'incident' ? 'incident' : 'task'}</span>
+        <span className="text-[12px] font-medium text-ink-2">Create {draft.kind === 'incident' ? 'incident' : 'task'}</span>
         <SimulationBadge label="Simulated issue tracker" />
-        <span className="ml-auto text-[12px] text-ink-3">Drafted by JAGR</span>
+        <span className="ml-auto text-[12px] text-ink-3">Drafted by Jagr</span>
       </div>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -150,7 +150,7 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
   );
 }
 
-/** Full task view, including why JAGR created it. */
+/** Full task view, including why Jagr created it. */
 export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { state, setTaskStatus } = useWorkspace();
   if (!task) return null;
@@ -177,9 +177,9 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
       </div>
 
       {task.createdBy === 'nightwatch' && (
-        <div className="mt-5 rounded-xl border border-accent/25 bg-accent-soft/50 p-4">
+        <div className="mt-5 rounded-lg border border-accent/25 bg-accent-soft/50 p-4">
           <div className="flex items-center gap-2 text-[13px] font-semibold">
-            <Info size={14} className="text-accent" /> Why JAGR created this
+            <Info size={14} className="text-accent" /> Why Jagr created this
           </div>
           <KeyValue
             className="mt-3"
@@ -187,7 +187,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
               { k: 'Finding', v: inv ? <Link className="font-medium text-accent hover:underline" to={`/investigations/${inv.id}`}>{inv.title}</Link> : task.investigationId ? 'From an earlier night' : '—' },
               { k: 'Leading hypothesis', v: task.description.hypothesis },
               { k: 'Confidence', v: task.description.confidence },
-              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by JAGR, filed by you' : 'Filed on an earlier night' },
+              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by Jagr, filed by you' : 'Filed on an earlier night' },
               { k: 'Autonomy level', v: 'Level 3 — execute low-risk actions' },
             ]}
           />
@@ -205,7 +205,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
             {task.comments.map((c, i) => (
               <li key={i} className="rounded-lg border border-line bg-canvas/60 p-3 text-[13px]">
                 <div className="mb-0.5 text-[12px] text-ink-3">
-                  {c.author === 'nightwatch' ? 'JAGR' : 'You'} · {fmtTime(c.at)}
+                  {c.author === 'nightwatch' ? 'Jagr' : 'You'} · {fmtTime(c.at)}
                 </div>
                 {c.body}
               </li>
@@ -245,20 +245,20 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
     setLoading(true);
     await requestMoreEvidence(approval.id);
     setLoading(false);
-    toast({ tone: 'info', title: 'JAGR gathered more evidence', body: 'Follow-up queries were attached to the request.' });
+    toast({ tone: 'info', title: 'Jagr gathered more evidence', body: 'Follow-up queries were attached to the request.' });
   };
 
   return (
-    <article id={approval.id} className={cx('scroll-mt-20 overflow-hidden rounded-xl border bg-surface shadow-card', decided ? 'border-line' : approval.risk === 'high' ? 'border-crit/30' : 'border-high/30')}>
+    <article id={approval.id} className={cx('scroll-mt-20 overflow-hidden rounded-lg border bg-surface shadow-card', decided ? 'border-line' : approval.risk === 'high' ? 'border-crit/30' : 'border-high/30')}>
       <div className="flex flex-wrap items-center gap-2 border-b border-line bg-subtle/60 px-4 py-2.5 sm:px-5">
         <ShieldCheck size={14} className="text-ink-2" />
-        <span className="text-[12px] font-semibold tracking-wide text-ink-2 uppercase">Action request</span>
+        <span className="text-[12px] font-medium text-ink-2">Action request</span>
         <RiskBadge risk={approval.risk} />
         <Badge>{GATE_LABELS[approval.gatedBy]}</Badge>
         <span className="ml-auto text-[12px] text-ink-3">Requested {fmtTime(approval.requestedAt)} · Level 4 — human approval</span>
       </div>
       <div className="p-4 sm:p-5">
-        <h3 className="text-[18px] font-semibold tracking-tight">{approval.title}</h3>
+        <h3 className="text-[20px] font-semibold tracking-tight">{approval.title}</h3>
         <KeyValue
           className="mt-4"
           items={[
@@ -271,10 +271,10 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
         />
         {cited.length > 0 && (
           <details className="group mt-4 rounded-lg border border-line">
-            <summary className="cursor-pointer list-none px-3 py-2 text-[12.5px] font-medium text-ink-2 hover:text-ink">Show cited evidence ({cited.length})</summary>
+            <summary className="cursor-pointer list-none px-3 py-2 text-[13px] font-medium text-ink-2 hover:text-ink">Show cited evidence ({cited.length})</summary>
             <ul className="divide-y divide-line border-t border-line">
               {cited.map((e) => (
-                <li key={e.id} className="flex items-start justify-between gap-3 px-3 py-2 text-[12.5px]">
+                <li key={e.id} className="flex items-start justify-between gap-3 px-3 py-2 text-[13px]">
                   <span>{e.title}</span>
                   <SourceChip source={e.source} className="shrink-0" />
                 </li>
@@ -342,7 +342,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
                 onClick={() => {
                   reject(approval.id);
                   setConfirm(null);
-                  toast({ tone: 'info', title: 'Rejected', body: 'JAGR will not perform this action. Recorded in the audit log.' });
+                  toast({ tone: 'info', title: 'Rejected', body: 'Jagr will not perform this action. Recorded in the audit log.' });
                 }}
               >
                 Reject
@@ -358,7 +358,7 @@ export function ApprovalCard({ approval, evidence }: { approval: ApprovalRequest
             In Demo night, approval updates the <strong>simulated</strong> state only. The decision is recorded in the audit log.
           </>
         ) : (
-          'JAGR will not perform this action for this finding. The rejection is recorded in the audit log and shown in the brief.'
+          'Jagr will not perform this action for this finding. The rejection is recorded in the audit log and shown in the brief.'
         )}
       </Modal>
     </article>
