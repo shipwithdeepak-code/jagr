@@ -5,6 +5,10 @@
       "destination": "/api/planner?path=:path*"
     },
     {
+      "source": "/api/:jagrPath((?!planner(?:/|$))[^/]+/.+)",
+      "destination": "/api/_route"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

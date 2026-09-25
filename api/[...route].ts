@@ -2,9 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { productionRuntime } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
 import { serveApi } from '../server/http/api.js';
+import { restoreApiUrl } from '../server/http/vercelRewrite.js';
 
 /**
  * The Jagr API on Vercel (every /api/* path except /api/planner, which has its own function).
+ * Vercel routes only one-segment paths to this file by name; vercel.json rewrites deeper paths here.
  * Host glue only: the application lives in server/app.ts and the core; Postgres, cron and sign-in
  * providers are chosen in server/runtime.ts from the environment.
  */
@@ -27,5 +29,7 @@ export default async function handler(req: IncomingMessage & { body?: unknown },
       return;
     }
   }
+  // Multi-segment paths arrive via the vercel.json rewrite (see server/http/vercelRewrite.ts).
+  req.url = restoreApiUrl(req.url ?? '/');
   await serveApi(app, req, res);
 }
