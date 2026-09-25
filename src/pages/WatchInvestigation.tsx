@@ -7,8 +7,7 @@ import { useWorkspace } from '@/state/workspace';
 import { fmtTime } from '@/lib/time';
 import { attentionRoute, EmailPreview, ProviderName, SourceLinkButton } from '@/components/product';
 import { ActionRow, AgentApprovalCard, AgentTraceTimeline, HypothesisList, PlannerModeLine } from '@/components/agent';
-import { AttentionBanner, EvidenceItem, InvestigationTimeline, LoadingState, MetricValue, SectionHeader, StatusBadge, strengthOf, type TimelineEntry } from '@/components/primitives';
-import { hypothesisLabel } from '@/product/agent/investigator';
+import { AttentionBanner, EvidenceItem, LoadingState, MetricValue, SectionHeader, StatusBadge } from '@/components/primitives';
 import { effectiveActions, traceWithDecisions } from '@/product/agent/decisions';
 import { confidenceBand } from '@/product/engine/monitor';
 import { EmptyState, Mono } from '@/components/ui';
@@ -16,6 +15,7 @@ import type { TaskDraft } from '@/domain/types';
 import { headlineOf, readingOf } from '@/product/presentation';
 import { buildEvidenceChain } from '@/product/view/evidenceChain';
 import { EvidenceChain } from '@/components/evidenceChain';
+import { InvestigationReplay } from '@/components/replay';
 import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
 import { isSourceId } from '@/product/roles/types';
 
@@ -70,32 +70,6 @@ export function WatchInvestigationPage() {
   return <Detail inv={inv} />;
 }
 
-function timelineOf(inv: WatchInvestigation): TimelineEntry[] {
-  const lead = inv.signals[0];
-  const timed: TimelineEntry[] = [{ key: 'signal', at: lead.onsetAt, label: 'Signal detected', title: `${lead.label} ${lead.magnitude}`, tone: 'signal' }];
-  const untimed: TimelineEntry[] = [];
-  const primary = readingOf(inv) ? inv.evidence.find((x) => x.provider === lead.provider && x.direction === 'degraded') : undefined;
-  for (const e of inv.evidence) {
-    if (e === primary) continue;
-    const text = e.statement.replace(/^[^:]{1,40}: /, '');
-    if (e.direction === 'change' && /release/i.test(e.statement)) {
-      const rel = inv.releaseAssociation;
-      timed.push({ key: e.id, at: e.onsetAt, label: 'Release', title: text, detail: rel && e.statement.includes(rel.version) ? `${rel.minutesBeforeOnset} min before the change began — a timing relationship, not a cause.` : undefined, tone: 'change' });
-    } else if (e.direction === 'change') timed.push({ key: e.id, at: e.onsetAt, label: 'Change', title: text, tone: 'change' });
-    else if (e.direction === 'degraded') {
-      const label = /review|feedback|★/i.test(e.statement) ? 'Customer signal' : /issue/i.test(e.statement) ? 'Issue signal' : 'Corroborating signal';
-      timed.push({ key: e.id, at: e.onsetAt, label, title: text, tone: 'evidence' });
-    } else if (e.direction === 'stable') untimed.push({ key: e.id, label: 'Checked — normal', title: text, tone: 'normal' });
-    else untimed.push({ key: e.id, label: 'Not checked', title: text, tone: 'gap' });
-  }
-  timed.sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
-  const confirmed = inv.statusHistory.find((h) => h.state === 'CONFIRMED')?.at ?? inv.updatedAt;
-  const assessed = inv.agentHypotheses
-    .filter((h) => h.kind !== 'external_or_unobserved' || strengthOf(h) !== 'weak')
-    .map((h) => `${hypothesisLabel(h.kind)} — ${strengthOf(h).replace('_', ' ')}`);
-  return [...timed, ...untimed, { key: 'assessment', at: confirmed, label: 'Assessment', title: assessed.join(' · '), detail: 'Evidence strength, not probability. Correlation is not causation.', tone: 'assessment' }];
-}
-
 function Details({ summary, children, defaultOpen = false }: { summary: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
   return (
     <details open={defaultOpen} className="group rounded-xl border border-line bg-surface">
@@ -109,7 +83,7 @@ function Details({ summary, children, defaultOpen = false }: { summary: ReactNod
 }
 
 function Detail({ inv }: { inv: WatchInvestigation }) {
-  const { state } = useProduct();
+  const { state, runMonitoring, running } = useProduct();
   const { createTaskFromDraft, state: ws } = useWorkspace();
   const [filed, setFiled] = useState<string | null>(ws.tasks.find((t) => t.fingerprint === `watch:${inv.dedupeKey}`)?.id ?? null);
   const watches = inv.watchIds.map((id) => state.watches.find((w) => w.id === id)).filter(Boolean);
@@ -239,11 +213,9 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             <EvidenceChain chain={buildEvidenceChain(inv, state.decisions)} stateOf={stateOf} />
           </section>
 
-          <section>
-            <SectionHeader title="How it unfolded" hint="The signal, then each piece of evidence Jagr found, in the order it happened." />
-            <div className="rounded-xl border border-line bg-surface px-4 py-5">
-              <InvestigationTimeline entries={timelineOf(inv)} />
-            </div>
+          <section aria-label="Investigation replay">
+            <SectionHeader title="How Jagr investigated" hint="Step through the recorded investigation — each planner decision, tool call, piece of evidence and conclusion, exactly as it happened." />
+            <InvestigationReplay inv={inv} decisions={state.decisions} onRunAgain={() => void runMonitoring()} running={running} />
           </section>
 
           <section>
