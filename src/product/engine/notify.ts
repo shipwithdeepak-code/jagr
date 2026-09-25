@@ -35,6 +35,7 @@ function subjectFor(inv: WatchInvestigation): string {
   let core: string;
   if (p.key === 'feedback') core = `${p.magnitude} mention ${inv.area}`;
   else if (p.key === 'work_items') core = `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
+  else if (p.key === 'changes') core = `${p.label} failed`;
   else if (p.magnitude.endsWith('pts')) core = `${p.label} ${drop ? 'fell' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   else core = `${p.label} ${drop ? 'dropped' : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
   return `${inv.attention === 'CRITICAL' ? '[Critical] ' : ''}Jagr: ${core}`;
@@ -69,7 +70,7 @@ export function composeAlert(inv: WatchInvestigation, trigger: EmailNotification
     trigger,
     attention: inv.attention,
     sections: {
-      whatChanged: `${p.label} ${arrow}${p.magnitude.replace(/^[−+]/, '')} since ${fmtTime(p.onsetAt)}.`,
+      whatChanged: p.key === 'changes' ? `${p.label} was reported as failed at ${fmtTime(p.onsetAt)}.` : `${p.label} ${arrow}${p.magnitude.replace(/^[−+]/, '')} since ${fmtTime(p.onsetAt)}.`,
       whatJagrFound: [...found, ...gaps].slice(0, 6),
       likelyExplanation: inv.likelyExplanation,
       uncertainty: inv.uncertainty,

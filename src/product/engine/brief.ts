@@ -12,6 +12,10 @@ export function composeBrief(args: {
   investigations: WatchInvestigation[];
   emails: EmailNotification[];
   log: SchedulerLogEntry[];
+  /** Successful deployments and releases seen by the watches — listed as context, never as findings. */
+  shipped?: NonNullable<MorningBriefDoc['shipped']>;
+  /** Change sources that could not be read for the context list. */
+  shippedUnavailable?: MorningBriefDoc['shippedUnavailable'];
 }): MorningBriefDoc {
   const { at, since, watches } = args;
   const inWindow = (x: string) => x >= since && x <= at;
@@ -52,6 +56,7 @@ export function composeBrief(args: {
     .map(({ e, inv }) => ({ title: e.statement.replace(/^[^:]{1,40}: /, ''), at: e.onsetAt!, source: e.provider, kind: e.changeKind, timing: e.timing, investigationId: inv.id }))
     .sort((a, b) => a.at.localeCompare(b.at));
 
+  const shipped = [...new Map((args.shipped ?? []).filter((c) => inWindow(c.at)).map((c) => [`${c.source}|${c.title}|${c.at}`, c])).values()].sort((a, b) => a.at.localeCompare(b.at));
   const n = items.length;
   const runs = args.log.filter((l) => l.type === 'watch_run' && inWindow(l.scheduledAt));
   const sources = new Set(briefWatches.flatMap((w) => w.sources));
@@ -68,6 +73,8 @@ export function composeBrief(args: {
     },
     deduplicated,
     ...(changes.length ? { changes } : {}),
+    ...(shipped.length ? { shipped } : {}),
+    ...(args.shippedUnavailable?.length ? { shippedUnavailable: args.shippedUnavailable } : {}),
     stats: {
       watchRuns: runs.length,
       sourcesChecked: sources.size,

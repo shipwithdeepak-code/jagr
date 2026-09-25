@@ -8,6 +8,7 @@ export function headlineOf(inv: WatchInvestigation): string {
   const drop = p.magnitude.startsWith('−');
   if (p.key === 'feedback') return `${p.magnitude} about ${inv.area}`;
   if (p.key === 'work_items') return `${p.magnitude.replace('new issues', `new ${inv.area} issues`)} reported`;
+  if (p.key === 'changes') return `${p.label} failed`;
   return `${p.label} ${drop ? (p.magnitude.endsWith('pts') ? 'fell' : 'dropped') : 'rose'} ${p.magnitude.replace(/^[−+]/, '')}`;
 }
 

@@ -7,6 +7,7 @@ import { AttentionBadge, EmailPreview } from '@/components/product';
 import { Button, Card, cx, EmptyState, Eyebrow, PageHeader, Tabs, Toggle } from '@/components/ui';
 import { AttentionBanner, LoadingState, StatusBadge } from '@/components/primitives';
 import { briefView } from '@/product/view/brief';
+import { PROVIDERS } from '@/product/integrations/adapters';
 import { nativeMetricSignal } from '@/product/integrations/bridge';
 
 const TIMEZONES = ['UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata'];
@@ -187,6 +188,24 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
             </li>
           ))}
         </ol>
+      )}
+
+      {(view.shipped.length > 0 || view.shippedUnavailable.length > 0) && (
+        <section aria-label="Changes shipped" className={cx('rounded-xl border border-line px-4 py-4', compact ? 'mt-4' : 'mt-6')}>
+          <p className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Changes shipped · context, not findings</p>
+          {view.shipped.length > 0 && (
+            <ul className="mt-2 space-y-1 text-[13px] text-ink">
+              {view.shipped.map((c) => (
+                <li key={`${c.source}|${c.title}|${c.at}`} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="num font-mono text-[12px] text-ink-3">{fmtTime(c.at)}</span>
+                  <span className="min-w-0 break-words">{c.title}</span>
+                  <span className="text-[12px] text-ink-3">{c.kind === 'release' ? 'release published' : 'deployment succeeded'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {view.shippedUnavailable.length > 0 && <p className="mt-2 text-[12.5px] text-high">Could not read changes from {view.shippedUnavailable.map((p) => PROVIDERS[p]?.name ?? p).join(', ')} — this list may be incomplete.</p>}
+        </section>
       )}
 
       <section aria-label="Quiet" className={cx('rounded-xl border border-dashed border-line-strong bg-canvas/60 px-4 py-4', compact ? 'mt-4' : 'mt-6')}>

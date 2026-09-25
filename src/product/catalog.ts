@@ -217,10 +217,20 @@ export const WATCH_TEMPLATES: WatchTemplate[] = [
     signals: [s('metric:search_usage'), s('work_items', 'search')],
     example: 'Search usage, search bugs',
   },
+  {
+    // Changes only: a failed deployment is a finding; successful deployments and releases are brief context.
+    id: 'github_changes',
+    name: 'GitHub production changes',
+    description: 'Production releases and changes in GitHub.',
+    area: 'general',
+    sources: ['github'],
+    signals: [s('changes')],
+    example: 'Deployments and releases',
+  },
 ];
 
 /** The templates offered in "What should I watch?" (spec order). */
-export const WIZARD_TEMPLATES: WatchTemplateId[] = ['checkout_health', 'app_stability', 'conversion', 'revenue', 'customer_issues', 'release_health'];
+export const WIZARD_TEMPLATES: WatchTemplateId[] = ['checkout_health', 'app_stability', 'conversion', 'revenue', 'customer_issues', 'release_health', 'github_changes'];
 
 export function watchFromTemplate(
   id: string,

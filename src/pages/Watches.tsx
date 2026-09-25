@@ -8,6 +8,7 @@ import { metricKeyOf as nativeMetricKey, nativeMetricSignal } from '@/product/in
 import type { SignalKey } from '@/product/types';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { METRIC_DEFS } from '@/product/integrations/world';
+import { canLeaveSourceStep, connectionsPending, initialWizardSources, wizardSourceRows } from '@/product/view/watchWizard';
 import { FREQUENCY_LABEL, nextRunAt, toCron } from '@/product/scheduler';
 import { useProduct } from '@/state/productContext';
 import { fmtTime } from '@/lib/time';
@@ -187,14 +188,16 @@ const INTERRUPT: { value: NotificationPolicy['interruptAt']; label: string; hint
 ];
 
 function CreateWatchWizard({ onClose }: { onClose: () => void }) {
-  const { state, createWatch, runMonitoring, running, mode, importedWorld } = useProduct();
+  const { state, createWatch, runMonitoring, running, mode, importedWorld, location } = useProduct();
   const toast = useToast();
   const [step, setStep] = useState(0);
   const [template, setTemplate] = useState<WatchTemplateId>('checkout_health');
   const tpl = WATCH_TEMPLATES.find((t) => t.id === template)!;
   const [name, setName] = useState(tpl.name);
-  // In a "my data" workspace, only sources that have data start ticked.
-  const usable = (list: ProviderId[]) => (mode === 'imported' ? list.filter((p) => state.connections.find((c) => c.provider === p)?.state !== 'not_configured') : list);
+  // In a "my data" workspace, only sources that have data start ticked; in a server workspace, only
+  // sources it has connected (its connection list is empty until the snapshot arrives).
+  const usable = (list: ProviderId[]) => initialWizardSources(list, state.connections, { location, mode });
+  const pending = connectionsPending(state.connections, { location });
   const [sources, setSources] = useState<ProviderId[]>(() => usable(tpl.sources));
   const [frequency, setFrequency] = useState<MonitoringFrequency>('30m');
   const [dailyAt, setDailyAt] = useState('07:00');
@@ -213,15 +216,20 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
     setThresholds({});
   }, [tpl]);
 
+  // A server workspace's connections can arrive after the wizard opens: pick sources once they do.
+  useEffect(() => {
+    if (!pending) setSources(usable(tpl.sources));
+  }, [pending]);
+
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
-  const conn = (p: ProviderId) => state.connections.find((c) => c.provider === p)!;
+  const rows = wizardSourceRows(tpl.sources, state.connections, { location });
   const invalidThreshold = metrics.some((id) => thresholds[id] !== undefined && thresholds[id] !== '' && !(Number(thresholds[id]) > 0));
-  const canNext = (step !== 2 || sources.length > 0) && (step !== 1 || !invalidThreshold);
+  const canNext = (step !== 2 || canLeaveSourceStep(sources, rows)) && (step !== 1 || !invalidThreshold);
 
   const finish = () => {
     const id = `w-${template}-${Date.now().toString(36)}`;
@@ -305,7 +313,9 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                 <div className="mt-4 space-y-2">
                   {metrics.length === 0 ? (
                     <p className="rounded-xl border border-dashed border-line-strong p-4 text-[13px] text-ink-2">
-                      {mode === 'imported' && tpl.signals.some((s) => signalMeta(s.key).kind === 'metric')
+                      {tpl.signals.every((s) => s.key === 'changes')
+                        ? `${tpl.name} reports a deployment the source marks as failed. Successful deployments and releases are listed as context in the morning brief — never as findings. There are no thresholds to set.`
+                        : mode === 'imported' && tpl.signals.some((s) => signalMeta(s.key).kind === 'metric')
                         ? `None of ${tpl.name}’s metrics are in your imported data, so there are no thresholds to set. Issues and feedback are judged against their usual volume.`
                         : `${tpl.name} counts new issues and negative reviews against their usual volume — there are no metric thresholds to set. Jagr opens an investigation when volume is clearly unusual.`}
                     </p>
@@ -348,22 +358,45 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
               )}
               {step === 2 && (
                 <div className="mt-4 space-y-2">
-                  {tpl.sources.map((p) => {
-                    const c = conn(p);
+                  {rows.map((r) => {
+                    const p = r.provider;
                     const on = sources.includes(p);
+                    const ready = r.status === 'ready';
                     return (
-                      <label key={p} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border p-3', on ? 'border-ink' : 'border-line')}>
-                        <input type="checkbox" checked={on} onChange={(e) => setSources(e.target.checked ? [...sources, p] : sources.filter((x) => x !== p))} className="size-4 accent-[var(--ink)]" />
+                      <label key={p} className={cx('flex items-center gap-3 rounded-xl border p-3', ready ? 'cursor-pointer' : 'cursor-not-allowed opacity-70', on ? 'border-ink' : 'border-line')}>
+                        <input type="checkbox" checked={on} disabled={!ready} onChange={(e) => setSources(e.target.checked ? [...sources, p] : sources.filter((x) => x !== p))} className="size-4 accent-[var(--ink)]" />
                         <ProviderName provider={p} className="text-[13.5px] font-medium" />
                         <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-3">
-                          {c.state === 'not_configured' ? 'Nothing imported — left out' : c.state !== 'simulated' && c.state !== 'connected' && c.state !== 'imported' && 'Will be recorded as a gap'}
-                          <ConnectionBadge state={c.state} />
+                          {r.status === 'loading' ? (
+                            'Loading connection…'
+                          ) : r.status === 'missing' ? (
+                            <>
+                              Not connected — left out
+                              <ConnectionBadge state="not_configured" />
+                            </>
+                          ) : (
+                            <>
+                              {r.state === 'not_configured' ? 'Nothing imported — left out' : r.state !== 'simulated' && r.state !== 'connected' && r.state !== 'imported' && 'Will be recorded as a gap'}
+                              <ConnectionBadge state={r.state} />
+                            </>
+                          )}
                         </span>
                       </label>
                     );
                   })}
+                  {pending && <p role="status" className="pt-1 text-[12px] text-ink-3">Loading this workspace’s connections…</p>}
+                  {!pending && location === 'server' && !rows.some((r) => r.status === 'ready') && (
+                    <p role="status" className="pt-1 text-[12px] text-high">
+                      None of this template’s sources is connected to this workspace yet. Connect one in <Link to="/sources" className="underline">Sources</Link>, or choose another template.
+                    </p>
+                  )}
                   <p className="pt-1 text-[12px] text-ink-3">
-                    Sources come from <Link to="/sources" className="text-accent hover:underline">Sources</Link>. {mode === 'imported' ? 'Sources you have not imported are left out of the run — never reported as “nothing found”.' : 'In the sample workspace every source is simulated — Jagr never presents fixture data as live.'}
+                    Sources come from <Link to="/sources" className="text-accent hover:underline">Sources</Link>.{' '}
+                    {mode === 'imported'
+                      ? 'Sources you have not imported are left out of the run — never reported as “nothing found”.'
+                      : location === 'server'
+                        ? 'Only sources connected to this workspace can be watched; they are read live on every check.'
+                        : 'In the sample workspace every source is simulated — Jagr never presents fixture data as live.'}
                   </p>
                 </div>
               )}

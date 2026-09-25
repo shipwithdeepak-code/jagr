@@ -112,7 +112,7 @@ export interface Watch {
   updatedAt: ISO;
 }
 
-export type WatchTemplateId = 'checkout_health' | 'app_stability' | 'conversion' | 'revenue' | 'customer_issues' | 'release_health' | 'signup_funnel' | 'search_discovery';
+export type WatchTemplateId = 'checkout_health' | 'app_stability' | 'conversion' | 'revenue' | 'customer_issues' | 'release_health' | 'signup_funnel' | 'search_discovery' | 'github_changes';
 
 export interface BriefSchedule {
   enabled: boolean;
@@ -390,6 +390,13 @@ export interface WatchInvestigation {
   actions: ProposedAction[];
   toolCalls: number;
   stopReason: string;
+  /**
+   * Set when the investigation is about a deployment the change source reported as failed (rather than
+   * a degrading signal): which record, on which change stream ("target": the record's title without its
+   * version), and when. A later successful deployment on the same target closes it — as a deployment
+   * outcome only, never as evidence that product impact is resolved.
+   */
+  deployment?: { source: ProviderId; recordId: string; target: string; at: ISO; version?: string };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -451,6 +458,13 @@ export interface MorningBriefDoc {
    * timing kind, so a planned date is never read as a delivery time. Absent on briefs composed before it.
    */
   changes?: { title: string; at: ISO; source: ProviderId; kind?: ChangeKind; timing?: ChangeTiming; investigationId: string }[];
+  /**
+   * Successful deployments and published releases the watches saw in the window — context, not
+   * findings. Absent when there were none (and on briefs composed before it existed).
+   */
+  shipped?: { title: string; at: ISO; source: ProviderId; kind: ChangeKind; timing: ChangeTiming; version?: string }[];
+  /** Change sources that could not be read for `shipped` — so an empty list is never read as "nothing shipped". */
+  shippedUnavailable?: ProviderId[];
 }
 
 // ─────────────────────────────────────────────────────────────

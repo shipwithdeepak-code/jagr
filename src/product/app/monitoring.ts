@@ -1,4 +1,4 @@
-import type { EmailNotification, MonitoringResult, ScheduledJob, SourceConnection } from '../types.js';
+import type { EmailNotification, MonitoringResult, MorningBriefDoc, ProviderId, ScheduledJob, SourceConnection, Watch } from '../types.js';
 import type { Clock } from '../ports/clock.js';
 import type { HttpClient } from '../ports/http.js';
 import type { JobQueue, LeasedJob } from '../ports/jobs.js';
@@ -7,7 +7,8 @@ import type { SecretPayload, SecretStore } from '../ports/secrets.js';
 import { SecretNotFound } from '../ports/secrets.js';
 import type { ConnectorCheck } from '../integrations/connectors/types.js';
 import type { ImportedDataset } from '../imports/schemas.js';
-import type { RegisteredSource } from '../roles/types.js';
+import type { RegisteredSource, SourceId } from '../roles/types.js';
+import { isSourceId } from '../roles/types.js';
 import { SourceRegistry } from '../roles/registry.js';
 import type { World } from '../integrations/world.js';
 import { defaultWorld } from '../integrations/world.js';
@@ -194,6 +195,30 @@ async function runWorkspaceNowLocked(deps: MonitoringDeps, workspaceId: string):
   return persistRun(deps, ws, r, 'monitor.run_now', at);
 }
 
+/**
+ * Successful deployments and published releases in the brief window, from the change sources of watches
+ * that monitor changes — context for the brief, never findings. A source that cannot be read is listed
+ * as unavailable (never read as "nothing shipped"), and never stops the brief.
+ */
+async function shippedContext(deps: MonitoringDeps, ws: Workspace, watches: Watch[], since: string, at: string): Promise<{ shipped: NonNullable<MorningBriefDoc['shipped']>; unavailable: ProviderId[] }> {
+  const briefWatches = watches.filter((w) => w.status === 'active' && w.notificationPolicy.morningBrief && w.signals.some((x) => x.key === 'changes'));
+  const among = [...new Set(briefWatches.flatMap((w) => w.sources))].filter((p): p is SourceId => isSourceId(p));
+  if (!among.length) return { shipped: [], unavailable: [] };
+  const { registry } = await sourcesForRun(deps, ws, at);
+  const shipped: NonNullable<MorningBriefDoc['shipped']> = [];
+  const unavailable: ProviderId[] = [];
+  for (const src of registry.withRole('changes', among)) {
+    try {
+      for (const r of await src.changes!.getChanges({ window: { start: since, end: at } })) {
+        if ((r.kind === 'deploy' && r.status === 'success') || r.kind === 'release') shipped.push({ title: r.title, at: r.at, source: src.id, kind: r.kind, timing: r.timing, version: r.version });
+      }
+    } catch {
+      unavailable.push(src.id);
+    }
+  }
+  return { shipped, unavailable };
+}
+
 /** A morning brief (job kind 'brief.compose'): composed from the workspace's investigations, recorded as an in-app notification. */
 export async function composeBriefJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'workspaceId' | 'payload'>): Promise<void> {
   const ws = await deps.repos.workspaces.get(job.workspaceId);
@@ -203,7 +228,8 @@ export async function composeBriefJob(deps: MonitoringDeps, job: Pick<LeasedJob,
   const [watches, investigations, notifications, decisions] = await Promise.all([deps.repos.watches.list(ws.id), deps.repos.investigations.list(ws.id), deps.repos.notifications.list(ws.id), deps.repos.decisions.list(ws.id)]);
   // Alerts already shown in Jagr, so the brief can say an item was already sent rather than repeat it as news.
   const emails = notifications.filter((n) => n.channel === 'in_app' && n.email).map((n) => ({ ...(n.email as Omit<EmailNotification, 'to' | 'from'>), to: '', from: '' }));
-  const brief = composeBrief({ at, since, watches, investigations, emails, log: [] });
+  const context = await shippedContext(deps, ws, watches, since, at);
+  const brief = composeBrief({ at, since, watches, investigations, emails, log: [], shipped: context.shipped, shippedUnavailable: context.unavailable });
   await deps.repos.briefs.save(ws.id, brief);
   await deps.repos.notifications.add(ws.id, { id: brief.id, channel: 'in_app', dedupeKey: `brief:${at}`, deliveredAt: at, status: 'delivered', detail: `${brief.headline} (${brief.items.length} item(s))` });
   // Sample and imported data are never sent to outbound channels.

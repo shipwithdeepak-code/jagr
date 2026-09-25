@@ -19,10 +19,10 @@ import type {
   WatchInvestigation,
 } from '../types.js';
 import { AREA_LABEL, DEMO_RECIPIENT, metricKeyOf, signalMeta } from '../catalog.js';
-import { createRegistry, labelOf, labelsFrom, SimulatedEmailChannel, type ProviderLabel } from '../integrations/adapters.js';
+import { createRegistry, labelOf, labelsFrom, makeLink, SimulatedEmailChannel, type ProviderLabel } from '../integrations/adapters.js';
 import { ProviderUnavailableError } from '../integrations/types.js';
 import type { SourceRegistry } from '../roles/registry.js';
-import type { SourceId } from '../roles/types.js';
+import type { ChangeRecord, SourceId } from '../roles/types.js';
 import { isSourceId } from '../roles/types.js';
 import { assumptionsOf } from '../evidence/assumptions.js';
 import type { World } from '../integrations/world.js';
@@ -101,8 +101,25 @@ function hhmm(iso: string) {
 /** A signal's identity within a run: the same key from two sources is two signals. */
 const signalId = (s: { key: string; provider: string }) => `${s.key}@${s.provider}`;
 
-async function observe(reg: SourceRegistry, watch: Watch, at: string, worldStart: string, P: (p: ProviderId) => ProviderLabel): Promise<{ findings: Finding[]; gaps: ProviderId[] }> {
+/** A change a watch's change source reported: a failed deployment is a finding; the rest is context. */
+interface ObservedChange {
+  source: SourceId;
+  record: ChangeRecord;
+}
+
+/** How far back each run reads changes (as for feedback); deployment ids deduplicate repeat sightings. */
+const CHANGE_LOOKBACK_MIN = 360;
+
+async function observe(
+  reg: SourceRegistry,
+  watch: Watch,
+  at: string,
+  worldStart: string,
+  P: (p: ProviderId) => ProviderLabel,
+): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[] }> {
   const findings: Finding[] = [];
+  const failedDeployments: ObservedChange[] = [];
+  const shipped: ObservedChange[] = [];
   const gaps = new Set<ProviderId>();
   const among = watch.sources.filter((p): p is SourceId => p !== 'email');
   const read = async (source: SourceId, fn: () => Promise<void>) => {
@@ -115,7 +132,21 @@ async function observe(reg: SourceRegistry, watch: Watch, at: string, worldStart
   };
   for (const sig of watch.signals) {
     const meta = signalMeta(sig.key);
-    if (meta.kind === 'changes') continue;
+    if (meta.kind === 'changes') {
+      // Deployments and releases from the watch's change sources. Only a deployment the source reports
+      // as failed is a finding; successful deployments and published releases are context. A source that
+      // cannot be read is a gap, never "nothing changed".
+      for (const s of reg.withRole('changes', among)) {
+        await read(s.id, async () => {
+          const records = await s.changes!.getChanges({ window: { start: addMinutes(at, -CHANGE_LOOKBACK_MIN), end: at } });
+          for (const record of records) {
+            if (record.kind === 'deploy' && record.status === 'failed') failedDeployments.push({ source: s.id, record });
+            else if ((record.kind === 'deploy' && record.status === 'success') || record.kind === 'release') shipped.push({ source: s.id, record });
+          }
+        });
+      }
+      continue;
+    }
     if (meta.kind === 'metric') {
       const m = reg.metricSource(metricKeyOf(sig.key)!, among);
       if (!m) continue;
@@ -169,7 +200,7 @@ async function observe(reg: SourceRegistry, watch: Watch, at: string, worldStart
       }
     }
   }
-  return { findings, gaps: [...gaps] };
+  return { findings, gaps: [...gaps], failedDeployments, shipped };
 }
 
 /** Group findings that describe one problem: same area (or an area-specific watch) and onsets within 2 hours. */
@@ -220,6 +251,8 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
   const emails: EmailNotification[] = [];
   const briefs: MorningBriefDoc[] = [];
   const log: SchedulerLogEntry[] = [];
+  // Successful deployments and releases the watches saw — context for the brief, never findings.
+  const shipped = new Map<string, ObservedChange>();
   let lastBrief = window.start;
 
   const emit = (e: RunEvent) => {
@@ -233,7 +266,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
   for (const [index, job] of jobs.entries()) {
     if (job.type !== 'morning_brief') emit({ type: 'job', index, total: jobs.length, watchName: o.watches.find((w) => w.id === job.watchId)?.name ?? '', at: job.at });
     if (job.type === 'morning_brief') {
-      const brief = composeBrief({ at: job.at, since: lastBrief, watches: o.watches, investigations, emails, log });
+      const brief = composeBrief({ at: job.at, since: lastBrief, watches: o.watches, investigations, emails, log, shipped: [...shipped.values()].map(shippedChange) });
       briefs.push(brief);
       lastBrief = job.at;
       log.push({ jobId: job.id, type: job.type, scheduledAt: job.at, outcome: `Morning brief — ${brief.headline}`, investigationIds: brief.items.map((i) => i.investigationId), emailIds: [] });
@@ -242,7 +275,8 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
 
     const watch = o.watches.find((w) => w.id === job.watchId)!;
     const at = job.at;
-    const { findings, gaps } = await observe(reg, watch, at, o.world.start, P);
+    const { findings, gaps, failedDeployments, shipped: seen } = await observe(reg, watch, at, o.world.start, P);
+    for (const c of seen) shipped.set(c.record.id, c);
     const touched = new Set<string>();
     const sent: string[] = [];
 
@@ -498,8 +532,55 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       }
     }
 
-    // Owner investigations this run did not see again.
-    for (const inv of investigations.filter((i) => i.watchId === watch.id && OPEN.includes(i.status) && !touched.has(i.id))) {
+    // DEPLOYMENT FAILURES — one investigation per failed deployment (deduplicated by its record id).
+    for (const f of failedDeployments) {
+      const existing = investigations.find((i) => i.dedupeKey === `${DEPLOY_KEY}${f.record.id}`);
+      if (existing) continue; // the same failed deployment, seen again: never a second investigation
+      const inv = deploymentFailureInvestigation(f, watch, at, { base, takenIds: new Set(investigations.map((i) => i.id)), label: P(f.source), simulated: reg.isSimulated(f.source) });
+      investigations.push(inv);
+      touched.add(inv.id);
+      emit({ type: 'investigation', id: inv.id, title: inv.title, firstPass: true });
+      for (const step of inv.trace) emit({ type: 'step', investigationId: inv.id, step });
+    }
+    for (const inv of investigations.filter((i) => i.watchId === watch.id && isDeploymentFailure(i) && OPEN.includes(i.status) && i.deployment)) {
+      const d = inv.deployment!;
+      // A later successful deployment on the same target closes the deployment failure (outcome only).
+      const success = seen.find((c) => c.source === d.source && c.record.kind === 'deploy' && c.record.status === 'success' && changeTarget(c.record) === d.target && c.record.at > d.at);
+      if (success) {
+        closeDeploymentFailure(inv, success, at, P(success.source));
+        continue;
+      }
+      // Existing cross-source correlation: another watched source degraded soon after the failure.
+      if (ATTENTION_RANK[inv.attention] < ATTENTION_RANK.HIGH) {
+        const onsetOf = (i: WatchInvestigation) => i.signals.map((x) => x.onsetAt).sort()[0];
+        const related = investigations.find((i) => !isDeploymentFailure(i) && (i.status === 'INVESTIGATING' || i.status === 'CONFIRMED') && i.signals.length > 0 && minutesBetween(d.at, onsetOf(i)) >= 0 && minutesBetween(d.at, onsetOf(i)) <= 120);
+        if (related) {
+          const gap = Math.round(minutesBetween(d.at, onsetOf(related)));
+          inv.attention = 'HIGH';
+          inv.attentionReason = `${related.title} began ${gap} min after this failed deployment — a timing correlation in another watched source, not a cause.`;
+          inv.correlatedProviders = [...new Set([...inv.correlatedProviders, ...related.correlatedProviders])];
+          inv.unknowns = [...new Set([...inv.unknowns, 'Whether the failed deployment and the degradation are related — timing alone does not establish it.'])];
+          inv.updatedAt = at;
+          inv.trace.push({ id: `${inv.id}-attention-${at}`, at, pass: maxPass(inv), kind: 'attention', title: 'Attention: HIGH', detail: inv.attentionReason });
+        }
+      }
+      const decision = decideNotification(inv, watch);
+      if (decision.send) {
+        const mail = composeAlert(inv, decision.trigger!, at, recipient);
+        try {
+          await email.send(mail);
+          emails.push(mail);
+          inv.notifiedLevels.push(inv.attention);
+          sent.push(mail.id);
+          inv.trace.push({ id: `${inv.id}-notify-${at}`, at: lastAt(inv, at), pass: maxPass(inv), kind: 'notify', title: `Emailed the PM: “${mail.subject}”`, detail: decision.reason });
+        } catch {
+          inv.runs.push({ at, watchId: watch.id, anomalous: true, note: 'Email channel unavailable — notification not delivered; it will appear in the morning brief.' });
+        }
+      }
+    }
+
+    // Owner investigations this run did not see again (deployment failures close only on a later success).
+    for (const inv of investigations.filter((i) => i.watchId === watch.id && OPEN.includes(i.status) && !touched.has(i.id) && !isDeploymentFailure(i))) {
       const leadProvider = inv.signals[0]?.provider;
       if (leadProvider && gaps.includes(leadProvider)) {
         inv.runs.push({ at, watchId: watch.id, anomalous: false, note: `${P(leadProvider).name} unavailable — could not re-check; status unchanged.` });
@@ -528,6 +609,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       scheduledAt: at,
       outcome: [
         findings.length ? `${findings.length} signal${findings.length === 1 ? '' : 's'} outside normal range` : 'All signals within normal range',
+        failedDeployments.length ? `${failedDeployments.length} failed deployment${failedDeployments.length === 1 ? '' : 's'} reported` : '',
         gaps.length ? `${gaps.map((g) => P(g).name).join(', ')} unavailable` : '',
         sent.length ? `${sent.length} email sent` : '',
       ]
@@ -539,6 +621,129 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
   }
 
   return { window, investigations, emails, briefs, log, connections: o.connections, actions: investigations.flatMap((i) => i.actions) };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Deployment failures — a change source reports a deployment as failed
+// ─────────────────────────────────────────────────────────────
+
+const DEPLOY_KEY = 'deploy:';
+
+/** A successful deployment or published release, as brief context. */
+function shippedChange(c: ObservedChange): NonNullable<MorningBriefDoc['shipped']>[number] {
+  return { title: c.record.title, at: c.record.at, source: c.source, kind: c.record.kind, timing: c.record.timing, version: c.record.version };
+}
+
+/** An investigation about a failed deployment (not a degrading signal). */
+export const isDeploymentFailure = (inv: WatchInvestigation) => !!inv.deployment || inv.dedupeKey.startsWith(DEPLOY_KEY);
+
+/**
+ * The change stream a deployment belongs to: its title with the version removed, so successive
+ * deployments of the same target (e.g. the same environment and repository) compare equal.
+ */
+export function changeTarget(r: Pick<ChangeRecord, 'title' | 'version'>): string {
+  return r.version ? r.title.split(r.version).join('') : r.title;
+}
+
+const DEPLOY_UNKNOWN_CAUSE = 'Why the deployment failed — the deployment record does not say (build, tests or infrastructure).';
+const DEPLOY_UNKNOWN_IMPACT = 'Whether users or product metrics are affected — the deployment record does not show it.';
+
+/** A new investigation from one failed-deployment record. Every statement is a fact from that record. */
+function deploymentFailureInvestigation(
+  f: ObservedChange,
+  watch: Watch,
+  at: string,
+  opts: { base: string; takenIds: Set<string>; label: ProviderLabel; simulated: boolean },
+): WatchInvestigation {
+  const r = f.record;
+  let id = `wi-deploy-${hhmm(r.at)}`;
+  for (let n = 2; opts.takenIds.has(id); n++) id = `wi-deploy-${hhmm(r.at)}-${n}`;
+  const path = `/investigations/w/${id}`;
+  const when = fmtTime(r.at);
+  const statement = `${opts.label.short}: ${r.title} — reported as failed at ${when}.`;
+  const observed = [statement, ...(r.notes ? [`Deployment note from ${opts.label.short}: ${r.notes}`] : [])];
+  const likely = `${opts.label.name} reports that ${r.title} failed at ${when}. The deployment record does not say why.`;
+  const uncertainty = 'Cause not established: the deployment record reports the failure, not what caused it. Nothing here shows whether users or product metrics are affected.';
+  const reason = 'A deployment to a watched environment failed. Morning brief — no interruption unless another watched source degrades in the same window.';
+  const stop = 'The failure is reported directly by the change source; its cause is not in the record, so there is nothing further to test from here.';
+  const link = makeLink(r.ref, `Open ${opts.label.short}`, opts.simulated, r.provenance.url);
+  const pass = 1;
+  const t = (n: number) => addSeconds(at, n);
+  return {
+    id,
+    watchId: watch.id,
+    watchIds: [watch.id],
+    area: watch.area === '*' ? 'general' : watch.area,
+    title: `Deployment failed: ${r.title}`,
+    summary: `${r.title} failed at ${when}. Cause not established.`,
+    startedAt: at,
+    updatedAt: at,
+    status: 'CONFIRMED',
+    statusHistory: [
+      { state: 'DETECTED', at },
+      { state: 'CONFIRMED', at },
+    ],
+    attention: 'MEDIUM',
+    attentionReason: reason,
+    confidence: 0.9,
+    confidenceReason: `Reported directly by ${opts.label.name}'s deployment status — the failure is a recorded fact; its cause is not.`,
+    signals: [{ key: 'changes', provider: f.source, area: watch.area === '*' ? 'general' : watch.area, label: r.title, magnitude: 'failed', ratio: 1, onsetAt: r.at, detectedAt: at, refs: [r.ref] }],
+    evidence: [{ id: `${r.id}:failed`, provider: f.source, direction: 'change', statement, onsetAt: r.at, refs: [r.ref], link, changeKind: r.kind, timing: r.timing }],
+    observed,
+    inferred: [],
+    unknowns: [DEPLOY_UNKNOWN_CAUSE, DEPLOY_UNKNOWN_IMPACT],
+    hypotheses: [],
+    likelyExplanation: likely,
+    uncertainty,
+    recommendedNextStep: `Open the failed deployment in ${opts.label.short} and check its logs.`,
+    correlatedProviders: [f.source],
+    sourceLinks: [link],
+    jagrPath: path,
+    jagrLink: `${opts.base}${path}`,
+    dedupeKey: `${DEPLOY_KEY}${r.id}`,
+    runs: [{ at, watchId: watch.id, anomalous: true, note: `Deployment reported as failed: ${r.title}` }],
+    notifiedLevels: [],
+    trace: [
+      { id: `${id}-${pass}-signal`, at: t(0), pass, kind: 'signal', title: `Signal: ${r.title} failed`, detail: `Reported by ${opts.label.name} at ${when} · detected by the ${watch.name} watch`, source: f.source, refs: [r.ref] },
+      { id: `${id}-${pass}-assessment`, at: t(1), pass, kind: 'assessment', title: `Deployment failure reported by ${opts.label.short}`, detail: likely },
+      { id: `${id}-${pass}-uncertainty`, at: t(2), pass, kind: 'uncertainty', title: 'Cause not established', detail: uncertainty },
+      { id: `${id}-${pass}-attention`, at: t(3), pass, kind: 'attention', title: 'Attention: MEDIUM', detail: reason },
+      { id: `${id}-${pass}-stop`, at: t(4), pass, kind: 'stop', title: 'Stopped investigating', detail: stop },
+    ],
+    agentHypotheses: [],
+    actions: [],
+    toolCalls: 0,
+    stopReason: stop,
+    deployment: { source: f.source, recordId: r.id, target: changeTarget(r), at: r.at, version: r.version },
+  };
+}
+
+/**
+ * Close a deployment-failure investigation after a later successful deployment on the same target.
+ * This resolves the deployment outcome only: it is not evidence that any product or system impact is
+ * resolved, and nothing here infers that the new deployment fixed the application or moved a metric.
+ */
+function closeDeploymentFailure(inv: WatchInvestigation, success: ObservedChange, at: string, label: ProviderLabel) {
+  const r = success.record;
+  setStatus(inv, 'RESOLVED', at);
+  inv.updatedAt = at;
+  inv.observed = [...inv.observed, `${label.short}: ${r.title} — reported as successful at ${fmtTime(r.at)}.`];
+  inv.unknowns = [
+    ...inv.unknowns.filter((u) => u !== DEPLOY_UNKNOWN_IMPACT),
+    'Whether any product or system impact is resolved — a later successful deployment only shows that deployment succeeded. Jagr does not infer that it fixed the application or caused any metric recovery.',
+  ];
+  inv.summary = `${inv.summary} Deployment failure resolved by a later successful deployment at ${fmtTime(r.at)}; product impact not assessed.`;
+  inv.runs.push({ at, watchId: inv.watchId, anomalous: false, note: `Deployment failure resolved by a subsequent successful deployment (${r.title}). Product impact not assessed.` });
+  inv.trace.push({
+    id: `${inv.id}-deploy-resolved-${at}`,
+    at,
+    pass: maxPass(inv),
+    kind: 'stop',
+    title: 'Deployment failure resolved by a subsequent successful deployment',
+    detail: `${r.title} succeeded at ${fmtTime(r.at)} on the same target. This closes the deployment failure only — it is not evidence that product impact is resolved, and Jagr does not infer that this deployment fixed the application or caused any metric recovery.`,
+    source: success.source,
+    refs: [r.ref],
+  });
 }
 
 export function highestAttention(invs: WatchInvestigation[]): AttentionLevel | undefined {

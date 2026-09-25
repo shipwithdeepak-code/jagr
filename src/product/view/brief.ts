@@ -39,6 +39,9 @@ export interface BriefView {
   stats: MorningBriefDoc['stats'];
   /** Changes that are evidence in the reported items, with their timing kind. */
   changes: NonNullable<MorningBriefDoc['changes']>;
+  /** Successful deployments and releases in the window — context, not findings. */
+  shipped: NonNullable<MorningBriefDoc['shipped']>;
+  shippedUnavailable: NonNullable<MorningBriefDoc['shippedUnavailable']>;
 }
 
 const bare = (s: string) => {
@@ -49,6 +52,7 @@ const bare = (s: string) => {
 function whatChanged(inv: WatchInvestigation): string {
   const lead = inv.signals[0];
   const rel = inv.releaseAssociation;
+  if (lead.key === 'changes') return `${lead.label} was reported as failed at ${lead.onsetAt.slice(11, 16)} UTC. The cause is not in the deployment record.`;
   const since = `${lead.label} ${lead.magnitude} since ${lead.onsetAt.slice(11, 16)} UTC.`;
   if (!rel) return since;
   return `${since} ${rel.kind && rel.kind !== 'release' ? rel.version : `Release ${rel.version}`} preceded it by ${rel.minutesBeforeOnset} min — timing, not a cause.`;
@@ -120,5 +124,7 @@ export function briefView(
     deduplicated: brief.deduplicated,
     stats: brief.stats,
     changes: brief.changes ?? [],
+    shipped: brief.shipped ?? [],
+    shippedUnavailable: brief.shippedUnavailable ?? [],
   };
 }
