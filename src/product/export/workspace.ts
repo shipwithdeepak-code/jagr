@@ -212,7 +212,8 @@ export async function exportServerWorkspace(repos: Repositories, workspaceId: st
     imports: byId(imports),
     investigations: byId(investigations),
     approvals: [...decisions].sort((a, b) => a.actionId.localeCompare(b.actionId)).map((d): ExportApproval => ({ actionId: d.actionId, status: d.status, at: d.at, optionId: d.optionId, note: d.note, result: d.result, actor: d.decidedBy ?? { ref: 'unknown', displayName: 'Unknown' } })),
-    notifications: byId(notifications).map((n): ExportNotification => ({ id: n.id, channel: n.channel, dedupeKey: n.dedupeKey, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, email: n.email })),
+    // In-flight delivery claims are not history yet; the export carries settled records only.
+    notifications: byId(notifications).flatMap((n): ExportNotification[] => (n.status === 'sending' ? [] : [{ id: n.id, channel: n.channel, dedupeKey: n.dedupeKey, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, email: n.email }])),
   });
 }
 

@@ -17,6 +17,8 @@ import { runMonitoring } from '../engine/monitor';
 import { composeBrief } from '../engine/brief';
 import type { InvestigationPlanner } from '../agent/planner';
 import { alertMessage, briefMessage, deliver, type ChannelFactory } from './notifications';
+import { uniqueId } from './ids';
+import { LeaseLost } from '../ports/jobs';
 
 /**
  * Server-side monitoring — the same engine the browser runs, driven by the job queue and persisted
@@ -118,14 +120,44 @@ async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResu
       void _from;
       if (await repos.notifications.add(ws.id, { id: e.id, channel: 'in_app', dedupeKey: e.id, deliveredAt: e.sentAt, status: 'delivered', investigationId: e.investigationId, email })) notifications++;
     }
-    const audit: AuditEntry = { id: `audit-${kind}-${at}`, workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, detail: `${r.investigations.length} investigation(s), ${r.emails.length} notification(s) · ${r.log.map((l) => l.outcome).join(' | ').slice(0, 400)}` };
+    const audit: AuditEntry = { id: uniqueId(`audit-${kind}`, at), workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, detail: `${r.investigations.length} investigation(s), ${r.emails.length} notification(s) · ${r.log.map((l) => l.outcome).join(' | ').slice(0, 400)}` };
     await repos.audit.append(audit);
     return { workspaceId: ws.id, investigations: r.investigations.length, touched: [...new Set(r.log.flatMap((l) => l.investigationIds))], notifications };
   });
 }
 
+/** Another monitoring run holds this workspace; retry later. */
+export class WorkspaceBusy extends Error {
+  constructor() {
+    super('A monitoring run is already in progress for this workspace.');
+    this.name = 'WorkspaceBusy';
+  }
+}
+
+/** A run lock outlives any single run; a crashed run's lock expires on its own. */
+export const RUN_LOCK_MS = 15 * 60_000;
+
+/**
+ * One monitoring run per workspace at a time. Runs read the stored investigations and write them back
+ * whole, so two concurrent runs (a scheduled job and a "run now", or two workers) would lose a pass.
+ */
+async function withRunLock<T>(deps: MonitoringDeps, workspaceId: string, fn: () => Promise<T>): Promise<T> {
+  const now = deps.clock.now();
+  const owner = uniqueId('run', now);
+  if (!(await deps.repos.locks.acquire(workspaceId, 'run', owner, new Date(Date.parse(now) + RUN_LOCK_MS).toISOString(), now))) throw new WorkspaceBusy();
+  try {
+    return await fn();
+  } finally {
+    await deps.repos.locks.release(workspaceId, 'run', owner);
+  }
+}
+
 /** A scheduled watch run (job kind 'monitor.watch'): continue the workspace's investigations at the job's due time. */
-export async function runWatchJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'workspaceId' | 'payload'>): Promise<RunSummary> {
+export function runWatchJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'workspaceId' | 'payload'>): Promise<RunSummary> {
+  return withRunLock(deps, job.workspaceId, () => runWatchJobLocked(deps, job));
+}
+
+async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'workspaceId' | 'payload'>): Promise<RunSummary> {
   const ws = await deps.repos.workspaces.get(job.workspaceId);
   if (!ws) throw new Error(`Workspace ${job.workspaceId} not found.`);
   const watchId = String(job.payload.watchId);
@@ -146,7 +178,11 @@ export async function runWatchJob(deps: MonitoringDeps, job: Pick<LeasedJob, 'wo
  * Run monitoring over the whole data window now — how imported and sample workspaces run (their data
  * has its own time range, like the browser build). Replaces the workspace's investigations.
  */
-export async function runWorkspaceNow(deps: MonitoringDeps, workspaceId: string): Promise<RunSummary> {
+export function runWorkspaceNow(deps: MonitoringDeps, workspaceId: string): Promise<RunSummary> {
+  return withRunLock(deps, workspaceId, () => runWorkspaceNowLocked(deps, workspaceId));
+}
+
+async function runWorkspaceNowLocked(deps: MonitoringDeps, workspaceId: string): Promise<RunSummary> {
   const ws = await deps.repos.workspaces.get(workspaceId);
   if (!ws) throw new Error(`Workspace ${workspaceId} not found.`);
   const at = deps.clock.now();
@@ -181,16 +217,36 @@ export async function drainJobs(deps: MonitoringDeps & { queue: JobQueue }, opts
   let failed = 0;
   const jobs = await deps.queue.claim({ workerId: opts.workerId, limit: opts.limit, leaseMs: opts.leaseMs });
   for (const job of jobs) {
+    // Jobs in a batch run one after another: renew this job's lease before starting it, so a lease that ran
+    // down while earlier jobs ran is never taken over by another worker mid-run. Lost it? Someone else has it.
+    try {
+      await deps.queue.extend(job.id, job.leaseToken, opts.leaseMs);
+    } catch (e) {
+      if (e instanceof LeaseLost) continue;
+      throw e;
+    }
+    let error: Error | undefined;
     try {
       if (job.kind === 'monitor.watch') await runWatchJob(deps, job);
       else if (job.kind === 'brief.compose') await composeBriefJob(deps, job);
       else throw new Error(`No handler for job kind ${job.kind}.`);
-      await deps.queue.complete(job.id, job.leaseToken);
-      done++;
     } catch (e) {
-      const backoff = Math.min(60, 2 ** job.attempts) * 60_000;
-      await deps.queue.fail(job.id, job.leaseToken, (e as Error).message.slice(0, 500), new Date(Date.parse(deps.clock.now()) + backoff).toISOString());
-      failed++;
+      error = e as Error;
+    }
+    // Settling can only fail if another worker took the job over meanwhile; then it is theirs to settle,
+    // and one lost job never stops the rest of the batch.
+    try {
+      if (!error) {
+        await deps.queue.complete(job.id, job.leaseToken);
+        done++;
+      } else {
+        // A busy workspace (another run holds it) is retried soon; other failures back off exponentially.
+        const backoff = error instanceof WorkspaceBusy ? 60_000 : Math.min(60, 2 ** job.attempts) * 60_000;
+        await deps.queue.fail(job.id, job.leaseToken, error.message.slice(0, 500), new Date(Date.parse(deps.clock.now()) + backoff).toISOString());
+        failed++;
+      }
+    } catch (e) {
+      if (!(e instanceof LeaseLost)) throw e;
     }
   }
   return { done, failed };

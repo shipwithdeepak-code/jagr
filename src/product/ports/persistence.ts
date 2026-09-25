@@ -108,7 +108,8 @@ export interface NotificationRecord {
   channel: string;
   dedupeKey: string;
   deliveredAt: ISO;
-  status: 'delivered' | 'failed';
+  /** sending = claimed, delivery in progress (or interrupted: see app/notifications.ts). */
+  status: 'sending' | 'delivered' | 'failed';
   investigationId?: string;
   /** Rendered content — never addresses or tokens. */
   email?: Omit<EmailNotification, 'to' | 'from'>;
@@ -181,7 +182,18 @@ export interface Repositories {
   };
   notifications: {
     list(workspaceId: string): Promise<NotificationRecord[]>;
+    /** Atomic: false when (channel, dedupeKey) is already taken — the claim that makes delivery at-most-once. */
     add(workspaceId: string, n: NotificationRecord): Promise<boolean>;
+    /** Replace a record by id (settle a claim: delivered, or failed with its dedupe key released). */
+    settle(workspaceId: string, n: NotificationRecord): Promise<void>;
+  };
+  /**
+   * Short leases on a workspace-scoped key (e.g. "run": one monitoring run per workspace at a time).
+   * `acquire` is atomic; it succeeds when the key is free, expired, or already held by the same owner.
+   */
+  locks: {
+    acquire(workspaceId: string, key: string, owner: string, until: ISO, now: ISO): Promise<boolean>;
+    release(workspaceId: string, key: string, owner: string): Promise<void>;
   };
   /** Morning briefs, as composed (the document a PM reads). Keyed by brief id; saving the same id replaces it. */
   briefs: {

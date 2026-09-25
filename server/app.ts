@@ -6,10 +6,11 @@ import { decide } from '../src/product/agent/decisions';
 import { ApprovalRequiredError } from '../src/product/agent/actions';
 import { commitServerImport, exportServerWorkspace, planImport } from '../src/product/export/workspace';
 import { schedulerTick } from '../src/product/app/scheduler';
-import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun } from '../src/product/app/monitoring';
+import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun, WorkspaceBusy } from '../src/product/app/monitoring';
 import { buildSnapshot } from '../src/product/app/workspaceSnapshot';
 import { replayInvestigation } from '../src/product/app/replay';
 import { briefView } from '../src/product/view/brief';
+import { redactPersonalData } from '../src/product/lib/redact';
 import { evaluationLab, type EvaluationLabReport } from '../src/product/app/evaluationLab';
 import { importFile } from '../src/product/imports/schemas';
 import { WriteConflict } from '../src/product/ports/persistence';
@@ -399,8 +400,9 @@ export function createApp(rt: Runtime) {
     try {
       return await handle(req);
     } catch (e) {
+      if (e instanceof WorkspaceBusy) return json(409, { error: e.message, code: 'workspace_busy' });
       // Never echo internals (or anything that might carry a credential) to the client.
-      console.error('[jagr api]', req.method, req.path, (e as Error).message);
+      console.error('[jagr api]', req.method, req.path, redactPersonalData(String((e as Error)?.message ?? e)).slice(0, 300));
       return json(500, { error: 'Internal error.' });
     }
   };

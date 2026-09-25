@@ -3,7 +3,8 @@ import { briefView } from '../view/brief';
 import type { Clock } from '../ports/clock';
 import type { HttpClient } from '../ports/http';
 import type { DeliveryTarget, NotificationChannel, NotificationMessage } from '../ports/notify';
-import type { Connection, Repositories, Workspace } from '../ports/persistence';
+import type { Connection, NotificationRecord, Repositories, Workspace } from '../ports/persistence';
+import { uniqueId } from './ids';
 import type { SecretPayload, SecretStore } from '../ports/secrets';
 import { redactPersonalData } from '../lib/redact';
 import type { ConnectorCheck } from '../integrations/connectors/types';
@@ -85,6 +86,9 @@ export function briefMessage(workspaceId: string, brief: MorningBriefDoc, ctx: {
   };
 }
 
+/** A claim still 'sending' after this long was interrupted (a send takes seconds). */
+export const STUCK_CLAIM_MS = 15 * 60_000;
+
 export interface DeliverySummary {
   delivered: number;
   duplicates: number;
@@ -97,7 +101,7 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
   if (!messages.length || !deps.channels) return out;
   const conns = (await deps.repos.connections.list(ws.id)).filter((c) => !c.roles.length && c.state === 'connected' && Object.prototype.hasOwnProperty.call(deps.channels, c.provider));
   if (!conns.length) return out;
-  const log = new Map((await deps.repos.notifications.list(ws.id)).filter((n) => n.status === 'delivered').map((n) => [n.id, n]));
+  const byKey = new Map((await deps.repos.notifications.list(ws.id)).map((n) => [`${n.channel} ${n.dedupeKey}`, n]));
   for (const c of conns) {
     let built: ReturnType<ChannelFactory> | undefined;
     let setupError: string | undefined;
@@ -108,12 +112,22 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
       setupError = (e as Error).message.slice(0, 200);
     }
     for (const m of messages) {
-      const id = `${c.id}:${m.dedupeKey}`;
-      if (log.has(id)) {
+      const key = `${c.id}:${m.dedupeKey}`;
+      const at = deps.clock.now();
+      const line = (detail: string) => clean(`${m.kind} · ${m.title}${detail ? ` · ${detail}` : ''}`).slice(0, 400);
+      // Claim before sending. The store's (channel, dedupe key) uniqueness makes the claim atomic, so two
+      // workers — or a retried job — never both send the same message. Delivered keeps the key forever.
+      const existing = byKey.get(`${c.provider} ${key}`);
+      if (existing?.status === 'sending' && Date.parse(at) - Date.parse(existing.deliveredAt) > STUCK_CLAIM_MS) {
+        // An attempt that never finished (the process stopped mid-send). Whether it reached the channel is
+        // unknown; release its key and try again — a rare duplicate beats a lost alert.
+        await deps.repos.notifications.settle(ws.id, { ...existing, status: 'failed', dedupeKey: `${key}#interrupted@${existing.deliveredAt}`, detail: line('an earlier attempt did not finish; delivery unknown — retried') });
+      }
+      const claim: NotificationRecord = { id: uniqueId(`ntf-${c.id}`, at), channel: c.provider, dedupeKey: key, deliveredAt: at, status: 'sending', detail: line('sending') };
+      if (!(await deps.repos.notifications.add(ws.id, claim))) {
         out.duplicates++;
         continue;
       }
-      const at = deps.clock.now();
       let status: 'delivered' | 'failed' = 'failed';
       let detail = setupError ?? '';
       if (built) {
@@ -125,13 +139,8 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
           detail = `${built.channel.kind} delivery failed: ${(e as Error).message.slice(0, 200)}`;
         }
       }
-      // The store deduplicates on (channel, dedupe key): a delivered message holds its key, so it is never
-      // logged — or sent by a later run — twice. A failed attempt is logged under its own key, so the same
-      // message is tried again the next time it is delivered.
-      const key = `${c.id}:${m.dedupeKey}`;
-      const record = { id: status === 'delivered' ? id : `${id}#failed@${at}`, channel: c.provider, dedupeKey: status === 'delivered' ? key : `${key}#failed@${at}`, deliveredAt: at, status, detail: clean(`${m.kind} · ${m.title}${detail ? ` · ${detail}` : ''}`).slice(0, 400) };
-      await deps.repos.notifications.add(ws.id, record);
-      if (status === 'delivered') log.set(id, record);
+      // Settle the claim. A failure releases the key, so the same message is tried again next time.
+      await deps.repos.notifications.settle(ws.id, { ...claim, status, dedupeKey: status === 'delivered' ? key : `${key}#failed@${at}`, detail: line(detail) });
       if (status === 'delivered') out.delivered++;
       else out.failed++;
     }

@@ -105,8 +105,19 @@ export function postgresRepositories(sql: SqlClient): Repositories {
           await collection<Decision>(c, 'decisions').put(w, d.actionId, d);
         }),
     },
+    locks: {
+      acquire: async (w, key, owner, until, now) =>
+        (
+          await sql.query(
+            "insert into workspace_docs (workspace_id, collection, id, doc) values ($1, 'locks', $2, $3::jsonb) on conflict (workspace_id, collection, id) do update set doc = excluded.doc, updated_at = now() where workspace_docs.doc->>'until' <= $4 or workspace_docs.doc->>'owner' = $5 returning id",
+            [w, key, json({ owner, until }), now, owner],
+          )
+        ).rows.length > 0,
+      release: async (w, key, owner) => void (await sql.query("delete from workspace_docs where workspace_id = $1 and collection = 'locks' and id = $2 and doc->>'owner' = $3", [w, key, owner])),
+    },
     notifications: {
       list: (w) => notifications.list(w),
+      settle: (w, n) => notifications.put(w, n.id, n),
       add: async (w, n) => (await sql.query("insert into workspace_docs (workspace_id, collection, id, doc) values ($1, 'notifications', $2, $3::jsonb) on conflict do nothing returning id", [w, n.id, json(n)])).rows.length > 0,
     },
     briefs: {

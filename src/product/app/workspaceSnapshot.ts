@@ -19,7 +19,7 @@ export interface WorkspaceSnapshot {
   investigations: WatchInvestigation[];
   decisions: (ActionDecision & { actionId: string; decidedBy?: string })[];
   /** In-app alerts (rendered content only) and the outbound delivery log. */
-  notifications: { id: string; channel: string; deliveredAt: ISO; status: 'delivered' | 'failed'; investigationId?: string; detail?: string; email?: Omit<EmailNotification, 'to' | 'from'> }[];
+  notifications: { id: string; channel: string; deliveredAt: ISO; status: 'sending' | 'delivered' | 'failed'; investigationId?: string; detail?: string; email?: Omit<EmailNotification, 'to' | 'from'> }[];
   /** Imported workspaces: the stored datasets. */
   imports: ImportedDataset[];
   /** Morning briefs as composed (most recent last). */

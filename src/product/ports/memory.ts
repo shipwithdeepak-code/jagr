@@ -25,6 +25,7 @@ interface WsData {
   decisions: Map<string, Decision>;
   notifications: Map<string, NotificationRecord>;
   briefs: Map<string, MorningBriefDoc>;
+  locks: Map<string, { owner: string; until: string }>;
   cursors: Map<string, string>;
   audit: AuditEntry[];
 }
@@ -38,7 +39,7 @@ interface State {
   data: Map<string, WsData>;
 }
 
-const emptyWs = (): WsData => ({ connections: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), cursors: new Map(), audit: [] });
+const emptyWs = (): WsData => ({ connections: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), locks: new Map(), cursors: new Map(), audit: [] });
 const emptyState = (): State => ({ workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), data: new Map() });
 
 function copyState(s: State): State {
@@ -53,6 +54,7 @@ function copyState(s: State): State {
       decisions: new Map(clone([...d.decisions])),
       notifications: new Map(clone([...d.notifications])),
       briefs: new Map(clone([...d.briefs])),
+      locks: new Map(clone([...d.locks])),
       cursors: new Map(d.cursors),
       audit: clone(d.audit),
     });
@@ -153,6 +155,18 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
         m.set(n.id, clone(n));
         return true;
       },
+      settle: async (w, n) => void ws(w).notifications.set(n.id, clone(n)),
+    },
+    locks: {
+      acquire: async (w, key, owner, until, now) => {
+        const cur = ws(w).locks.get(key);
+        if (cur && cur.until > now && cur.owner !== owner) return false;
+        ws(w).locks.set(key, { owner, until });
+        return true;
+      },
+      release: async (w, key, owner) => {
+        if (ws(w).locks.get(key)?.owner === owner) ws(w).locks.delete(key);
+      },
     },
     briefs: {
       list: async (w) => values(ws(w).briefs).sort((a, b) => a.generatedAt.localeCompare(b.generatedAt)),
@@ -202,7 +216,8 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
   let seq = 0;
   const leased = (id: string, token: string) => {
     const j = jobs.find((x) => x.id === id);
-    if (!j || j.state !== 'leased' || j.leaseToken !== token || j.leaseUntil <= clock.now()) throw new LeaseLost();
+    // Ownership is the lease token: an expired lease nobody else claimed is still the holder's.
+    if (!j || j.state !== 'leased' || j.leaseToken !== token) throw new LeaseLost();
     return j;
   };
   const plus = (ms: number) => new Date(Date.parse(clock.now()) + ms).toISOString();

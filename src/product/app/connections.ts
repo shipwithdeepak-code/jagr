@@ -5,6 +5,7 @@ import type { Role } from '../roles/types';
 import { SecretNotFound } from '../ports/secrets';
 import { connectionView, type ConnectionView } from '../connections/model';
 import { checkConnection, type MonitoringDeps } from './monitoring';
+import { uniqueId } from './ids';
 
 /**
  * Connection lifecycle — connect / configure, test, reconnect, disconnect — for credentials a workspace
@@ -75,7 +76,7 @@ function typeFor(deps: ConnectionDeps, provider: string): ConnectionType {
 
 async function audit(deps: ConnectionDeps, ws: Workspace, actor: Actor, action: string, target: string, detail: string) {
   const at = deps.clock.now();
-  await deps.repos.audit.append({ id: `audit-${action}-${target}-${at}`, workspaceId: ws.id, at, actor, action, target, detail });
+  await deps.repos.audit.append({ id: uniqueId(`audit-${action}-${target}`, at), workspaceId: ws.id, at, actor, action, target, detail });
 }
 
 async function viewAfterCheck(deps: ConnectionDeps, ws: Workspace, id: string) {

@@ -93,6 +93,32 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       expect(await repos.briefs.list('ws-b')).toEqual([]);
     });
 
+    it('locks: exclusive until expiry, re-entrant for the same owner, released only by the owner', async () => {
+      const { repos } = await make();
+      const t0 = '2026-09-25T10:00:00.000Z';
+      const until = '2026-09-25T10:15:00.000Z';
+      expect(await repos.locks.acquire('ws-a', 'run', 'A', until, t0)).toBe(true);
+      expect(await repos.locks.acquire('ws-a', 'run', 'B', until, t0)).toBe(false);
+      expect(await repos.locks.acquire('ws-b', 'run', 'B', until, t0)).toBe(true);
+      expect(await repos.locks.acquire('ws-a', 'run', 'A', until, t0)).toBe(true);
+      await repos.locks.release('ws-a', 'run', 'B');
+      expect(await repos.locks.acquire('ws-a', 'run', 'B', until, t0)).toBe(false);
+      // Expired: anyone may take it.
+      expect(await repos.locks.acquire('ws-a', 'run', 'B', '2026-09-25T10:30:00.000Z', '2026-09-25T10:16:00.000Z')).toBe(true);
+      await repos.locks.release('ws-a', 'run', 'B');
+      expect(await repos.locks.acquire('ws-a', 'run', 'C', until, t0)).toBe(true);
+    });
+
+    it('notification claims: settle replaces the record; releasing the dedupe key lets it be claimed again', async () => {
+      const { repos } = await make();
+      const claim = { id: 'c1', channel: 'chat', dedupeKey: 'k', deliveredAt: '2026-09-25T10:00:00.000Z', status: 'sending' as const };
+      expect(await repos.notifications.add('ws-a', claim)).toBe(true);
+      expect(await repos.notifications.add('ws-a', { ...claim, id: 'c2' })).toBe(false);
+      await repos.notifications.settle('ws-a', { ...claim, status: 'failed', dedupeKey: 'k#failed' });
+      expect((await repos.notifications.list('ws-a')).map((n) => [n.id, n.status, n.dedupeKey])).toEqual([['c1', 'failed', 'k#failed']]);
+      expect(await repos.notifications.add('ws-a', { ...claim, id: 'c2' })).toBe(true);
+    });
+
     it('notifications are deduplicated per channel', async () => {
       const { repos } = await make();
       const n = { id: 'n1', channel: 'chat', dedupeKey: 'inv-1:HIGH', deliveredAt: '2026-09-24T08:00:00.000Z', status: 'delivered' as const };
@@ -167,6 +193,17 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       const [b] = await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 });
       await q.fail(b.id, b.leaseToken, 'timeout again', '2026-09-24T08:10:00.000Z');
       expect(await q.inspect('k')).toMatchObject({ state: 'dead', attempts: 2, lastError: 'timeout again' });
+    });
+
+    it('a lease that expired but was not taken over is still the holder’s: it can extend and complete', async () => {
+      const clock = manualClock('2026-09-24T08:00:00.000Z');
+      const q = await make(clock);
+      await q.enqueue({ kind: 'monitor.watch', workspaceId: 'ws-a', payload: {}, idempotencyKey: 'slow' });
+      const [j] = await q.claim({ workerId: 'w1', limit: 1, leaseMs: 60_000 });
+      clock.advance(5 * 60_000);
+      await q.extend(j.id, j.leaseToken, 60_000);
+      await q.complete(j.id, j.leaseToken);
+      expect(await q.inspect('slow')).toMatchObject({ state: 'done' });
     });
 
     it('extending a lease keeps the job', async () => {

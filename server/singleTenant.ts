@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { ProviderId } from '../src/product/types';
 import type { Role } from '../src/product/roles/types';
 import type { Connection, Repositories, Workspace } from '../src/product/ports/persistence';
@@ -148,7 +148,7 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
 
   const result: BootstrapResult = { workspaceId: ws.id, configured: [], rotated: [], removed: [] };
   const audit = (action: string, target: string, detail: string) =>
-    repos.audit.append({ id: `audit-${action}-${target}-${now}`, workspaceId: ws.id, at: now, actor: { ref: 'system', displayName: 'Jagr' }, action, target, detail });
+    repos.audit.append({ id: `audit-${action}-${target}-${now}-${randomBytes(4).toString('hex')}`, workspaceId: ws.id, at: now, actor: { ref: 'system', displayName: 'Jagr' }, action, target, detail });
 
   for (const spec of OWNER_CONNECTORS) {
     const id = `owner-${spec.source}`;

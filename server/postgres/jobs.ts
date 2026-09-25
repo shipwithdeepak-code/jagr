@@ -28,8 +28,9 @@ const toJob = (r: Row): LeasedJob => ({ id: r.id, kind: r.kind, workspaceId: r.w
 
 export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
   const plus = (ms: number) => new Date(Date.parse(clock.now()) + ms).toISOString();
+  // Ownership is the lease token: a lease that expired but that no other worker took over is still ours.
   const owned = async (id: string, token: string, update: string, params: unknown[]) => {
-    const r = await sql.query(`update jobs set ${update} where id = $1 and state = 'leased' and lease_token = $2 and lease_until > $3 returning id`, [id, token, clock.now(), ...params]);
+    const r = await sql.query(`update jobs set ${update} where id = $1 and state = 'leased' and lease_token = $2 returning id`, [id, token, ...params]);
     if (!r.rows.length) throw new LeaseLost();
   };
   return {
@@ -62,8 +63,8 @@ export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
     },
     complete: (id, token) => owned(id, token, `state = 'done'`, []),
     fail: (id, token, error, retryAt) =>
-      owned(id, token, `last_error = $4, state = case when $5::timestamptz is not null and attempts < max_attempts then 'queued' else 'dead' end, run_at = coalesce($5::timestamptz, run_at)`, [error, retryAt ?? null]),
-    extend: (id, token, leaseMs) => owned(id, token, `lease_until = $4`, [plus(leaseMs)]),
+      owned(id, token, `last_error = $3, state = case when $4::timestamptz is not null and attempts < max_attempts then 'queued' else 'dead' end, run_at = coalesce($4::timestamptz, run_at)`, [error, retryAt ?? null]),
+    extend: (id, token, leaseMs) => owned(id, token, `lease_until = $3`, [plus(leaseMs)]),
     async inspect(key) {
       const r = await sql.query<{ state: JobState; attempts: number; last_error: string | null }>('select state, attempts, last_error from jobs where idempotency_key = $1', [key]);
       const j = r.rows[0];
