@@ -169,7 +169,7 @@ function ScenarioRow({ s }: { s: LabScenario }) {
           <dd className="text-ink">{s.actual || '—'}</dd>
         </dl>
         <div>
-          <h4 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Evidence · checks</h4>
+          <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Evidence · checks</h3>
           <ul className="space-y-1">
             {s.checks.map((c) => (
               <li key={c.label} className="grid grid-cols-[18px_minmax(0,1fr)] gap-2 sm:grid-cols-[18px_220px_minmax(0,1fr)]">
@@ -202,7 +202,7 @@ function TraceOf({ inv, connections }: { inv: WatchInvestigation; connections: S
 
 function RelevantTrace({ s }: { s: LabScenario }) {
   const [repro, setRepro] = useState<{ investigation?: WatchInvestigation; connections: SourceConnection[] } | 'loading' | 'error' | null>(null);
-  const heading = <h4 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Relevant trace</h4>;
+  const heading = <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Relevant trace</h3>;
   if (!s.reproducible) {
     return (
       <div>
