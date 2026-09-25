@@ -85,7 +85,7 @@ class SimulatedAdapter implements IntegrationAdapter {
     private readonly conn: SourceConnection,
   ) {
     this.name = PROVIDERS[provider].name;
-    this.capabilities = PROVIDERS[provider].capabilities;
+    this.capabilities = world.capabilities?.[provider] ?? PROVIDERS[provider].capabilities;
   }
 
   connection() {

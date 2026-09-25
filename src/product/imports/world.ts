@@ -124,6 +124,15 @@ export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: strin
       bucketMinutes,
       metrics,
       metricCatalog: METRIC_DEFS.map(({ base: _b, std: _s, ...def }) => (void _b, void _s, def)),
+      // Each imported channel serves only what was imported into it. Without this, the feedback channel
+      // (which reuses a store's source id) would be asked for the store's crash metrics and releases,
+      // and report them as "not checked" / "no releases" next to the feedback it did read.
+      capabilities: {
+        ga4: ['metrics'],
+        jira: ['issues', 'releases', 'events', 'changes'],
+        app_store: ['reviews', 'events', ...(metrics.some((s) => s.provider === 'app_store') ? (['metrics'] as const) : [])],
+        google_play: metrics.some((s) => s.provider === 'google_play') ? ['metrics'] : [],
+      },
       issues: issuesM.items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       releases: releasesM.items.sort((a, b) => a.releasedAt.localeCompare(b.releasedAt)),
       reviews: feedbackM.items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),

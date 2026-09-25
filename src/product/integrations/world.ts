@@ -1,7 +1,7 @@
 import { createRng, hashString } from '../lib/rng';
 import { addMinutes } from '../lib/time';
 import type { ProviderId } from '../types';
-import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from './types';
+import type { Capability, IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from './types';
 
 /**
  * A fixture "world": what Jira, GA4, App Store Connect and Google Play would return for one
@@ -50,6 +50,11 @@ export interface WorldSpec {
 export interface World {
   id: string;
   name: string;
+  /**
+   * Per-source capabilities, when a world's sources carry less than the provider's usual set (imports:
+   * a channel serves only what was imported into it). Absent → the provider's capabilities.
+   */
+  capabilities?: Partial<Record<ProviderId, Capability[]>>;
   start: string;
   end: string;
   /** Spacing of metric points. Simulated nights use 15 minutes; imported data uses its own cadence. */

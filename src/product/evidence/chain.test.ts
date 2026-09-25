@@ -141,4 +141,17 @@ describe('evidence chain scenarios', () => {
       expect(new Set(keys).size).toBe(keys.length);
     }
   });
+
+  it('My data: the feedback channel is never reported as "not checked" (or as having no releases) while its feedback is evidence', async () => {
+    // Regression: the imported feedback channel reuses a store's source id and used to inherit the store's
+    // crash metrics and releases, producing a "not checked" gap and a "no releases" claim beside its reviews.
+    const inv = checkout(await investigate({ metrics: sample('metrics'), issues: sample('issues'), releases: sample('releases'), changes: sample('changes'), feedback: sample('reviews') }));
+    const feedback = inv.evidence.filter((e) => e.provider === 'app_store');
+    expect(feedback.map((e) => e.direction)).toEqual(['degraded']);
+    expect(feedback[0].id).toMatch(/:reviews:checkout$/);
+    expect(inv.unknowns.join(' ')).not.toMatch(/crash free sessions/i);
+    // Its reviews are still read, and the other channels still answer for their own data.
+    expect(inv.correlatedProviders).toContain('app_store');
+    expect(inv.evidence.some((e) => e.provider === 'jira' && e.direction === 'change')).toBe(true);
+  });
 });
