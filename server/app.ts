@@ -10,6 +10,7 @@ import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun
 import { buildSnapshot } from '../src/product/app/workspaceSnapshot';
 import { replayInvestigation } from '../src/product/app/replay';
 import { briefView } from '../src/product/view/brief';
+import { evaluationLab, type EvaluationLabReport } from '../src/product/app/evaluationLab';
 import { importFile } from '../src/product/imports/schemas';
 import { WriteConflict } from '../src/product/ports/persistence';
 import type { Runtime } from './runtime';
@@ -77,6 +78,7 @@ function publicWorkspace(ws: Workspace) {
 
 export function createApp(rt: Runtime) {
   const secure = rt.config.secureCookies;
+  let labReport: Promise<EvaluationLabReport> | undefined;
 
   const memberOf = (p: Principal, workspaceId: string): Membership | undefined => p.memberships.find((m) => m.workspaceId === workspaceId);
 
@@ -346,6 +348,14 @@ export function createApp(rt: Runtime) {
       return json(200, { ok: true }, { cookies: [clearCookie(SESSION_COOKIE, secure), clearCookie(CSRF_COOKIE, secure)] });
     }
     if (head === 'me' && req.method === 'GET') return json(200, { user: p.user, memberships: p.memberships });
+    // The Evaluation Lab as structured results (deterministic suites on fixtures; computed once per server instance).
+    if (head === 'evaluations' && !a && req.method === 'GET') {
+      labReport ??= evaluationLab(rt.clock.now()).catch((e) => {
+        labReport = undefined;
+        throw e;
+      });
+      return json(200, await labReport);
+    }
     if (head === 'connection-types' && req.method === 'GET') return json(200, { types: Object.values(rt.types).map(typeInfo) });
 
     if (head === 'workspaces' && !a && req.method === 'GET') {
