@@ -28,7 +28,9 @@ const TONE: Record<Tone, string> = {
 
 export type StrengthValue = 'strong' | 'moderate' | 'weak' | 'ruled_out' | 'unknown';
 
-const SOURCE: Record<ConnectionState, { label: string; tone: Tone; shape: 'dot' | 'ring' | 'dash' }> = {
+/** Source status. STALE is not a connection state: it is derived (data stops before the run window ends). */
+export type SourceStatusValue = ConnectionState | 'stale';
+const SOURCE: Record<SourceStatusValue, { label: string; tone: Tone; shape: 'dot' | 'ring' | 'dash' | 'half' }> = {
   connected: { label: 'Connected', tone: 'ok', shape: 'dot' },
   imported: { label: 'User import', tone: 'accent', shape: 'dot' },
   simulated: { label: 'Simulated', tone: 'info', shape: 'dash' },
@@ -36,6 +38,7 @@ const SOURCE: Record<ConnectionState, { label: string; tone: Tone; shape: 'dot' 
   unavailable: { label: 'Unavailable', tone: 'high', shape: 'ring' },
   error: { label: 'Error', tone: 'crit', shape: 'ring' },
   needs_reconnect: { label: 'Needs reconnection', tone: 'high', shape: 'ring' },
+  stale: { label: 'Stale', tone: 'med', shape: 'half' },
 };
 const ATTENTION: Record<AttentionLevel, Tone> = { LOW: 'neutral', MEDIUM: 'med', HIGH: 'high', CRITICAL: 'crit' };
 const STRENGTH: Record<StrengthValue, { label: string; tone: Tone; bars: number }> = {
@@ -54,7 +57,7 @@ export function strengthOf(h: Pick<AgentHypothesis, 'status' | 'strength'>): Str
 }
 
 type StatusProps =
-  | { kind: 'source'; value: ConnectionState }
+  | { kind: 'source'; value: SourceStatusValue }
   | { kind: 'attention'; value: AttentionLevel }
   | { kind: 'strength'; value: StrengthValue }
   | { kind: 'risk'; value: AttentionLevel };
@@ -93,7 +96,8 @@ export function StatusBadge(props: StatusProps & { className?: string; size?: 's
   );
 }
 
-function Shape({ shape }: { shape: 'dot' | 'ring' | 'dash' }) {
+function Shape({ shape }: { shape: 'dot' | 'ring' | 'dash' | 'half' }) {
+  if (shape === 'half') return <span aria-hidden className="size-1.5 rounded-full ring-1 ring-current [background:linear-gradient(90deg,currentColor_50%,transparent_50%)]" />;
   if (shape === 'dot') return <span aria-hidden className="size-1.5 rounded-full bg-current" />;
   if (shape === 'ring') return <span aria-hidden className="size-1.5 rounded-full ring-1 ring-current" />;
   return <span aria-hidden className="h-px w-2 bg-current" />;

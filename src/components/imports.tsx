@@ -4,11 +4,10 @@ import { useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { acceptedCount, IMPORT_KINDS, SUPPORTED_METRICS, type ImportedDataset, type ImportKind } from '@/product/imports/schemas';
 import { fmtDate, fmtTime } from '@/lib/time';
-import { ConnectionBadge, PROVIDER_ICON } from './product';
-import { PROVIDERS } from '@/product/integrations/adapters';
 import { Badge, Button, Card, cx, Mono, SectionTitle } from './ui';
 import { PRIVACY_NOTICE } from './onboarding';
-import { SourceCoverage } from './primitives';
+import { SourceGroups, SourcesOverview } from './sources';
+import { sourceViews } from '@/product/view/sources';
 
 const SAMPLE_FOR: Record<ImportKind, string> = { metrics: '/samples/metrics.csv', issues: '/samples/issues.csv', releases: '/samples/releases.csv', changes: '/samples/changes.csv', feedback: '/samples/reviews.csv' };
 
@@ -30,6 +29,7 @@ export function ImportedSources() {
       .map((d) => d.importedAt)
       .sort()
       .at(-1);
+  const views = sourceViews(state.connections, { asOf: importedWorld?.world?.end ?? state.clock, lastImport: (id) => lastImport(id) });
 
   const onFile = async (file: File) => {
     setReading(true);
@@ -43,7 +43,7 @@ export function ImportedSources() {
 
   return (
     <>
-      <SourceCoverage connections={state.connections} />
+      <SourcesOverview views={views} />
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px] text-ink-2">
         <Lock size={15} className="mt-0.5 shrink-0" />
         <span>{PRIVACY_NOTICE}</span>
@@ -119,44 +119,8 @@ export function ImportedSources() {
       )}
 
       <SectionTitle hint="How each evidence channel is fed in this workspace.">Source status</SectionTitle>
-      <div className="grid gap-3 md:grid-cols-2">
-        {state.connections
-          .filter((c) => c.provider !== 'email')
-          .map((c) => {
-            const Icon = PROVIDER_ICON[c.provider];
-            return (
-              <Card key={c.provider}>
-                <div className="flex items-start gap-3">
-                  <Icon size={16} className="mt-0.5 text-ink-2" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13.5px] font-semibold">{c.label?.name ?? PROVIDERS[c.provider].name}</span>
-                      <ConnectionBadge state={c.state} />
-                    </div>
-                    <div className="mt-0.5 text-[12px] break-words text-ink-2">{c.detail}</div>
-                    {c.state === 'imported' && lastImport(c.provider) && (
-                      <div className="mt-1 text-[11.5px] text-ink-3">
-                        Last imported {fmtDate(lastImport(c.provider)!)} {fmtTime(lastImport(c.provider)!)} · validated on upload
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        <Card>
-          <div className="flex items-start gap-3">
-            <Info size={16} className="mt-0.5 text-ink-2" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13.5px] font-semibold">Jira Cloud</span>
-                <ConnectionBadge state="not_configured" />
-              </div>
-              <div className="mt-0.5 text-[12px] text-ink-3">A real Jira Cloud connector exists, but connecting it needs server-side credentials this deployment does not have. Export issues/releases as CSV and import them instead.</div>
-            </div>
-          </div>
-        </Card>
-      </div>
+      <SourceGroups views={views} />
+      <p className="mt-4 text-[12px] text-ink-3">Live connectors (Jira Cloud, GitHub, Amplitude, Intercom) run on a Jagr server with credentials held there, never in this browser. Until then, export issues, releases or feedback as CSV and import them here.</p>
     </>
   );
 }

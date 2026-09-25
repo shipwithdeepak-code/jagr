@@ -47,7 +47,7 @@ export interface ProductApi {
   runMonitoring(): Promise<MonitoringResult | undefined>;
   createWatch(watch: Watch): void;
   setWatchStatus(id: string, status: Watch['status']): void;
-  setConnection(provider: ProviderId, state: ConnectionState, detail: string): void;
+  setConnection(provider: ProviderId, state: ConnectionState, detail: string, opts?: { freshAsOf?: string }): void;
   setBrief(brief: BriefSchedule): void;
   /** Approve / reject / modify an action. Execution goes through the same approval gate as the agent. */
   decide(action: ProposedAction, decision: { status: ActionDecision['status']; optionId?: string; note?: string }): ActionDecision;
