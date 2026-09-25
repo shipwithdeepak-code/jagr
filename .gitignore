@@ -11,3 +11,4 @@ dist
 # Local Claude / dev-server configuration
 .claude/
 .jagr/
+.neon
