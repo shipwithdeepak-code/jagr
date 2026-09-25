@@ -11,9 +11,11 @@ import { AttentionBanner, EvidenceItem, InvestigationTimeline, LoadingState, Met
 import { hypothesisLabel } from '@/product/agent/investigator';
 import { effectiveActions, traceWithDecisions } from '@/product/agent/decisions';
 import { confidenceBand } from '@/product/engine/monitor';
-import { cx, EmptyState, Mono } from '@/components/ui';
+import { EmptyState, Mono } from '@/components/ui';
 import type { TaskDraft } from '@/domain/types';
 import { headlineOf, readingOf } from '@/product/presentation';
+import { buildEvidenceChain } from '@/product/view/evidenceChain';
+import { EvidenceChain } from '@/components/evidenceChain';
 import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
 import { isSourceId } from '@/product/roles/types';
 
@@ -232,6 +234,11 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-8">
+          <section aria-label="Evidence chain">
+            <SectionHeader title="Evidence chain" hint="From the signal to the decision: what Jagr observed, what it could correlate, what it infers, what it doesn’t know — and what waits for you. Every item shows where it came from." />
+            <EvidenceChain chain={buildEvidenceChain(inv, state.decisions)} stateOf={stateOf} />
+          </section>
+
           <section>
             <SectionHeader title="How it unfolded" hint="The signal, then each piece of evidence Jagr found, in the order it happened." />
             <div className="rounded-xl border border-line bg-surface px-4 py-5">
@@ -247,30 +254,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
           <div className="lg:hidden">{decision}</div>
 
           <section>
-            <SectionHeader title="Observed · Inferred · Unknown" hint="What Jagr saw, what it concluded from that, and what it doesn't know — kept strictly apart." />
-            <div className="grid overflow-hidden rounded-xl border border-line bg-surface md:grid-cols-3 md:divide-x md:divide-line max-md:divide-y max-md:divide-line">
-              {(
-                [
-                  ['Observed', 'Facts from the sources', inv.observed, 'text-ink'],
-                  ['Inferred', "Jagr's reading of the facts", inv.inferred, 'text-accent'],
-                  ['Unknown', 'Not established or not checked', inv.unknowns, 'text-high'],
-                ] as const
-              ).map(([title, hint, items, tone]) => (
-                <div key={title} className="p-4">
-                  <div className={cx('text-[12.5px] font-semibold', tone)}>{title}</div>
-                  <div className="text-[11.5px] text-ink-3">{hint}</div>
-                  <ul className="mt-2.5 space-y-2 text-[12.5px] leading-snug text-ink-2">
-                    {items.map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <SectionHeader title="Evidence" count={inv.evidence.length} hint="Each item shows its source, how it reached Jagr, and when. Open it to see the record." />
+            <SectionHeader title="All evidence" count={inv.evidence.length} hint="Every record Jagr gathered, including checks that came back normal and sources it could not read." />
             <div className="divide-y divide-line rounded-xl border border-line bg-surface px-4">
               {inv.evidence.map((e) => (
                 <EvidenceItem key={e.id} evidence={e} source={<ProviderName provider={e.provider} short />} state={stateOf(e.provider)} action={e.link ? <SourceLinkButton link={e.link} compact /> : undefined} />
