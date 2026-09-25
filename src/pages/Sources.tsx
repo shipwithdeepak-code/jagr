@@ -1,4 +1,4 @@
-import { ArrowLeft, Info, Lock } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import type { ConnectionState, ProviderId, RecordKind } from '@/product/types';
 import { externalUrl, PROVIDERS, resolveRef } from '@/product/integrations/adapters';
@@ -6,16 +6,17 @@ import { defaultWorld } from '@/product/integrations/world';
 import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '@/product/integrations/types';
 import { useProduct } from '@/state/productContext';
 import { fmtDateTime } from '@/lib/time';
-import { ConnectionBadge, PROVIDER_ICON, ProviderName } from '@/components/product';
+import { ConnectionBadge, ProviderName } from '@/components/product';
 import { SeriesChart } from '@/components/charts';
 import { Badge, Button, Card, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { ImportedSources } from '@/components/imports';
-import { SourceCoverage } from '@/components/primitives';
+import { StatusBadge } from '@/components/primitives';
+import { SourceGroups, SourcesOverview } from '@/components/sources';
+import { sourceViews, type SourceGroup } from '@/product/view/sources';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import { WorkspaceTransfer } from '@/components/workspaceTransfer';
 
-const OPS: Record<string, string> = { metrics: 'getMetrics()', issues: 'getIssues()', releases: 'getReleases()', reviews: 'getReviews()', events: 'getEvents()', changes: 'getChanges()', send_email: 'send()' };
 
 export function SourcesPage() {
   const { mode } = useProduct();
@@ -36,12 +37,10 @@ export function SourcesPage() {
 }
 
 function SampleSources() {
-  const { state, setConnection } = useProduct();
-  const toast = useToast();
-  const set = (p: ProviderId, s: ConnectionState, detail: string) => {
-    setConnection(p, s, detail);
-    toast({ tone: 'info', title: `${PROVIDERS[p].name}: ${s}`, body: 'Re-run monitoring to see how Jagr handles it.' });
-  };
+  const { state } = useProduct();
+  const asOf = state.result?.window.end ?? SAMPLE_WINDOW_END;
+  const views = sourceViews(state.connections, { asOf });
+  const email = state.connections.find((c) => c.provider === 'email');
 
   return (
     <>
@@ -58,68 +57,43 @@ function SampleSources() {
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px]">
         <Info size={15} className="mt-0.5 shrink-0 text-ink-2" />
         <div className="text-ink-2">
-          <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. Live connectors (Amplitude, GitHub, Jira Cloud, Intercom, and Slack for outbound alerts) run on a Jagr server in single-tenant mode, with credentials held server-side — never in this browser app. Connecting them from this page (OAuth) is not built yet. You can simulate an outage to see how Jagr reports gaps instead of guessing.
+          <span className="font-medium text-ink">No live connections in this build.</span> Every source below runs on deterministic fixture data and is labelled <ConnectionBadge state="simulated" /> — in the Agent Trace every tool result from it is tagged <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>. Live connectors (Amplitude, GitHub, Jira Cloud, Intercom, and Slack for outbound alerts) run on a Jagr server in single-tenant mode, with credentials held server-side — never in this browser app. Connecting them from this page (OAuth) is not built yet. You can simulate an outage, an error or a stale sync to see how Jagr reports gaps instead of guessing.
         </div>
       </div>
-      <SourceCoverage connections={state.connections} />
-      <div className="grid gap-4 md:grid-cols-2">
-        {state.connections.map((c) => {
-          const meta = PROVIDERS[c.provider];
-          const Icon = PROVIDER_ICON[c.provider];
-          const watchers = state.watches.filter((w) => w.sources.includes(c.provider)).map((w) => w.name);
+      <SourcesOverview views={views} />
+      <SourceGroups
+        views={views}
+        extra={(v) => {
+          const watchers = state.watches.filter((w) => w.sources.includes(v.id)).map((w) => w.name);
           return (
-            <Card key={c.provider}>
-              <div className="flex items-start gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-subtle text-ink-2">
-                  <Icon size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14px] font-semibold">{meta.name}</span>
-                    <ConnectionBadge state={c.state} />
-                  </div>
-                  <div className="text-[12px] text-ink-3">{c.detail}</div>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {meta.capabilities.map((cap) => (
-                  <Mono key={cap} className="rounded bg-subtle px-1.5 py-0.5 text-ink-2">
-                    {OPS[cap]}
-                  </Mono>
-                ))}
-              </div>
-              {c.provider === 'jira' && (
-                <div className="mt-3 rounded-lg border border-line bg-subtle/60 px-3 py-2 text-[12px] text-ink-2">
-                  <span className="font-medium text-ink">Real connector: implemented, not configured.</span> <Mono>JiraCloudAdapter</Mono> (REST v3 <Mono>search/jql</Mono> + project versions) is built and tested against mocked Jira responses. It needs server-side credentials — an API token can’t safely live in a browser app — so this browser build uses simulated Jira data; a Jagr server in single-tenant mode reads the real project. Jira release dates are day-precision; minute-level release timing comes from the stores.
-                </div>
+            <>
+              <p className="mt-2 text-[12px] text-ink-3">
+                {watchers.length ? `Used by ${watchers.join(', ')}` : 'Not used by any watch'} · production connector: {PROVIDERS[v.id].realApi}
+              </p>
+              {v.id === 'jira' && (
+                <p className="mt-2 text-[12px] text-ink-3">
+                  <span className="font-medium text-ink-2">Real connector: implemented, not configured here.</span> It needs server-side credentials — an API token can’t safely live in a browser app — so this browser build uses simulated Jira data. Jira release dates are day-precision; minute-level timing comes from the stores.
+                </p>
               )}
-              <div className="mt-2 text-[12px] text-ink-3">
-                {c.provider === 'email' ? 'Used for alerts and the morning brief.' : watchers.length ? `Used by ${watchers.join(', ')}` : 'Not used by any watch'} · production connector: {meta.realApi}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
-                <Button size="sm" icon={Lock} disabled title="OAuth is not implemented in this build">
-                  Connect
-                </Button>
-                {c.state !== 'simulated' && (
-                  <Button size="sm" onClick={() => set(c.provider, 'simulated', c.provider === 'email' ? 'Simulated outbox — emails are rendered in Jagr, never delivered' : 'Deterministic fixture data (no credentials configured)')}>
-                    Use simulated data
-                  </Button>
-                )}
-                {c.state !== 'unavailable' && (
-                  <Button size="sm" variant="ghost" onClick={() => set(c.provider, 'unavailable', 'Connection timed out (simulated outage)')}>
-                    Simulate outage
-                  </Button>
-                )}
-                {c.state !== 'error' && (
-                  <Button size="sm" variant="ghost" onClick={() => set(c.provider, 'error', '401 — token expired (simulated)')}>
-                    Simulate error
-                  </Button>
-                )}
-              </div>
-            </Card>
+              <SimulationControls id={v.id} group={v.group} />
+            </>
           );
-        })}
-      </div>
+        }}
+      />
+      {email && (
+        <section aria-labelledby="channels-h" className="mt-8">
+          <h2 id="channels-h" className="text-[13px] font-semibold tracking-tight">
+            Delivery channel
+          </h2>
+          <p className="mt-0.5 mb-3 text-[12.5px] text-ink-3">Where Jagr sends alerts and the morning brief. Not an evidence source.</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-[12.5px]">
+            <span className="font-medium text-ink">{PROVIDERS.email.name}</span>
+            <StatusBadge kind="source" value={email.state} />
+            <span className="min-w-0 break-words text-ink-3">{email.detail}</span>
+            <SimulationControls id="email" group={email.state === 'simulated' ? 'simulated' : email.state === 'unavailable' ? 'unavailable' : email.state === 'error' ? 'error' : 'simulated'} inline />
+          </div>
+        </section>
+      )}
       <p className="mt-6 text-[12.5px] text-ink-3">
         The demo-night replay uses its own adapters — see <Link to="/integrations" className="text-accent hover:underline">demo integrations</Link>.
       </p>
@@ -169,6 +143,39 @@ export function SourceRecordPage() {
         {ref.kind === 'metric' ? <MetricView m={rec as MetricSeries} /> : <KeyValue items={fields(ref.kind, rec)} />}
       </Card>
     </>
+  );
+}
+
+const SAMPLE_WINDOW_END = '2026-09-24T08:05:00.000Z';
+const SIMULATED_DETAIL = 'Deterministic fixture data (no credentials configured)';
+
+/** Sample workspace only: put a simulated source into a failure state to see how Jagr reports gaps. */
+function SimulationControls({ id, group, inline = false }: { id: ProviderId; group: SourceGroup; inline?: boolean }) {
+  const { state, setConnection } = useProduct();
+  const toast = useToast();
+  const asOf = state.result?.window.end ?? SAMPLE_WINDOW_END;
+  const set = (s: ConnectionState, detail: string, label: string, freshAsOf?: string) => {
+    setConnection(id, s, detail, freshAsOf ? { freshAsOf } : undefined);
+    toast({ tone: 'info', title: `${PROVIDERS[id].name}: ${label}`, body: 'Run monitoring again to see how Jagr handles it.' });
+  };
+  const staleAt = new Date(Date.parse(asOf) - 192 * 60_000).toISOString();
+  const buttons = [
+    group !== 'simulated' && { label: 'Use simulated data', run: () => set('simulated', id === 'email' ? 'Simulated outbox — emails are rendered in Jagr, never delivered' : SIMULATED_DETAIL, 'simulated data') },
+    group !== 'stale' && id !== 'email' && { label: 'Simulate stale sync', run: () => set('simulated', `${SIMULATED_DETAIL} — last sync simulated 3h 12m before the window ends`, 'stale sync', staleAt) },
+    group !== 'unavailable' && { label: 'Simulate outage', run: () => set('unavailable', 'Connection timed out (simulated outage)', 'outage') },
+    group !== 'error' && { label: 'Simulate error', run: () => set('error', '401 — token expired (simulated)', 'error') },
+  ].filter((b): b is { label: string; run: () => void } => !!b);
+  return (
+    <div className={inline ? 'ml-auto flex flex-wrap gap-1.5' : 'mt-3 border-t border-dashed border-line pt-3'}>
+      {!inline && <div className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Simulation</div>}
+      <div className="flex flex-wrap gap-1.5">
+        {buttons.map((b) => (
+          <Button key={b.label} size="sm" variant="ghost" onClick={b.run}>
+            {b.label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }
 

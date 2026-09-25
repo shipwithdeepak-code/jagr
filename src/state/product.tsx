@@ -167,8 +167,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     [],
   );
   const setConnection = useCallback(
-    (provider: ProviderId, state: ConnectionState, detail: string) =>
-      setState((s) => (s.workspace?.mode === 'imported' ? s : { ...s, connections: s.connections.map((c) => (c.provider === provider ? { ...c, state, detail, updatedAt: CLOCK } : c)), stale: true })),
+    // `freshAsOf` simulates a source whose last successful sync stops early (stale); omitted = current.
+    (provider: ProviderId, state: ConnectionState, detail: string, opts?: { freshAsOf?: string }) =>
+      setState((s) => (s.workspace?.mode === 'imported' ? s : { ...s, connections: s.connections.map((c) => (c.provider === provider ? { ...c, state, detail, updatedAt: CLOCK, freshAsOf: opts?.freshAsOf } : c)), stale: true })),
     [],
   );
   const setBrief = useCallback((brief: BriefSchedule) => setState((s) => ({ ...s, brief, stale: true })), []);
