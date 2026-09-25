@@ -205,6 +205,9 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
       freshAsOf: changed ? undefined : existing?.freshAsOf,
       lastSyncAt: changed ? undefined : existing?.lastSyncAt,
       lastError: changed ? undefined : existing?.lastError,
+      createdAt: existing?.createdAt ?? existing?.updatedAt ?? now,
+      lastSuccessfulCheckAt: changed ? undefined : existing?.lastSuccessfulCheckAt,
+      capabilities: changed ? undefined : existing?.capabilities,
       updatedAt: changed || !existing ? now : existing.updatedAt,
     };
     await repos.connections.save(ws.id, next);

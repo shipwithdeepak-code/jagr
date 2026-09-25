@@ -13,6 +13,7 @@ import { json, redirect } from './http/types';
 import { authenticate, clearCookie, cookie, CSRF_COOKIE, csrfOk, OAUTH_COOKIE, openOAuthState, parseCookies, sealOAuthState, SESSION_COOKIE, startSession, hashToken, type Principal } from './auth';
 import { randomToken } from './identity/pkce';
 import { OWNER_WORKSPACE_ID } from './singleTenant';
+import { connectionView } from '../src/product/connections/model';
 import { watchFromTemplate, WATCH_TEMPLATES } from '../src/product/catalog';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
@@ -94,7 +95,7 @@ export function createApp(rt: Runtime) {
     const [section, sub] = rest;
 
     if (!section && req.method === 'GET') {
-      const connections = (await rt.repos.connections.list(id)).map(({ secretRef: _s, ...c }) => (void _s, c));
+      const connections = (await rt.repos.connections.list(id)).map((c) => connectionView(c, rt.clock.now()));
       return json(200, { workspace: publicWorkspace(ws), membership: m, connections, watches: await rt.repos.watches.list(id) });
     }
     // Watches are created from the catalog's templates; sources must be connections in this workspace.

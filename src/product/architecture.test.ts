@@ -51,7 +51,7 @@ describe('portable core (src/product)', () => {
   });
 
   it('the investigation engine never names a vendor or a vendor source', () => {
-    const engine = core.filter((p) => /src\/product\/(engine|roles|ports|app|export)\//.test(p) || /agent\/(investigator|tools|planner|plannerPrompt|plannerSchema|actions|decisions)\.ts$/.test(p) || /product\/(progress|presentation)\.ts$/.test(p));
+    const engine = core.filter((p) => /src\/product\/(engine|roles|ports|app|export|connections)\//.test(p) || /agent\/(investigator|tools|planner|plannerPrompt|plannerSchema|actions|decisions)\.ts$/.test(p) || /product\/(progress|presentation)\.ts$/.test(p));
     expect(engine.length).toBeGreaterThan(10);
     const bad = engine.flatMap((p) => {
       const hits = code(p).match(/'(jira|ga4|app_store|google_play|amplitude|github|intercom|slack|sentry|mixpanel)'|\b(Jira|GA4|App Store|Google Play|Play Store|Amplitude|GitHub|Intercom|Mixpanel|Sentry)\b/g);

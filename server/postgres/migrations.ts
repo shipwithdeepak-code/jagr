@@ -30,6 +30,14 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
         updated_at timestamptz not null default now());
     `,
   },
+  {
+    // Connections domain: every connection carries createdAt (records before it get their updatedAt).
+    id: '002_connection_created_at',
+    sql: `
+      update workspace_docs set doc = jsonb_set(doc, '{createdAt}', doc->'updatedAt')
+      where collection = 'connections' and doc ? 'updatedAt' and not doc ? 'createdAt';
+    `,
+  },
 ];
 
 export async function migrate(sql: SqlClient): Promise<string[]> {

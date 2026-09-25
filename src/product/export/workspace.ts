@@ -79,13 +79,22 @@ const emailContent = (e: EmailNotification): Omit<EmailNotification, 'to' | 'fro
   return rest;
 };
 
-const exportConnection = (c: Connection): ExportConnection => {
-  const { workspaceId: _w, secretRef: _s, lastError: _e, ...rest } = c;
-  void _w;
-  void _s;
-  void _e;
-  return rest;
-};
+/** Explicit field list: the export format is independent of the stored record (which grows over time). */
+const exportConnection = (c: Connection): ExportConnection => ({
+  id: c.id,
+  source: c.source,
+  provider: c.provider,
+  roles: c.roles,
+  authKind: c.authKind,
+  state: c.state,
+  detail: c.detail,
+  ...(c.label ? { label: c.label } : {}),
+  config: c.config,
+  ...(c.externalAccount ? { externalAccount: c.externalAccount } : {}),
+  ...(c.freshAsOf ? { freshAsOf: c.freshAsOf } : {}),
+  ...(c.lastSyncAt ? { lastSyncAt: c.lastSyncAt } : {}),
+  updatedAt: c.updatedAt,
+});
 
 // ── Browser-local workspace ──────────────────────────────────
 

@@ -180,12 +180,14 @@ describe('connected workspaces: isolation and health', () => {
     const connectors = connectorsFrom([reference as ConnectorDescriptor<unknown>]);
     expect((await checkConnection({ ...w, http: scriptedHttp(route).http, connectors }, 'ws-1', connection.id)).state).toBe('connected');
     expect((await w.repos.connections.get('ws-1', connection.id))!.externalAccount).toBe('web');
+    expect((await w.repos.connections.get('ws-1', connection.id))!.lastSuccessfulCheckAt).toBe(w.clock.now());
 
     const outage = await checkConnection({ ...w, http: scriptedHttp(() => ({ status: 503 })).http, connectors }, 'ws-1', connection.id);
     expect(outage.state).toBe('unavailable');
     const afterOutage = (await w.repos.connections.get('ws-1', connection.id))!;
     expect(afterOutage.state).toBe('connected');
     expect(afterOutage.lastError).toMatch(/503/);
+    expect(afterOutage.lastErrorAt).toBe(w.clock.now());
 
     expect((await checkConnection({ ...w, http: scriptedHttp(() => ({ status: 401 })).http, connectors }, 'ws-1', connection.id)).state).toBe('needs_reconnect');
     expect((await w.repos.connections.get('ws-1', connection.id))!.state).toBe('needs_reconnect');

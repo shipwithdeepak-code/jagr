@@ -34,6 +34,23 @@ describe('Postgres specifics', () => {
     expect(await migrate(sql)).toEqual([]);
   });
 
+  it('002 backfills createdAt on connections stored before it, and leaves others alone', async () => {
+    const sql = await freshPglite();
+    await sql.exec('create table if not exists jagr_migrations (id text primary key, applied_at timestamptz not null default now())');
+    await sql.transaction(async (c) => {
+      await c.exec(MIGRATIONS[0].sql);
+      await c.query('insert into jagr_migrations (id) values ($1)', [MIGRATIONS[0].id]);
+    });
+    await sql.query("insert into workspace_docs (workspace_id, collection, id, doc) values ('w', 'connections', 'old', $1::jsonb), ('w', 'connections', 'new', $2::jsonb), ('w', 'watches', 'x', $3::jsonb)", [
+      JSON.stringify({ id: 'old', updatedAt: '2026-01-01T00:00:00.000Z' }),
+      JSON.stringify({ id: 'new', updatedAt: '2026-02-01T00:00:00.000Z', createdAt: '2025-12-01T00:00:00.000Z' }),
+      JSON.stringify({ id: 'x', updatedAt: '2026-01-01T00:00:00.000Z' }),
+    ]);
+    expect(await migrate(sql)).toEqual(MIGRATIONS.slice(1).map((m) => m.id));
+    const rows = (await sql.query<{ id: string; doc: { createdAt?: string } }>('select id, doc from workspace_docs order by id')).rows;
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.doc.createdAt]))).toEqual({ new: '2025-12-01T00:00:00.000Z', old: '2026-01-01T00:00:00.000Z', x: undefined });
+  });
+
   it('secrets are encrypted at rest: no plaintext secret or data key in the table', async () => {
     const sql = await db();
     const store = postgresSecretStore(sql, envKeyProvider(keyEnv()));

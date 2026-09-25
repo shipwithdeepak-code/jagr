@@ -36,6 +36,8 @@ export interface ConnectorCheck {
   detail: string;
   /** A non-secret account label, e.g. the project or org name. */
   account?: string;
+  /** Capabilities / scopes the credential was found to have (non-secret), when the provider reports them. */
+  capabilities?: string[];
 }
 
 export interface ConnectorDescriptor<C = unknown> {

@@ -215,8 +215,10 @@ export async function checkConnection(deps: MonitoringDeps, workspaceId: string,
   const now = deps.clock.now();
   const next: Connection =
     result.state === 'unavailable'
-      ? { ...c, lastError: result.detail, updatedAt: now }
-      : { ...c, state: result.state, detail: result.detail, externalAccount: result.account ?? c.externalAccount, lastError: result.state === 'connected' ? undefined : result.detail, updatedAt: now };
+      ? { ...c, lastError: result.detail, lastErrorAt: now, updatedAt: now }
+      : result.state === 'connected'
+        ? { ...c, state: 'connected', detail: result.detail, externalAccount: result.account ?? c.externalAccount, capabilities: result.capabilities ?? c.capabilities, lastError: undefined, lastErrorAt: undefined, lastSuccessfulCheckAt: now, updatedAt: now }
+        : { ...c, state: result.state, detail: result.detail, lastError: result.detail, lastErrorAt: now, updatedAt: now };
   await deps.repos.connections.save(workspaceId, next);
   return result;
 }

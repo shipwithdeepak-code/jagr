@@ -67,11 +67,20 @@ export interface Connection {
   label?: { name: string; short: string };
   /** Non-secret settings: projects, repos, metric bindings, area mappings, channel ids. */
   config: Record<string, unknown>;
+  /** A non-secret label for the provider-side account: project, org, site or workspace name. */
   externalAccount?: string;
   secretRef?: SecretRef;
   freshAsOf?: ISO;
   lastSyncAt?: ISO;
   lastError?: string;
+  /** When a credential check last succeeded. */
+  lastSuccessfulCheckAt?: ISO;
+  /** When the last error was recorded (so health can tell an old error from a current one). */
+  lastErrorAt?: ISO;
+  /** Provider-side capabilities / scopes the connection was granted, as reported by the provider (non-secret). */
+  capabilities?: string[];
+  /** Absent on connections stored before connections carried it (see connections/model.ts upgradeConnection). */
+  createdAt?: ISO;
   updatedAt: ISO;
 }
 
