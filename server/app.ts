@@ -8,6 +8,7 @@ import { commitServerImport, exportServerWorkspace, planImport } from '../src/pr
 import { schedulerTick } from '../src/product/app/scheduler';
 import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun } from '../src/product/app/monitoring';
 import { buildSnapshot } from '../src/product/app/workspaceSnapshot';
+import { replayInvestigation } from '../src/product/app/replay';
 import { importFile } from '../src/product/imports/schemas';
 import { WriteConflict } from '../src/product/ports/persistence';
 import type { Runtime } from './runtime';
@@ -204,6 +205,27 @@ export function createApp(rt: Runtime) {
         throw e;
       }
       return json(404, { error: 'Not found.' });
+    }
+    // Replay: the stored investigation only — no source is read, nothing re-runs.
+    if (section === 'investigations' && sub && rest[2] === 'replay' && req.method === 'GET') {
+      const inv = await rt.repos.investigations.get(id, sub);
+      if (!inv) return json(404, { error: 'Investigation not found.' });
+      const decisions = Object.fromEntries((await rt.repos.decisions.list(id)).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
+      const pass = req.query.pass ? Number(req.query.pass) : undefined;
+      return json(200, replayInvestigation(inv, decisions, Number.isInteger(pass) ? pass : undefined));
+    }
+    // Run again: a NEW run of the investigation's watches over current data. Separate from replay.
+    if (section === 'investigations' && sub && rest[2] === 'rerun' && req.method === 'POST') {
+      const inv = await rt.repos.investigations.get(id, sub);
+      if (!inv) return json(404, { error: 'Investigation not found.' });
+      // Imported and sample data do not change, and re-running them replaces investigations: replay instead.
+      if (ws.mode !== 'connected') return json(409, { error: 'This workspace’s data does not change, so running again would only repeat it. Use the replay of the original investigation.' });
+      const at = rt.clock.now();
+      let investigations = 0;
+      // A new pass is appended to the investigation; the original passes stay as recorded.
+      for (const watchId of inv.watchIds) investigations += (await runWatchJob(rt, { workspaceId: id, payload: { watchId, dueAt: at } })).investigations;
+      await audit(id, p, 'investigation.rerun', inv.id);
+      return json(200, { kind: 'run_again', at, investigations, note: 'A new run over current data. Its results can differ from the original investigation, which is kept as recorded.' });
     }
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {

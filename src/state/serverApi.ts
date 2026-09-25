@@ -1,4 +1,5 @@
 import type { WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
+import type { InvestigationReplay } from '@/product/app/replay';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
 import type { ConnectionView } from '@/product/connections/model';
 import type { ConnectorCheck } from '@/product/integrations/connectors/types';
@@ -97,6 +98,10 @@ export const serverApi = {
   addImport: (ws: string, kind: ImportKind, filename: string, text: string) => call('POST', `/api/workspaces/${encodeURIComponent(ws)}/imports`, { kind, filename, text }),
   removeImport: (ws: string, id: string) => call('DELETE', `/api/workspaces/${encodeURIComponent(ws)}/imports/${encodeURIComponent(id)}`),
   exportWorkspace: (ws: string) => call<WorkspaceExportV1>('GET', `/api/workspaces/${encodeURIComponent(ws)}/export`),
+  /** The original investigation from storage (no provider is read). */
+  replay: (ws: string, inv: string, pass?: number) => call<InvestigationReplay>('GET', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/replay${pass !== undefined ? `?pass=${pass}` : ''}`),
+  /** A new run over current data (connected workspaces); the original investigation is kept as recorded. */
+  runAgain: (ws: string, inv: string) => call<{ kind: 'run_again'; investigations: number; note: string }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/rerun`),
   connectionTypes: () => call<{ types: ConnectionTypeInfo[] }>('GET', '/api/connection-types').then((r) => r.types),
   connect: (ws: string, input: { provider: string; config: Record<string, unknown>; credential?: Record<string, string> }) => call<{ connection: ConnectionView; check: ConnectorCheck }>('PUT', `/api/workspaces/${encodeURIComponent(ws)}/connections`, input),
   testConnection: (ws: string, id: string) => call<{ connection: ConnectionView; check: ConnectorCheck }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/connections/${encodeURIComponent(id)}/check`),
