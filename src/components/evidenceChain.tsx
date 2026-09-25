@@ -13,6 +13,7 @@ const MARKER: Record<ChainStage, string> = {
   observed: 'size-2 rounded-full bg-ink',
   correlated: 'size-2.5 rounded-full border-2 border-ink bg-surface',
   inferred: 'size-2.5 rounded-full border-2 border-accent bg-surface',
+  assumed: 'size-2.5 rounded-full border-2 border-dotted border-ink-3 bg-surface',
   unknown: 'size-2.5 rounded-full border-2 border-dashed border-high bg-surface',
   attention: 'size-2.5 rotate-45 rounded-[2px] border-2 border-ink bg-surface',
   recommendation: 'size-2 rounded-[1px] bg-accent',
@@ -37,10 +38,12 @@ function Provenance({ p, stateOf }: { p: ChainProvenance; stateOf: (p: ProviderI
       {p.sources.map((s) => (
         <span key={s} className="inline-flex items-center gap-1.5">
           <ProviderName provider={s} short />
-          {modeLabel(stateOf(s)) && <span className="text-[10px] font-semibold tracking-[0.06em] uppercase">{modeLabel(stateOf(s))}</span>}
+          {/* The mode recorded with the evidence wins: an old investigation keeps the data mode it was built on. */}
+          {modeLabel(p.mode ?? stateOf(s)) && <span className="text-[10px] font-semibold tracking-[0.06em] uppercase">{modeLabel(p.mode ?? stateOf(s))}</span>}
         </span>
       ))}
       {p.at && <span className="num font-mono">{fmtTime(p.at)} UTC</span>}
+      {p.freshAsOf && <span className="font-medium text-high">data only to {fmtTime(p.freshAsOf)} UTC</span>}
       {p.records && p.records > 1 && <span className="num">{p.records} records</span>}
       {p.query && <span>query: {p.query}</span>}
       {p.link && (

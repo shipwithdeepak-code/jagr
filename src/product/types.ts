@@ -181,6 +181,28 @@ export interface EvidenceItem {
   timing?: ChangeTiming;
   /** Gap evidence: why the source's data is missing or incomplete. */
   gap?: 'unavailable' | 'error' | 'not_configured' | 'stale' | 'no_data';
+  /**
+   * The evidence snapshot: where the statement came from, captured when it was read, so an old
+   * investigation reads the same even after the source (or its connection) changes. Absent on
+   * investigations recorded before snapshots existed.
+   */
+  provenance?: EvidenceProvenance;
+}
+
+export interface EvidenceProvenance {
+  /** How the data reached Jagr. Absent when nothing was read (a source that was down or not set up). */
+  mode?: 'connected' | 'imported' | 'simulated';
+  sources: ProviderId[];
+  /** When Jagr read it. */
+  fetchedAt: ISO;
+  /** The records the statement rests on (capped), as they were when read. */
+  records: { externalId: string; url?: string; observedAt: ISO }[];
+  /** More records backed the statement than are listed. */
+  moreRecords?: number;
+  /** The source's data was complete only up to here at read time. */
+  freshAsOf?: ISO;
+  /** Metric readings the statement rests on. */
+  values?: { metric: string; current: number; baseline: number; baselineWindow: string; unit: 'percent' | 'count' | 'currency' };
 }
 
 /**
@@ -319,6 +341,11 @@ export interface InvestigationRun {
 }
 
 export interface WatchInvestigation {
+  /**
+   * What the reasoning takes as given without having checked it (e.g. that a baseline window is
+   * representative). Derived from the evidence the investigation used — never generated text.
+   */
+  assumptions?: string[];
   id: string;
   watchId: string;
   watchIds: string[];

@@ -91,7 +91,18 @@ export function metricEvidence(series: MetricSeries, reading: MetricReading, sim
   const statement = degraded
     ? `${P(series.source).short}: ${series.name} is ${fmtValue(series, reading.currentSinceOnset)} vs ${fmtValue(series, series.baseline.mean)} baseline (${fmtMagnitude(series, reading)}) since ${fmtTime(reading.onsetAt!)}.`
     : `${P(series.source).short}: ${series.name} is within its normal range (${fmtMagnitude(series, reading)} vs baseline).`;
-  return { id: `${series.source}:metric:${series.key}`, provider: series.source, direction: degraded ? 'degraded' : 'stable', statement, onsetAt: reading.onsetAt, refs: [ref], link };
+  const p = series.provenance;
+  return {
+    id: `${series.source}:metric:${series.key}`,
+    provider: series.source,
+    direction: degraded ? 'degraded' : 'stable',
+    statement,
+    onsetAt: reading.onsetAt,
+    refs: [ref],
+    link,
+    // Snapshot: the readings the statement rests on, as read.
+    provenance: { mode: p?.mode, sources: [series.source], fetchedAt: p?.fetchedAt ?? series.points[series.points.length - 1]?.t ?? '', records: p ? [{ externalId: p.externalId, url: p.url, observedAt: p.observedAt }] : [], values: { metric: series.name, current: degraded ? reading.currentSinceOnset : reading.current, baseline: series.baseline.mean, baselineWindow: series.baseline.window, unit: series.unit } },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────

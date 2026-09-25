@@ -24,6 +24,7 @@ import { ProviderUnavailableError } from '../integrations/types';
 import type { SourceRegistry } from '../roles/registry';
 import type { SourceId } from '../roles/types';
 import { isSourceId } from '../roles/types';
+import { assumptionsOf } from '../evidence/assumptions';
 import type { World } from '../integrations/world';
 import { planJobs } from '../scheduler';
 import { ATTENTION_RANK, assessAttention } from './attention';
@@ -423,6 +424,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
         agentHypotheses: out.hypotheses,
       });
       applyCompetingExplanations(inv, out.hypotheses, out.externalIssue);
+      inv.assumptions = assumptionsOf(inv);
       inv.summary = summarise(inv, P);
       // LIFECYCLE
       const lastOwnerRun = [...inv.runs].reverse().find((x) => x.watchId === watch.id);

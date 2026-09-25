@@ -12,10 +12,11 @@ import type {
   ToolName,
   TraceStep,
   Watch,
+  EvidenceProvenance,
 } from '../types';
 import { AREA_LABEL, AREA_METRICS, metricKeyOf, metricMeta, signalMeta } from '../catalog';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters';
-import type { ChangeRecord, FeedbackItem, SourceId, WorkItem } from '../roles/types';
+import type { ChangeRecord, FeedbackItem, Provenance, SourceId, WorkItem } from '../roles/types';
 import { isSourceId } from '../roles/types';
 import type { SourceRegistry } from '../roles/registry';
 import { changeLabel, changePhrase, metricEvidence, timedChange, type Gathered } from '../engine/investigate';
@@ -234,16 +235,51 @@ export async function runInvestigation(args: {
 
   const g: Gathered = { evidence: [], gaps: [], notInWatch: [], changes: [], workItems: [], feedback: [] };
   const tags = new Map<string, Set<Tag>>();
+  const refKey = (r: SourceRef) => `${r.provider}:${r.kind}:${r.id}`;
+  // Every record read in this pass, by reference — for the evidence snapshot and record links.
+  const readRecords = new Map<string, Provenance>();
+  const staleAsOf = new Map<ProviderId, string>();
+  const modeOf = (p: ProviderId): EvidenceProvenance['mode'] => {
+    const st = args.connectionState(p);
+    return st === 'connected' ? 'connected' : st === 'imported' ? 'imported' : st === 'simulated' ? 'simulated' : undefined;
+  };
+  const snapshot = (e: EvidenceItem): EvidenceProvenance => {
+    const recs = [...new Map(e.refs.map((r) => [refKey(r), readRecords.get(refKey(r))])).values()].filter((x): x is Provenance => !!x);
+    const shown = recs.slice(0, 20);
+    return {
+      ...e.provenance,
+      // Nothing was read from a source that was down or not set up: no data mode is claimed for it.
+      mode: e.provenance?.mode ?? (e.direction === 'gap' ? undefined : (recs[0]?.mode ?? modeOf(e.provider))),
+      sources: e.provenance?.sources ?? [e.provider],
+      fetchedAt: e.provenance?.fetchedAt || recs[0]?.fetchedAt || at,
+      records: e.provenance?.records?.length ? e.provenance.records : shown.map((p) => ({ externalId: p.externalId, url: p.url, observedAt: p.observedAt })),
+      ...(recs.length > shown.length ? { moreRecords: recs.length - shown.length } : {}),
+      ...(staleAsOf.has(e.provider) ? { freshAsOf: staleAsOf.get(e.provider) } : {}),
+    };
+  };
   const add = (e: EvidenceItem, ...t: Tag[]) => {
-    g.evidence.push(e);
-    tags.set(e.id, new Set(t));
+    const item = { ...e, refs: [...new Map(e.refs.map((r) => [refKey(r), r])).values()] };
+    // The same finding reported twice (e.g. by two queries) is one piece of evidence, not two.
+    const dup = g.evidence.findIndex((x) => x.id === item.id);
+    if (dup >= 0) {
+      const prev = g.evidence[dup];
+      g.evidence[dup] = { ...prev, refs: [...new Map([...prev.refs, ...item.refs].map((r) => [refKey(r), r])).values()] };
+      g.evidence[dup] = { ...g.evidence[dup], provenance: snapshot({ ...g.evidence[dup], provenance: undefined }) };
+      t.forEach((x) => tags.get(item.id)?.add(x));
+      return;
+    }
+    g.evidence.push({ ...item, provenance: snapshot(item) });
+    tags.set(item.id, new Set(t));
   };
   const has = (t: Tag) => [...tags.values()].some((s) => s.has(t));
   const withTag = (t: Tag) => g.evidence.filter((e) => tags.get(e.id)?.has(t));
   // Each record's own page in its source (provenance.url), used for links from connected sources.
   const recordUrls = new Map<string, string>();
-  const refKey = (r: SourceRef) => `${r.provider}:${r.kind}:${r.id}`;
-  const remember = (records: { ref: SourceRef; provenance?: { url?: string } }[]) => records.forEach((r) => r.provenance?.url && recordUrls.set(refKey(r.ref), r.provenance.url));
+  const remember = (records: { ref: SourceRef; provenance?: Provenance }[]) =>
+    records.forEach((r) => {
+      if (r.provenance?.url) recordUrls.set(refKey(r.ref), r.provenance.url);
+      if (r.provenance) readRecords.set(refKey(r.ref), r.provenance);
+    });
   const link = (ref: SourceRef, label: string) => makeLink(ref, label, args.simulatedLinks(ref.provider), recordUrls.get(refKey(ref)));
   const areaLabel = AREA_LABEL[area].toLowerCase();
   const since = addMinutes(onsetAt, -60);
@@ -282,6 +318,7 @@ export async function runInvestigation(args: {
    */
   const staleGap = (source: SourceId, freshAsOf: string) => {
     const detail = `${P(source).name} data is only complete up to ${fmtTime(freshAsOf)} (its last sync) — anything after that was not seen.`;
+    staleAsOf.set(source, freshAsOf);
     if (!g.gaps.some((x) => x.provider === source)) {
       g.gaps.push({ provider: source, detail, stale: true, freshAsOf });
       add({ id: `${source}:stale`, provider: source, direction: 'gap', statement: detail, refs: [], gap: 'stale' }, 'unavailable');

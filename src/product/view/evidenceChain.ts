@@ -12,7 +12,7 @@ import { hypothesisLabel } from '../agent/investigator';
  * structured reasoning only, never a model's chain of thought.
  */
 
-export const CHAIN_STAGES = ['signal', 'observed', 'correlated', 'inferred', 'unknown', 'attention', 'recommendation', 'approval'] as const;
+export const CHAIN_STAGES = ['signal', 'observed', 'correlated', 'inferred', 'assumed', 'unknown', 'attention', 'recommendation', 'approval'] as const;
 export type ChainStage = (typeof CHAIN_STAGES)[number];
 
 export const CHAIN_STAGE_LABEL: Record<ChainStage, string> = {
@@ -20,6 +20,7 @@ export const CHAIN_STAGE_LABEL: Record<ChainStage, string> = {
   observed: 'Observed',
   correlated: 'Correlated',
   inferred: 'Inferred',
+  assumed: 'Assumed',
   unknown: 'Unknown',
   attention: 'Attention',
   recommendation: 'Recommendation',
@@ -29,6 +30,10 @@ export const CHAIN_STAGE_LABEL: Record<ChainStage, string> = {
 /** Where a link came from. Sources are resolved to names and data modes by the UI. */
 export interface ChainProvenance {
   sources: ProviderId[];
+  /** Data mode recorded when the evidence was read (the snapshot) — authoritative over the current connection. */
+  mode?: 'connected' | 'imported' | 'simulated';
+  /** The source's data was complete only up to here when it was read. */
+  freshAsOf?: ISO;
   at?: ISO;
   link?: SourceLink;
   /** How many source records back the statement. */
@@ -59,6 +64,8 @@ export interface EvidenceChain {
 
 const prov = (e: EvidenceItem): ChainProvenance => ({
   sources: [e.provider],
+  mode: e.provenance?.mode,
+  freshAsOf: e.provenance?.freshAsOf,
   at: e.onsetAt,
   link: e.link,
   records: e.refs.length || undefined,
@@ -111,6 +118,9 @@ export function buildEvidenceChain(inv: WatchInvestigation, decisions: Record<st
   if (leading && leading.strength !== 'none') {
     links.push({ id: 'inf-leading', stage: 'inferred', text: `Leading explanation: ${hypothesisLabel(leading.kind)}`, note: `${leading.strength.charAt(0).toUpperCase() + leading.strength.slice(1)} evidence — how much independent evidence lines up, not a probability.` });
   }
+
+  // ASSUMED — premises the reasoning takes as given without having checked them (recorded with the investigation).
+  (inv.assumptions ?? []).forEach((t, i) => links.push({ id: `asm-${i}`, stage: 'assumed', text: t, quiet: true }));
 
   // UNKNOWN — what is not established, and what could not be checked.
   inv.unknowns.forEach((t, i) => links.push({ id: `unk-${i}`, stage: 'unknown', text: t }));
