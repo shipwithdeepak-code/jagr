@@ -87,7 +87,7 @@ export interface SourceViewOptions {
 
 // Reasons follow the connection lifecycle API (docs/CONNECTORS.md): connect, test, reconnect and
 // disconnect exist on the Jagr server, for server workspaces only.
-const BROWSER_CONNECT = 'Live connections belong to a server workspace. Move this workspace to an account; an owner or admin then connects the source with its API key. Nothing is connected from a browser-only workspace.';
+const BROWSER_CONNECT = 'Live sources connect in a server workspace (sign in under Settings), where an owner or admin adds an API key or token. Nothing is connected from a workspace that lives only in this browser. Provider sign-in (OAuth) isn’t built.';
 const BROWSER_LOCAL = 'This workspace lives in your browser, so there is no server connection to test or change.';
 const ENV_MANAGED = 'Managed by the deployment environment (owner credentials): it can be tested here, not changed.';
 const OWNERS_ONLY = 'Only workspace owners and admins can change connections.';
