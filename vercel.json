@@ -8,11 +8,5 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/tick",
-      "schedule": "* * * * *"
-    }
   ]
 }
