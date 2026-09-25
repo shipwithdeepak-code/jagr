@@ -4,8 +4,7 @@ import { defaultSettings } from '@/domain/defaults';
 import { EVALUATION_SCENARIOS, runEvaluationSuite } from '@/evaluation/scenarios';
 import { useWorkspace } from '@/state/workspace';
 import { Badge, Button, Card, cx, PageHeader, SectionTitle, Stat, Tabs } from '@/components/ui';
-import { GoldenEvaluations } from '@/components/GoldenEvaluations';
-import { AdversarialEvaluations } from '@/components/AdversarialEvaluations';
+import { EvaluationLab } from '@/components/evaluationLab';
 import { PlannerEvaluations } from '@/components/PlannerEvaluations';
 
 export function EvaluationsPage() {
@@ -31,12 +30,11 @@ export function EvaluationsPage() {
   return (
     <>
       <PageHeader
-        title="Evaluations"
-        description="An agent that acts without evaluation isn’t something I’d trust. Every case replays a simulated night through the real engine and checks behaviour, not wording: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
+        title="Evaluation Lab"
+        description="An agent that acts without evaluation isn’t something to trust. Every case replays a fixture night through the real engine and checks behaviour, not wording: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
       />
 
-      <GoldenEvaluations />
-      <AdversarialEvaluations />
+      <EvaluationLab />
       <PlannerEvaluations />
 
       <SectionTitle
