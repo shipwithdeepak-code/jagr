@@ -14,6 +14,7 @@ import { authenticate, clearCookie, cookie, CSRF_COOKIE, csrfOk, OAUTH_COOKIE, o
 import { randomToken } from './identity/pkce';
 import { OWNER_WORKSPACE_ID } from './singleTenant';
 import { connectionView } from '../src/product/connections/model';
+import { ConnectionError, configureConnection, disconnectConnection, listConnections, reconnectConnection, typeInfo } from '../src/product/app/connections';
 import { watchFromTemplate, WATCH_TEMPLATES } from '../src/product/catalog';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
@@ -35,6 +36,10 @@ const newId = (prefix: string) => `${prefix}_${randomToken(12)}`;
 const DecisionBody = z.object({ actionId: z.string().min(1), status: z.enum(['approved', 'rejected', 'done']), optionId: z.string().optional(), note: z.string().max(500).optional() }).strict();
 const ImportBody = z.object({ doc: z.unknown(), confirm: z.literal(true).optional() }).strict();
 const WatchBody = z.object({ templateId: z.enum(WATCH_TEMPLATES.map((t) => t.id) as [string, ...string[]]), sources: z.array(z.string()).min(1).optional() }).strict();
+const Credential = z.record(z.string().max(64), z.string().max(8192)).refine((r) => Object.keys(r).length <= 10);
+const ConnectBody = z.object({ provider: z.string().min(1).max(40), config: z.record(z.string(), z.unknown()).default({}), credential: Credential.optional() }).strict();
+const ReconnectBody = z.object({ credential: Credential }).strict();
+const CONNECTION_ERROR_STATUS: Record<ConnectionError['code'], number> = { unknown_provider: 400, invalid_config: 400, invalid_credential: 400, managed_by_environment: 409, not_found: 404, wrong_workspace_mode: 409 };
 const WorkspaceBody = z.object({ name: z.string().min(1).max(80), mode: z.enum(['connected', 'imported']).default('connected') }).strict();
 
 /** What a member sees of a workspace: never secret references or connection errors with provider detail beyond the message. */
@@ -125,12 +130,42 @@ export function createApp(rt: Runtime) {
       await audit(id, p, 'watch.removed', sub);
       return json(200, { ok: true });
     }
-    // Probe a connection's credential now; the outcome is recorded on the connection.
-    if (section === 'connections' && sub && rest[2] === 'check' && req.method === 'POST') {
-      if (!(await rt.repos.connections.get(id, sub))) return json(404, { error: 'Connection not found.' });
-      const result = await checkConnection(rt, id, sub);
-      await audit(id, p, 'connection.checked', sub, result.state);
-      return json(200, { check: result });
+    // ── Connections: list / get / connect-configure / test / reconnect / disconnect ──
+    if (section === 'connections') {
+      const canManage = m.role === 'owner' || m.role === 'admin';
+      const actor = { ref: p.user.id, displayName: p.user.displayName };
+      try {
+        if (!sub && req.method === 'GET') return json(200, { connections: await listConnections(rt, id) });
+        if (!sub && req.method === 'PUT') {
+          if (!canManage) return json(403, { error: 'Only workspace owners and admins can change connections.' });
+          const body = ConnectBody.safeParse(req.body);
+          if (!body.success) return json(400, { error: 'Expected { provider, config, credential? }.' });
+          return json(200, await configureConnection({ ...rt, types: rt.types }, ws, actor, body.data));
+        }
+        const c = sub ? await rt.repos.connections.get(id, sub) : null;
+        if (!c) return json(404, { error: 'Connection not found.' });
+        const action = rest[2];
+        if (!action && req.method === 'GET') return json(200, { connection: connectionView(c, rt.clock.now()) });
+        if (action === 'check' && req.method === 'POST') {
+          const result = await checkConnection(rt, id, c.id);
+          await audit(id, p, 'connection.checked', c.id, result.state);
+          return json(200, { check: result, connection: connectionView((await rt.repos.connections.get(id, c.id))!, rt.clock.now()) });
+        }
+        if (action === 'reconnect' && req.method === 'POST') {
+          if (!canManage) return json(403, { error: 'Only workspace owners and admins can change connections.' });
+          const body = ReconnectBody.safeParse(req.body);
+          if (!body.success) return json(400, { error: 'Expected { credential }.' });
+          return json(200, await reconnectConnection({ ...rt, types: rt.types }, ws, actor, c.id, body.data.credential));
+        }
+        if (!action && req.method === 'DELETE') {
+          if (!canManage) return json(403, { error: 'Only workspace owners and admins can change connections.' });
+          return json(200, { connection: await disconnectConnection({ ...rt, types: rt.types }, ws, actor, c.id) });
+        }
+      } catch (e) {
+        if (e instanceof ConnectionError) return json(CONNECTION_ERROR_STATUS[e.code], { error: e.message, code: e.code });
+        throw e;
+      }
+      return json(404, { error: 'Not found.' });
     }
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {
@@ -201,6 +236,7 @@ export function createApp(rt: Runtime) {
       return json(200, { ok: true }, { cookies: [clearCookie(SESSION_COOKIE, secure), clearCookie(CSRF_COOKIE, secure)] });
     }
     if (head === 'me' && req.method === 'GET') return json(200, { user: p.user, memberships: p.memberships });
+    if (head === 'connection-types' && req.method === 'GET') return json(200, { types: Object.values(rt.types).map(typeInfo) });
 
     if (head === 'workspaces' && !a && req.method === 'POST') {
       const body = WorkspaceBody.safeParse(req.body ?? {});

@@ -35,6 +35,7 @@ const reference: ConnectorDescriptor<Config> = {
   roles: ['changes'],
   config: Config,
   secretKinds: ['api_key'],
+  credentialFields: [{ key: 'token', label: 'Token' }],
   hosts: (cfg) => [cfg.host],
   build: (ctx) => ({
     changes: {

@@ -5,6 +5,7 @@ import type { HttpClient } from '../../ports/http';
 import type { Clock } from '../../ports/clock';
 import { restrictHosts, requestJson } from '../connectors/http';
 import { ConnectorConfigError } from '../connectors/errors';
+import type { ConnectorCheck } from '../connectors/types';
 import { redactPersonalData } from '../../lib/redact';
 
 /**
@@ -92,5 +93,20 @@ export const slackChannelFactory: ChannelFactory = (conn, ctx) => {
   const s = ctx.secret;
   const token = s?.kind === 'api_key' ? s.fields.botToken : s?.kind === 'oauth' ? s.accessToken : undefined;
   if (!token) throw new ConnectorConfigError('Slack has no stored bot token.');
-  return { channel: slackChannel(token, ctx.http, ctx.clock), target: { address: parsed.data.channel } };
+  return { channel: slackChannel(token, ctx.http, ctx.clock), target: { address: parsed.data.channel }, check: () => slackCheck(token, ctx.http) };
 };
+
+/**
+ * Verify a bot token with `auth.test` (sends nothing). Keeps only the Slack workspace name. Whether the
+ * bot can post to the configured channel is known on the first delivery (delivery log).
+ */
+export async function slackCheck(token: string, http: HttpClient): Promise<ConnectorCheck> {
+  try {
+    const r = await requestJson<{ ok: boolean; team?: string; error?: string }>(restrictHosts(http, [HOST], 'slack'), 'slack', 'Slack', `https://${HOST}/api/auth.test`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/x-www-form-urlencoded' } });
+    if (r?.ok) return { state: 'connected', detail: 'Slack bot token verified; channel access is confirmed on the first delivery', account: r.team ? redactPersonalData(r.team).slice(0, 80) : undefined };
+    const code = String(r?.error ?? 'unknown_error').replace(/[^a-z_]/g, '').slice(0, 40);
+    return { state: ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked', 'token_expired'].includes(code) ? 'needs_reconnect' : 'error', detail: `Slack refused the token (${code})` };
+  } catch (e) {
+    return { state: (e as Error).name === 'ConnectorAuthError' ? 'needs_reconnect' : 'unavailable', detail: (e as Error).message.slice(0, 200) };
+  }
+}

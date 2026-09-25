@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 30_000 });
 import type { IdentityProvider, VerifiedIdentity } from '../src/product/ports/identity';
+import type { HttpClient } from '../src/product/ports/http';
+import { scriptedHttp } from '../src/product/testkit/connectorContract';
 import { manualClock } from '../src/product/ports/clock';
 import { sourcesForRun, type Connector } from '../src/product/app/monitoring';
 import { freshPglite } from './postgres/pglite';
@@ -48,17 +50,17 @@ function baseEnv(sessionSecret: string, secretKey: string, extra: Record<string,
     JAGR_GITHUB_REPOS: 'acme/web, acme/api',
     JAGR_JIRA_SITE: 'https://acme.atlassian.net',
     JAGR_JIRA_PROJECT: 'SHOP',
-    JAGR_SLACK_CHANNEL: 'C0123',
+    JAGR_SLACK_CHANNEL: 'C0123456789',
     ...extra,
   };
 }
 
-async function boot(extra: Record<string, string | undefined> = {}, reuse?: { sql: SqlClient; sessionSecret: string; secretKey: string }, connectors?: Record<string, Connector>) {
+async function boot(extra: Record<string, string | undefined> = {}, reuse?: { sql: SqlClient; sessionSecret: string; secretKey: string }, connectors?: Record<string, Connector>, http?: HttpClient) {
   const sql = reuse?.sql ?? (await freshPglite());
   const sessionSecret = reuse?.sessionSecret ?? randomBytes(32).toString('hex');
   const secretKey = reuse?.secretKey ?? randomBytes(32).toString('base64');
   const clock = manualClock('2026-09-25T10:00:00.000Z');
-  const rt = await createRuntime(baseEnv(sessionSecret, secretKey, extra), { sql, clock, identity: { fake: fakeIdp }, connectors });
+  const rt = await createRuntime(baseEnv(sessionSecret, secretKey, extra), { sql, clock, identity: { fake: fakeIdp }, connectors, http: http ?? (async () => { throw new Error('tests make no network calls'); }) });
   return { rt, app: createApp(rt), sql, sessionSecret, secretKey, clock };
 }
 
@@ -206,13 +208,16 @@ describe('single-tenant bootstrap', () => {
   });
 
   it('Slack is outbound only: a delivery log to read, and no endpoint that could approve anything from Slack', async () => {
-    const { app } = await boot();
+    const { http, calls } = scriptedHttp((u) => (u.hostname === 'slack.com' && u.pathname === '/api/auth.test' ? { body: { ok: false, error: 'invalid_auth' } } : undefined));
+    const { app } = await boot({}, undefined, undefined, http);
     const { session } = await signIn(app, 'code-owner');
     const log = await app(req('GET', `/api/workspaces/${OWNER_WORKSPACE_ID}/notifications`, session));
     expect(log.status).toBe(200);
     expect(log.body).toEqual({ notifications: [] });
     for (const path of ['/api/slack/interactions', '/api/slack/events', '/api/slack/commands']) expect((await app(req('POST', path, session, {}))).status).toBe(404);
     const check = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-slack/check`, session));
-    expect((check.body as { check: { state: string; detail: string } }).check).toMatchObject({ state: 'connected', detail: expect.stringMatching(/delivery log/) });
+    // The check verifies the bot token with auth.test (sending nothing); the test token is not a real one.
+    expect((check.body as { check: { state: string; detail: string } }).check).toMatchObject({ state: 'needs_reconnect', detail: expect.stringMatching(/invalid_auth/) });
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(['/api/auth.test']);
   });
 });

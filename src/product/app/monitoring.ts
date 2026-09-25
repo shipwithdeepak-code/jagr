@@ -200,14 +200,21 @@ export async function checkConnection(deps: MonitoringDeps, workspaceId: string,
   const c = await deps.repos.connections.get(workspaceId, connectionId);
   if (!c) throw new Error(`Connection ${connectionId} not found.`);
   const connector = Object.prototype.hasOwnProperty.call(deps.connectors, c.provider) ? deps.connectors[c.provider] : undefined;
-  // Outbound channels are verified by delivering: their outcome is in the delivery log.
-  if (!connector && !c.roles.length && deps.channels && Object.prototype.hasOwnProperty.call(deps.channels, c.provider))
-    return { state: c.state === 'connected' ? 'connected' : 'error', detail: 'Outbound channel — each delivery is recorded in the delivery log (GET …/notifications).' };
-  if (!connector) return { state: 'error', detail: `No connector for “${c.provider}” in this deployment.` };
+  const channel = !connector && !c.roles.length && deps.channels && Object.prototype.hasOwnProperty.call(deps.channels, c.provider) ? deps.channels[c.provider] : undefined;
+  if (!connector && !channel) return { state: 'error', detail: `No connector for “${c.provider}” in this deployment.` };
   let result: ConnectorCheck;
   try {
     const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
-    result = await connector.check(c, { secret, http: deps.http, clock: deps.clock });
+    if (connector) result = await connector.check(c, { secret, http: deps.http, clock: deps.clock });
+    else {
+      // An outbound channel: verify its credential without sending anything (delivery outcomes are in the delivery log).
+      try {
+        result = await channel!(c, { secret, http: deps.http, clock: deps.clock }).check();
+      } catch (e) {
+        if (e instanceof SecretNotFound) throw e;
+        result = { state: 'error', detail: (e as Error).message.slice(0, 300) };
+      }
+    }
   } catch (e) {
     if (!(e instanceof SecretNotFound)) throw e;
     result = { state: 'needs_reconnect', detail: 'The stored credential is missing; reconnect this source.' };

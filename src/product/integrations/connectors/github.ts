@@ -163,6 +163,7 @@ export const githubConnector: ConnectorDescriptor<GitHubConfig> = {
   roles: ['changes'],
   config: GitHubConfig as unknown as z.ZodType<GitHubConfig>,
   secretKinds: ['api_key'],
+  credentialFields: [{ key: 'token', label: 'Fine-grained personal access token (read-only)' }],
   hosts: () => ['api.github.com'],
   build(ctx) {
     const r = new GitHubReader(ctx);

@@ -49,6 +49,7 @@ export const jiraConnector: ConnectorDescriptor<JiraConfig> = {
   roles: ['work_items', 'changes'],
   config: JiraConfig as unknown as z.ZodType<JiraConfig>,
   secretKinds: ['api_key'],
+  credentialFields: [{ key: 'email', label: 'Atlassian account email' }, { key: 'apiToken', label: 'API token' }],
   hosts: (cfg) => [hostOf(cfg.site)],
   build(ctx) {
     const client = () => new JiraCloudAdapter({ baseUrl: base(ctx.config.site), projectKey: ctx.config.project, authorization: authOf(ctx.secret), http: ctx.http, maxPages: ctx.config.maxPages });

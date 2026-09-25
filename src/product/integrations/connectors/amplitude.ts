@@ -259,6 +259,7 @@ export const amplitudeConnector: ConnectorDescriptor<AmplitudeConfig> = {
   roles: ['metrics', 'changes'],
   config: AmplitudeConfig as unknown as z.ZodType<AmplitudeConfig>,
   secretKinds: ['api_key'],
+  credentialFields: [{ key: 'apiKey', label: 'API key' }, { key: 'secretKey', label: 'Secret key' }],
   hosts: (cfg) => [HOST[cfg.region]],
   build(ctx) {
     const r = new AmplitudeReader(ctx);

@@ -7,6 +7,8 @@ import type { Connector, MonitoringDeps } from '../src/product/app/monitoring';
 import { CONNECTORS, connectorsFrom } from '../src/product/integrations/connectors/index';
 import { CHANNELS } from '../src/product/integrations/channels/index';
 import type { ChannelFactory } from '../src/product/app/notifications';
+import type { ConnectionType } from '../src/product/app/connections';
+import { CONNECTION_TYPES } from '../src/product/integrations/connectionTypes';
 import { createPlannerManager, type InvestigationPlanner } from '../src/product/agent/planner';
 import { readPlannerConfig } from '../src/product/agent/providers/config';
 import { llmPlannerProvider, PROVIDER_REGISTRY } from '../src/product/agent/providers/registry';
@@ -47,6 +49,8 @@ export interface Runtime extends MonitoringDeps {
   sql: SqlClient;
   /** single-tenant: what bootstrap did at start (connection ids only, never values). */
   bootstrap?: BootstrapResult;
+  /** Connection types this deployment offers (connectors + outbound channels). */
+  types: Record<string, ConnectionType>;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -93,6 +97,7 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     identity,
     connectors: deps.connectors ?? connectorsFrom(CONNECTORS),
     channels: deps.channels ?? CHANNELS,
+    types: CONNECTION_TYPES,
     planner: serverPlanner(env, http),
     appBaseUrl: config.appBaseUrl,
     config,

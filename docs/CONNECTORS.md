@@ -36,6 +36,34 @@ Every connector must pass `testkit/connectorContract.ts` against recorded provid
 - isolation: two connections of the same connector never carry each other's credential
 - `check()` reports `connected` / `needs_reconnect` / `unavailable` / `error` without throwing
 
+## Connecting a source (API)
+
+Workspace members connect sources with API keys / tokens through the server; the browser never receives a
+credential back. One connection per provider per workspace. Core: `app/connections.ts` (provider-agnostic) over
+`integrations/connectionTypes.ts` (each connector's roles, credential fields and config schema, plus Slack).
+
+| Operation | Route | Who |
+|---|---|---|
+| Types on offer | `GET /api/connection-types` (credential field names only) | signed in |
+| List / get | `GET /api/workspaces/:id/connections[/:cid]` → `ConnectionView` | members |
+| Connect / configure | `PUT /api/workspaces/:id/connections` `{ provider, config, credential? }` | owners, admins |
+| Test | `POST /api/workspaces/:id/connections/:cid/check` | members |
+| Reconnect | `POST /api/workspaces/:id/connections/:cid/reconnect` `{ credential }` | owners, admins |
+| Disconnect | `DELETE /api/workspaces/:id/connections/:cid` | owners, admins |
+
+- Config is validated by the provider's own schema and the credential against its declared fields **before**
+  anything is stored or called; unknown providers and extra credential fields are refused.
+- Connect and reconnect test the connection immediately and return its health. A rejected credential marks it
+  *needs reconnect*; reconnect rotates the stored secret in place (compare-and-swap).
+- Disconnect deletes the stored credential and keeps the connection as *not configured*, so past investigations
+  keep its name and monitoring reports it as a gap.
+- Environment-managed connections (single-tenant owner credentials) can be tested, not changed.
+- Only connected workspaces take live connections. Every change is audited by field name, never value.
+- `ConnectionView` carries health (`healthy`, `unverified`, `stale`, `degraded`, `needs_reconnect`, `error`,
+  `not_configured`), account label, roles, capabilities, freshness, created/updated, last successful check and last
+  error — and withholds anything that looks like a credential or an email address.
+- Slack's test is `auth.test` (verifies the bot token, sends nothing); channel access is confirmed on first delivery.
+
 ## Live verification
 
 Two manual commands, never part of `npm test`; both print states, counts and hostnames only — never credentials or

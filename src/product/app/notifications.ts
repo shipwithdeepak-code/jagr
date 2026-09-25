@@ -5,6 +5,7 @@ import type { DeliveryTarget, NotificationChannel, NotificationMessage } from '.
 import type { Connection, Repositories, Workspace } from '../ports/persistence';
 import type { SecretPayload, SecretStore } from '../ports/secrets';
 import { redactPersonalData } from '../lib/redact';
+import type { ConnectorCheck } from '../integrations/connectors/types';
 
 /**
  * Outbound notification delivery — vendor-neutral. The engine decides WHAT to tell people (alerts by
@@ -18,7 +19,12 @@ import { redactPersonalData } from '../lib/redact';
  */
 
 /** Builds an outbound channel from a connection (registered per provider at the composition root). */
-export type ChannelFactory = (conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }) => { channel: NotificationChannel; target: DeliveryTarget };
+export type ChannelFactory = (conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }) => {
+  channel: NotificationChannel;
+  target: DeliveryTarget;
+  /** Verify the credential without sending anything. */
+  check(): Promise<ConnectorCheck>;
+};
 
 export interface DeliveryDeps {
   repos: Repositories;

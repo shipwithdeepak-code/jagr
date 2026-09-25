@@ -51,6 +51,8 @@ export interface ConnectorDescriptor<C = unknown> {
   config: z.ZodType<C>;
   /** Credential kinds the connector accepts. */
   secretKinds: SecretPayload['kind'][];
+  /** The api_key credential fields a workspace member enters to connect it. */
+  credentialFields: { key: string; label: string }[];
   /** Hosts the connector may call for this config. Anything else is refused. */
   hosts(config: C): string[];
   /** Build the role source. No network calls here. */

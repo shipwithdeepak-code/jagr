@@ -120,6 +120,7 @@ export const intercomConnector: ConnectorDescriptor<IntercomConfig> = {
   roles: ['feedback'],
   config: IntercomConfig as unknown as z.ZodType<IntercomConfig>,
   secretKinds: ['api_key', 'oauth'],
+  credentialFields: [{ key: 'token', label: 'Access token' }],
   hosts: (cfg) => [API[cfg.region]],
   build(ctx) {
     const r = new IntercomReader(ctx);
