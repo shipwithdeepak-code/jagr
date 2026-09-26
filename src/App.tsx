@@ -9,9 +9,10 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProductProvider } from '@/state/product';
 import { ServerSessionProvider, useServerSession } from '@/state/serverSession';
 import { useProduct } from '@/state/productContext';
-import { surfaceFor, type Surface } from '@/state/surface';
+import { resolveSurface, type Surface } from '@/state/surface';
 import { ProductOverviewPage } from '@/pages/ProductOverview';
 import { LandingPage } from '@/pages/Landing';
+import { WorkspaceGate } from '@/components/WorkspaceGate';
 
 // Secondary screens load on demand to keep the first paint small.
 const InvestigationsPage = lazy(() => import('@/pages/Investigations').then((m) => ({ default: m.InvestigationsPage })));
@@ -34,6 +35,7 @@ const AboutPage = lazy(() => import('@/pages/About').then((m) => ({ default: m.A
 
 const TITLES: Record<string, string> = {
   '/': 'Overview',
+  '/overview': 'Overview',
   '/investigations': 'Investigations',
   '/watches': 'Watches',
   '/sources': 'Sources',
@@ -50,36 +52,61 @@ const TITLES: Record<string, string> = {
   '/about': 'About Jagr',
 };
 
+const GATE_TITLES: Partial<Record<Surface, string>> = {
+  resolving: 'Restoring your workspace',
+  choose: 'Choose a workspace',
+  create: 'Create your workspace',
+  'no-workspace': 'No workspace open',
+};
+
 function ScrollAndTitle({ surface }: { surface: Surface }) {
   const { pathname, hash } = useLocation();
   useEffect(() => {
     if (!hash) window.scrollTo(0, 0);
     const key = '/' + (pathname.split('/')[1] ?? '');
-    document.title = surface === 'public' ? 'Jagr — know what changed while you were away' : `${TITLES[pathname] ?? TITLES[key] ?? 'Investigation'} · Jagr`;
+    document.title =
+      surface === 'public' ? 'Jagr — know what changed while you were away' : `${GATE_TITLES[surface] ?? TITLES[pathname] ?? TITLES[key] ?? 'Page not found'} · Jagr`;
   }, [pathname, hash, surface]);
   return null;
 }
 
 /**
- * The one place the two surfaces split (see state/surface.ts): the public landing renders on its own,
- * outside the application shell; everything else renders inside the single AppShell.
+ * The one place the surfaces split (see state/surface.ts): the public landing and the workspace gate
+ * render on their own, outside the application shell; everything else renders inside the single AppShell.
  */
 function Surfaces() {
-  const { pathname } = useLocation();
-  const { mode, location } = useProduct();
-  const { restoring } = useServerSession();
-  const surface = surfaceFor(pathname, { mode, location, restoring });
+  const { pathname, search } = useLocation();
+  const { mode, location, server } = useProduct();
+  const session = useServerSession();
+  const { surface, autoOpen } = resolveSurface(
+    pathname,
+    search,
+    {
+      checked: session.checked,
+      signedIn: !!session.user,
+      workspaceIds: session.workspaces.map((w) => w.id),
+      activeId: session.activeId,
+      choice: session.choice,
+      signingIn: session.signingIn,
+      failed: !!session.error || (session.server === null && session.choice === 'server'),
+    },
+    { location, mode, serverFailed: !!server?.error && !server.loading },
+  );
+  // A signed-in person's only workspace opens by itself. The URL is left as it is (no new history
+  // entry), so they land on the route they asked for.
+  const { open } = session;
+  useEffect(() => {
+    if (autoOpen) open(autoOpen);
+  }, [autoOpen, open]);
   return (
     <>
       <ScrollAndTitle surface={surface} />
-      {surface === 'public' ? (
-        <ErrorBoundary resetKey={pathname}>
-          <LandingPage />
-        </ErrorBoundary>
-      ) : (
+      {surface === 'app' ? (
         <AppShell>
           <Screens />
         </AppShell>
+      ) : (
+        <ErrorBoundary resetKey={pathname}>{surface === 'public' ? <LandingPage /> : <WorkspaceGate surface={surface} />}</ErrorBoundary>
       )}
     </>
   );
@@ -92,6 +119,7 @@ function Screens() {
       <Suspense fallback={<div className="py-20 text-center text-[13px] text-ink-3">Loading…</div>}>
         <Routes>
               <Route path="/" element={<ProductOverviewPage />} />
+              <Route path="/overview" element={<ProductOverviewPage />} />
               <Route path="/demo" element={<DemoNightPage />} />
               <Route path="/watches" element={<WatchesPage />} />
               <Route path="/sources" element={<SourcesPage />} />

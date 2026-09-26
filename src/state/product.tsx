@@ -235,8 +235,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     return decision;
   }, []);
   const setPlannerChoice = useCallback((planner: 'deterministic' | 'llm') => setState((s) => ({ ...s, planner, stale: true })), []);
-  /** Back to the first-run welcome. Deletes this browser's workspace (imports included); the planner choice stays. */
-  const clearWorkspace = useCallback(() => setState({ ...initial(), planner: ref.current.planner }), []);
+  /**
+   * Start over: deletes this browser's workspace (imports included); the planner choice stays. It is an
+   * explicit choice to stay in this browser, so a signed-in person is not sent back into a server workspace.
+   */
+  const leaveForBrowser = session.useBrowserWorkspace;
+  const clearWorkspace = useCallback(() => {
+    setState({ ...initial(), planner: ref.current.planner });
+    leaveForBrowser();
+  }, [leaveForBrowser]);
   const reset = useCallback(() => {
     // Reset restores the simulated workspace; the planner selection is a preference and survives it.
     const fresh = { ...initial(), planner: ref.current.planner };
