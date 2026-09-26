@@ -6,7 +6,7 @@ import { connectRequest, githubConfigFromFields, githubFieldsFromConfig, type Gi
 import { sourceViews, type SourceActionId, type SourceView } from '@/product/view/sources';
 import { isSourceId, type SourceId } from '@/product/roles/types';
 import { useProduct } from '@/state/productContext';
-import { useServerSession } from '@/state/serverSession';
+import { markSigningIn, useServerSession } from '@/state/serverSession';
 import { serverApi, ServerError } from '@/state/serverApi';
 import { Badge, Button, Card, Modal, SectionTitle, Select, Toggle, cx } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -60,7 +60,7 @@ export function WorkspaceLocationPanel() {
         <div className="mt-3 flex flex-wrap gap-2">
           {session.server.signIn.length ? (
             session.server.signIn.map((p) => (
-              <a key={p} className="inline-flex h-8 items-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle" href={serverApi.signInUrl(p, '/settings')}>
+              <a key={p} className="inline-flex h-8 items-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle" href={serverApi.signInUrl(p, '/settings')} onClick={markSigningIn}>
                 Sign in with {p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p}
               </a>
             ))

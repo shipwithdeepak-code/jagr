@@ -2,9 +2,10 @@ import { ArrowRight, Lock } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
-import { useServerSession } from '@/state/serverSession';
+import { markSigningIn, useServerSession } from '@/state/serverSession';
 import { serverApi } from '@/state/serverApi';
 import { Logo } from '@/components/Logo';
+import { GoogleMark } from '@/components/WorkspaceGate';
 import { MetricValue, StatusBadge } from '@/components/primitives';
 import { cx } from '@/components/ui';
 
@@ -60,47 +61,38 @@ const btn = 'interactive inline-flex h-11 items-center gap-2 rounded-lg px-4 tex
 const btnPrimary = cx(btn, 'bg-ink text-canvas hover:opacity-90');
 const btnSecondary = cx(btn, 'border border-line-strong text-ink hover:border-ink-3');
 
-function GoogleMark() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3ZM12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1a5.9 5.9 0 0 1-5.5-4.1H3.2v2.6A10 10 0 0 0 12 22ZM6.5 14a6 6 0 0 1 0-3.9V7.5H3.2a10 10 0 0 0 0 9ZM12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.2 7.5l3.3 2.6A5.9 5.9 0 0 1 12 5.9Z"
-      />
-    </svg>
-  );
-}
-
 /**
- * The server entry, in the state the session is in: signed out → Continue with Google; signed in →
- * open a workspace (or create one); no Jagr server here → nothing to offer, so nothing is shown.
+ * The server entry, in the state the session is in. The landing shows to a signed-in person only after
+ * they chose to leave their workspace, so this is their way back:
+ *   checking            a quiet placeholder — never a disabled sign-in button that may not apply
+ *   signed out          Continue with Google (the existing flow; the return opens their workspace)
+ *   one workspace       Open <name>
+ *   several / none      Choose workspace / Create your workspace (the workspace gate)
+ *   no Jagr server      nothing to offer, so nothing is shown
  */
 function ServerEntry({ compact = false }: { compact?: boolean }) {
   const session = useServerSession();
-  const google = session.server?.signIn.includes('google');
-  if (session.server === undefined) {
+  const size = compact && 'h-9 px-3 text-[13px]';
+  if (!session.checked) {
     return (
-      <span className={cx(btnPrimary, 'cursor-wait opacity-60', compact && 'h-9 px-3 text-[13px]')} aria-disabled="true">
-        {!compact && <GoogleMark />}
-        {compact ? 'Sign in' : 'Continue with Google'}
-      </span>
+      <span className={cx('inline-block shrink-0 rounded-lg bg-subtle', compact ? 'h-9 w-20' : 'h-11 w-[196px]')} aria-hidden="true" />
     );
   }
   if (session.user) {
-    const first = session.workspaces[0];
-    return first ? (
-      <button type="button" className={cx(btnPrimary, compact && 'h-9 px-3 text-[13px]')} onClick={() => session.open(first.id)}>
-        {compact ? 'Open workspace' : `Open ${first.name}`}
+    const only = session.workspaces.length === 1 ? session.workspaces[0] : undefined;
+    return only ? (
+      <button type="button" className={cx(btnPrimary, size, compact && 'max-w-[40vw]')} onClick={() => session.open(only.id)}>
+        <span className="truncate">Open {only.name}</span>
       </button>
     ) : (
-      <Link to="/settings#workspace" className={cx(btnPrimary, compact && 'h-9 px-3 text-[13px]')}>
-        Create a workspace
-      </Link>
+      <button type="button" className={cx(btnPrimary, size)} onClick={session.clearChoice}>
+        {session.workspaces.length ? 'Choose workspace' : 'Create your workspace'}
+      </button>
     );
   }
-  if (!google) return null;
+  if (!session.server?.signIn.includes('google')) return null;
   return (
-    <a href={serverApi.signInUrl('google', '/')} className={cx(btnPrimary, compact && 'h-9 px-3 text-[13px]')}>
+    <a href={serverApi.signInUrl('google', '/')} onClick={markSigningIn} className={cx(btnPrimary, size)}>
       {!compact && <GoogleMark />}
       {compact ? 'Sign in' : 'Continue with Google'}
     </a>
@@ -109,9 +101,7 @@ function ServerEntry({ compact = false }: { compact?: boolean }) {
 
 function Entry() {
   const { createWorkspace } = useProduct();
-  const session = useServerSession();
   const navigate = useNavigate();
-  const others = session.user ? session.workspaces.slice(1) : [];
   const quiet = 'interactive underline-offset-4 hover:text-ink hover:underline';
   return (
     <div className="grid gap-4">
@@ -125,11 +115,6 @@ function Entry() {
         </Link>
       </div>
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-3">
-        {others.map((w) => (
-          <button key={w.id} type="button" className={quiet} onClick={() => session.open(w.id)}>
-            Open {w.name}
-          </button>
-        ))}
         <button
           type="button"
           className={quiet}

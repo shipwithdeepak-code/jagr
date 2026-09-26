@@ -23,7 +23,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { OvernightRun } from '@/domain/types';
 import { useWorkspace } from '@/state/workspace';
 import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decisions';
@@ -351,18 +351,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Whether a nav target is the current page. Overview lives at `/` and its alias `/overview`. */
+function isSamePage(pathname: string, path: string): boolean {
+  if (path === '/') return pathname === '/' || pathname === '/overview';
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
 function NavRow({ item, compact = false, env, demoEntry = false }: { item: NavItem; compact?: boolean; env: AppEnvironment; demoEntry?: boolean }) {
   const Icon = item.icon;
   const location = useLocation();
   const [path, query = ''] = item.to.split('?');
   // Active = same page AND same environment: Approvals in the Workspace is not Approvals in Demo night.
-  const samePage = path === '/' ? location.pathname === '/' : location.pathname === path || location.pathname.startsWith(`${path}/`);
   // The Demo night entry is marked active only when collapsed; expanded, its own sub-items are.
-  const active = demoEntry ? env === 'demo' && compact : samePage && environmentForPath(path, query) === env;
+  // This one value drives both the highlight and aria-current (a plain Link, so the router's own
+  // URL matching can't disagree with it).
+  const active = demoEntry ? env === 'demo' && compact : isSamePage(location.pathname, path) && environmentForPath(path, query) === env;
   return (
-    <NavLink
+    <Link
       to={item.to}
-      end={item.to === '/'}
       title={compact ? item.label : undefined}
       aria-label={compact ? (item.count !== undefined ? `${item.label} (${item.count})` : item.label) : undefined}
       aria-current={active ? 'page' : undefined}
@@ -379,7 +385,7 @@ function NavRow({ item, compact = false, env, demoEntry = false }: { item: NavIt
       {!compact && item.count !== undefined && (
         <span className={cx('tabular ml-auto rounded px-1.5 text-[12px] font-medium', item.alert ? 'bg-high-soft text-high' : 'text-ink-3')}>{item.count}</span>
       )}
-    </NavLink>
+    </Link>
   );
 }
 

@@ -38,8 +38,8 @@ export function ProductOverviewPage() {
   const lastChecked = location === 'server' ? cards.flatMap((c) => c.card.runs.map((l) => l.scheduledAt)).sort().at(-1) : r?.window.end;
   const healthy = cards.filter(({ w }) => w.status === 'active' && !open.some((i) => i.watchIds.includes(w.id))).length;
 
-  // Before a workspace is entered, `/` is the public landing (App); here only while one is opening.
-  if (!mode) return <LoadingState label="Opening your workspace…" />;
+  // The workspace gate (App) covers restoring and choosing; this shows only if a server workspace's data is unavailable.
+  if (!mode) return <LoadingState label={server ? `Loading ${server.name}…` : 'Loading…'} />;
 
   const headline = running ? 'Jagr is checking your watches…' : !r ? (mode === 'imported' && !state.watches.length ? 'Create a watch to start monitoring' : 'Jagr is ready') : attention.length ? `${attention.length} ${attention.length === 1 ? 'investigation needs' : 'investigations need'} your attention` : 'Nothing needs your attention';
 
