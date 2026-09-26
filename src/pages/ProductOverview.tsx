@@ -12,7 +12,8 @@ import { EmptyPanel, LinkArrow, LoadingState, MetricValue, SectionHeader, Status
 import { readingOf } from '@/product/presentation';
 import { findingState, investigationTitle, labelledTime } from '@/product/view/investigation';
 import { watchCardStatus } from '@/product/view/watchCard';
-import { GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
+import { runHasEvidenceGap } from '@/product/view/quickStart';
+import { ConnectedWorkspaceQuickStart, GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import type { ProviderId, WatchInvestigation } from '@/product/types';
 
 /**
@@ -37,6 +38,9 @@ export function ProductOverviewPage() {
   // When Jagr last looked: the latest recorded run (server), or the end of the replayed window (browser).
   const lastChecked = location === 'server' ? cards.flatMap((c) => c.card.runs.map((l) => l.scheduledAt)).sort().at(-1) : r?.window.end;
   const healthy = cards.filter(({ w }) => w.status === 'active' && !open.some((i) => i.watchIds.includes(w.id))).length;
+  const latestRun = cards.flatMap(({ card }) => card.runs).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)).at(-1);
+  const nextRun = cards.flatMap(({ card }) => card.nextRun ?? []).sort()[0];
+  const latestWatch = latestRun ? state.watches.find((w) => w.id === latestRun.watchId) : undefined;
 
   // The workspace gate (App) covers restoring and choosing; this shows only if a server workspace's data is unavailable.
   if (!mode) return <LoadingState label={server ? `Loading ${server.name}…` : 'Loading…'} />;
@@ -47,6 +51,7 @@ export function ProductOverviewPage() {
     <div className="animate-fade-up">
       {storageError && <div className="mb-4 rounded-lg border border-crit/40 bg-crit-soft/60 px-4 py-3 text-[13px] text-ink">{storageError}</div>}
       {mode === 'imported' && <GettingStarted />}
+      {mode === 'connected' && location === 'server' && <ConnectedWorkspaceQuickStart />}
 
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -71,7 +76,7 @@ export function ProductOverviewPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button icon={RefreshCw} onClick={() => void runMonitoring().catch(() => undefined)} disabled={running || (mode === 'imported' && !state.watches.length)}>
+          <Button icon={RefreshCw} onClick={() => void runMonitoring().catch(() => undefined)} disabled={running || !activeWatches.length}>
             {running ? 'Running…' : 'Run now'}
           </Button>
           <Link to="/watches?new=1" className="interactive inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle">
@@ -103,6 +108,13 @@ export function ProductOverviewPage() {
               {lastChecked ? `Last checked ${fmtTime(lastChecked)} UTC · ` : ''}
               {healthy} of {activeWatches.length} watch{activeWatches.length === 1 ? '' : 'es'} healthy
             </p>
+            {location === 'server' && latestRun && !(r?.investigations.length) && (
+              <p className="mt-2 text-[13px] text-ink-2">
+                {runHasEvidenceGap(latestRun.outcome) ? `Check completed with an evidence gap: ${latestRun.outcome}. No conclusion was drawn from the unavailable source.` : `Check completed: ${latestRun.outcome}. No investigation was opened.`}
+                {nextRun ? ` Next scheduled check: ${fmtDateTime(nextRun)} UTC.` : ''}
+                {latestWatch ? ` ${latestWatch.name} will interrupt at ${latestWatch.notificationPolicy.interruptAt} and above; CRITICAL is immediate and other qualifying findings wait for confirmation.` : ''}
+              </p>
+            )}
           </div>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">

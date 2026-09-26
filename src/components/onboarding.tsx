@@ -2,6 +2,7 @@ import { Check, Download, FlaskConical, Plus, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { acceptedCount } from '@/product/imports/schemas';
+import { connectedQuickStartState } from '@/product/view/quickStart';
 import { Badge, Button, Card, cx } from './ui';
 
 export const PRIVACY_NOTICE =
@@ -69,6 +70,42 @@ export function GettingStarted() {
                 {running ? 'Investigating…' : 'Run monitoring'}
               </Button>
             )}
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+/** Connected server workspaces: the shortest truthful path to a first completed check. */
+export function ConnectedWorkspaceQuickStart() {
+  const { state, server, runMonitoring, running } = useProduct();
+  if (!server) return null;
+  const quickStart = connectedQuickStartState({ loading: server.loading, connections: server.connections, productConnections: state.connections, watches: state.watches, result: state.result, running, clock: state.clock, snapshotAt: server.snapshotAt });
+  if (!quickStart.showChecklist) return null;
+
+  const steps = [
+    { done: quickStart.stage !== 'loading' && quickStart.stage !== 'source', title: 'Connect a live source', body: quickStart.stage === 'loading' ? 'Checking source readiness…' : quickStart.stage === 'source' ? 'Jagr needs a successfully verified evidence source before it can monitor your product.' : 'A live evidence source is verified.' },
+    { done: quickStart.stage === 'run', title: 'Create a watch', body: quickStart.stage === 'watch' ? state.watches.length ? 'An active watch must use at least one verified source. Open Watches to resume or create one.' : quickStart.recommendedTemplate ? 'A watch supported by your verified source is ready to configure.' : 'No built-in watch matches the verified source yet. Open the watch creator to review the available questions.' : 'Your first watch is ready.' },
+    { done: false, title: 'Run the first check', body: quickStart.running ? 'Jagr is checking your watch against the live source.' : 'Run now to confirm the setup. A quiet check is a successful result.' },
+  ];
+  const current = quickStart.stage === 'loading' || quickStart.stage === 'source' ? 0 : quickStart.stage === 'watch' ? 1 : 2;
+  const watchHref = state.watches.length ? '/watches' : quickStart.recommendedTemplate ? `/watches?new=1&template=${quickStart.recommendedTemplate}` : '/watches?new=1';
+
+  return (
+    <Card className="mb-6">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] font-semibold">Quick Start <span className="font-normal text-ink-3">· connect, watch, then verify the first check</span></div>
+      <ol className="grid gap-3 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <li key={step.title} className={cx('rounded-lg border p-3', index === current ? 'border-accent bg-accent-soft/40' : 'border-line')}>
+            <div className="flex items-center gap-2 text-[12px] font-semibold">
+              <span className={cx('grid size-5 shrink-0 place-items-center rounded-full text-[12px]', step.done ? 'bg-ok text-surface' : 'bg-subtle text-ink-2 ring-1 ring-inset ring-line')}>{step.done ? <Check size={11} /> : index + 1}</span>
+              {step.title}
+            </div>
+            <p className="mt-1.5 text-[12px] text-ink-2">{step.body}</p>
+            {index === current && index === 0 && quickStart.stage !== 'loading' && <Link to="/sources" className="mt-2 inline-flex h-7 items-center gap-1 rounded bg-ink px-2.5 text-[12px] font-medium text-canvas"><Plus size={12} /> Connect source</Link>}
+            {index === current && index === 1 && <Link to={watchHref} className="mt-2 inline-flex h-7 items-center gap-1 rounded bg-ink px-2.5 text-[12px] font-medium text-canvas"><Plus size={12} /> Create watch</Link>}
+            {index === current && index === 2 && <Button size="sm" variant="primary" icon={RefreshCw} className="mt-2" disabled={running} onClick={() => void runMonitoring().catch(() => undefined)}>{running ? 'Checking…' : 'Run monitoring'}</Button>}
           </li>
         ))}
       </ol>

@@ -11,6 +11,7 @@ import { METRIC_DEFS } from '@/product/integrations/world';
 import { canLeaveSourceStep, connectionsPending, initialWizardSources, sourceStepBlocker, templateAvailability, wizardSourceRows } from '@/product/view/watchWizard';
 import { FREQUENCY_LABEL, toCron } from '@/product/scheduler';
 import { watchCardStatus } from '@/product/view/watchCard';
+import { createWatchWithState, initialWatchCreationState } from '@/product/view/watchCreation';
 import { useProduct } from '@/state/productContext';
 import { fmtDateTime, fmtTime } from '@/lib/time';
 import { AttentionBadge, ConnectionBadge, ProviderName } from '@/components/product';
@@ -165,7 +166,7 @@ export function WatchesPage() {
         )}
       </Drawer>
 
-      {wizardOpen && <CreateWatchWizard onClose={() => setParams({})} />}
+      {wizardOpen && <CreateWatchWizard initialTemplate={params.get('template')} onClose={() => setParams({})} />}
     </>
   );
 }
@@ -194,11 +195,12 @@ const INTERRUPT: { value: NotificationPolicy['interruptAt']; label: string; hint
   { value: 'MEDIUM', label: 'Any persistent change', hint: 'Also single-source changes. Expect more alerts.' },
 ];
 
-function CreateWatchWizard({ onClose }: { onClose: () => void }) {
+function CreateWatchWizard({ onClose, initialTemplate }: { onClose: () => void; initialTemplate: string | null }) {
   const { state, createWatch, runMonitoring, running, mode, importedWorld, location } = useProduct();
   const toast = useToast();
   const [step, setStep] = useState(0);
-  const [template, setTemplate] = useState<WatchTemplateId>('checkout_health');
+  const requestedTemplate = WIZARD_TEMPLATES.includes(initialTemplate as WatchTemplateId) ? (initialTemplate as WatchTemplateId) : 'checkout_health';
+  const [template, setTemplate] = useState<WatchTemplateId>(requestedTemplate);
   const tpl = WATCH_TEMPLATES.find((t) => t.id === template)!;
   const [name, setName] = useState(tpl.name);
   // In a "my data" workspace, only sources that have data start ticked; in a server workspace, only
@@ -211,7 +213,8 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
   const [interruptAt, setInterruptAt] = useState<NotificationPolicy['interruptAt']>('HIGH');
   const [brief, setBrief] = useState(true);
   const [briefMin, setBriefMin] = useState<NotificationPolicy['briefMin']>('MEDIUM');
-  const [created, setCreated] = useState<Watch | null>(null);
+  const [creation, setCreation] = useState(initialWatchCreationState);
+  const { creating, created, error: creationError, warning: creationWarning } = creation;
   // With imported data, only metrics that are actually in the upload can be tuned.
   const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
   const metrics = tpl.signals.filter((s) => { const m = metricKeyOf(s.key); return !!m && METRIC_RULE.has(m) && (!importedMetrics || importedMetrics.has(s.key)); }).map((s) => metricKeyOf(s.key)!);
@@ -229,7 +232,10 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
   }, [pending]);
 
   const dialog = useRef<HTMLDivElement>(null);
-  useDialogFocus(true, onClose, dialog);
+  const close = () => {
+    if (!creating) onClose();
+  };
+  useDialogFocus(true, close, dialog);
 
   const rows = wizardSourceRows(tpl.sources, state.connections, { location });
   const availability = templateAvailability(tpl.sources, state.connections, { location });
@@ -248,7 +254,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
   const canNext = !blocker && (step !== 2 || canLeaveSourceStep(sources, rows));
   const duplicateName = state.watches.some((w) => w.name.trim().toLowerCase() === name.trim().toLowerCase());
 
-  const finish = () => {
+  const finish = async () => {
     const id = `w-${template}-${Date.now().toString(36)}`;
     const watch = watchFromTemplate(id, template, {
       name: name.trim() || tpl.name,
@@ -263,16 +269,15 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
         }),
       ),
     }, state.clock);
-    createWatch(watch);
-    setCreated(watch);
+    await createWatchWithState(watch, createWatch, setCreation);
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="create-watch-title">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="create-watch-title" aria-busy={creating}>
       <div ref={dialog} tabIndex={-1} className="animate-fade-up flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-pop outline-none">
         <div className="flex items-center justify-between border-b border-line px-5 py-3">
           <div id="create-watch-title" className="text-[14px] font-semibold">{created ? 'Watch created' : 'Create watch'}</div>
-          <button onClick={onClose} className="rounded p-1 text-ink-3 hover:bg-subtle" aria-label="Close">
+          <button onClick={close} disabled={creating} className="rounded p-1 text-ink-3 hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50" aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -284,6 +289,9 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
           </div>
         )}
         <div className="flex-1 overflow-y-auto px-5 py-5">
+          {creationError && <p role="alert" className="mb-4 rounded-lg border border-crit/40 bg-crit-soft px-3 py-2 text-[13px] text-crit">Watch creation failed: {creationError}</p>}
+          {creationWarning && <p role="alert" className="mb-4 rounded-lg border border-high/40 bg-high-soft px-3 py-2 text-[13px] text-ink">{creationWarning}</p>}
+          {creating && <p role="status" className="sr-only">Creating and saving the watch.</p>}
           {created ? (
             <div className="text-center">
               <div className="mx-auto grid size-10 place-items-center rounded-full bg-ok-soft text-ok">
@@ -505,7 +513,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between border-t border-line px-5 py-3">
           {created ? (
             <>
-              <Button variant="ghost" onClick={onClose}>
+              <Button variant="ghost" onClick={close}>
                 Done
               </Button>
               <Button
@@ -522,7 +530,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
             </>
           ) : (
             <>
-              <Button variant="ghost" icon={ArrowLeft} onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>
+              <Button variant="ghost" icon={ArrowLeft} disabled={creating} onClick={() => (step === 0 ? close() : setStep(step - 1))}>
                 {step === 0 ? 'Cancel' : 'Back'}
               </Button>
               <div className="flex min-w-0 items-center gap-3">
@@ -540,8 +548,8 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                     Next <ArrowRight size={14} />
                   </Button>
                 ) : (
-                  <Button variant="primary" icon={Check} onClick={finish}>
-                    Create watch
+                  <Button variant="primary" icon={Check} onClick={() => void finish()} disabled={creating}>
+                    {creating ? 'Creating…' : 'Create watch'}
                   </Button>
                 )}
               </div>

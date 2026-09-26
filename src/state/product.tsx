@@ -17,6 +17,7 @@ import { EMAIL_FROM } from '@/product/catalog';
 import { productStateFromSnapshot, type WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
 import { useServerSession } from './serverSession';
 import { serverApi, ServerError } from './serverApi';
+import { persistWatchAndRefresh } from '@/product/view/watchCreation';
 
 /** Recorded in exports this browser produces. */
 const APP_VERSION = '1.1.0';
@@ -107,9 +108,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       const snapshot = await serverApi.snapshot(id);
       setSrv({ id, snapshot, state: fromSnapshot(snapshot) });
       setServerError(undefined);
+      return true;
     } catch (e) {
       setServerError((e as Error).message);
       authLost(e);
+      return false;
     } finally {
       setServerLoading(false);
     }
@@ -225,7 +228,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const createWatch = useCallback((watch: Watch) => setState((s) => ({ ...s, watches: [...s.watches, watch], stale: true })), []);
+  const createWatch = useCallback(async (watch: Watch) => {
+    setState((s) => ({ ...s, watches: [...s.watches, watch], stale: true }));
+    return { ok: true as const };
+  }, []);
   const setWatchStatus = useCallback(
     (id: string, status: Watch['status']) => setState((s) => ({ ...s, watches: s.watches.map((w) => (w.id === id ? { ...w, status, updatedAt: s.clock } : w)), stale: true })),
     [],
@@ -310,21 +316,39 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       running: serverRunning,
       runMonitoring: async () => {
         setServerRunning(true);
+        let failure: string | undefined;
         try {
           await serverApi.runNow(serverId);
           setServerError(undefined);
         } catch (e) {
-          setServerError((e as Error).message);
+          failure = (e as Error).message;
           authLost(e);
           throw e;
         } finally {
           setServerRunning(false);
           await loadServer(serverId).catch(() => undefined);
+          // A successful recovery refresh must not turn a failed run into an apparent quiet result.
+          if (failure) setServerError(failure);
         }
         return undefined;
       },
-      createWatch: (w: Watch) =>
-        void onServer((id) => serverApi.createWatch(id, { templateId: w.template, sources: w.sources, name: w.name, schedule: w.schedule, severityThreshold: w.severityThreshold, thresholds: w.thresholds as Record<string, number> | undefined, notificationPolicy: w.notificationPolicy })),
+      createWatch: async (w: Watch) => {
+        try {
+          const result = await persistWatchAndRefresh(
+            async () => void (await serverApi.createWatch(serverId, { templateId: w.template, sources: w.sources, name: w.name, schedule: w.schedule, severityThreshold: w.severityThreshold, thresholds: w.thresholds as Record<string, number> | undefined, notificationPolicy: w.notificationPolicy })),
+            () => loadServer(serverId),
+          );
+          if (result.warning) setServerError(result.warning);
+          return result;
+        } catch (e) {
+          const error = (e as Error).message;
+          authLost(e);
+          await loadServer(serverId).catch(() => undefined);
+          // A successful recovery refresh must not erase the mutation failure the person needs to act on.
+          setServerError(error);
+          return { ok: false, error };
+        }
+      },
       setWatchStatus: (wid: string, status: Watch['status']) => void onServer((id) => serverApi.setWatchStatus(id, wid, status === 'paused' ? 'paused' : 'active')),
       // Outages and stale syncs are simulated only in the sample workspace; a server workspace shows real health.
       setConnection: () => undefined,
@@ -371,7 +395,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         settings: { planner: snap?.workspace.settings.planner ?? 'deterministic', aiEgressAllowed: snap?.workspace.settings.aiEgressAllowed ?? true },
         loading: serverLoading,
         error: serverError,
-        refresh: () => loadServer(serverId),
+        refresh: async () => void (await loadServer(serverId)),
         setAiEgressAllowed: async (allowed: boolean) => void (await onServer((id) => serverApi.updateWorkspace(id, { aiEgressAllowed: allowed }))),
       },
     };

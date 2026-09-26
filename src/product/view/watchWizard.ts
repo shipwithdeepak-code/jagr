@@ -1,4 +1,4 @@
-import type { ConnectionState, ProviderId, SourceConnection } from '../types.js';
+import type { ConnectionState, ProviderId, SourceConnection, WatchTemplateId } from '../types.js';
 
 /**
  * The Create Watch wizard's "Where should I look?" step, as data. A template names sources the
@@ -67,6 +67,15 @@ export function templateAvailability(providers: readonly ProviderId[], connectio
   if (rows.some((r) => r.status === 'ready' && r.state !== 'not_configured')) return { status: 'ready' };
   if (rows.some((r) => r.status === 'loading')) return { status: 'loading' };
   return { status: 'unavailable', missing: [...providers] };
+}
+
+/** First catalog template supported by the supplied source set, preserving catalog order. */
+export function firstCompatibleTemplate(
+  templates: readonly { id: WatchTemplateId; sources: readonly ProviderId[] }[],
+  connections: SourceConnection[],
+  ctx: WizardContext,
+): WatchTemplateId | undefined {
+  return templates.find((template) => templateAvailability(template.sources, connections, ctx).status === 'ready')?.id;
 }
 
 /** Why the current step cannot be left — shown next to the disabled button, never a silent dead end. */

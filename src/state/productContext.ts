@@ -6,6 +6,7 @@ import type { ActionDecision, BriefSchedule, ConnectionState, MonitoringResult, 
 import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
 import type { ImportedWorld } from '@/product/imports/world';
 import type { ConnectionView } from '@/product/connections/model';
+import type { CreateWatchResult } from '@/product/view/watchCreation';
 
 /**
  * sample = the simulated sample night · imported = the user's own CSV / JSON evidence ·
@@ -49,7 +50,8 @@ export interface ProductApi {
   progress?: RunProgress;
   /** Undefined when an imported workspace has nothing to investigate yet. */
   runMonitoring(): Promise<MonitoringResult | undefined>;
-  createWatch(watch: Watch): void;
+  /** Distinguishes persistence failure from a successful create whose follow-up snapshot could not refresh. */
+  createWatch(watch: Watch): Promise<CreateWatchResult>;
   setWatchStatus(id: string, status: Watch['status']): void;
   setConnection(provider: ProviderId, state: ConnectionState, detail: string, opts?: { freshAsOf?: string }): void;
   setBrief(brief: BriefSchedule): void;
