@@ -124,7 +124,7 @@ export function AccountPanel() {
 const why = (e: unknown) => (e instanceof ServerError ? e.message : 'The server could not be reached.');
 
 /** Sources page for a server workspace with live connections. */
-export function ServerSources() {
+export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (connection: ConnectionView) => void } = {}) {
   const product = useProduct();
   const toast = useToast();
   const srv = product.server!;
@@ -211,7 +211,7 @@ export function ServerSources() {
           </div>
         </section>
       )}
-      {form && <ConnectForm workspaceId={srv.workspaceId} {...form} onDone={async () => { setForm(undefined); await srv.refresh(); }} />}
+      {form && <ConnectForm workspaceId={srv.workspaceId} {...form} onCancel={() => setForm(undefined)} onSuccess={async (connection) => { await srv.refresh(); setForm(undefined); onConnectionSaved?.(connection); }} />}
     </>
   );
 }
@@ -219,7 +219,7 @@ export function ServerSources() {
 /** connect: configuration and credential · reconnect: a new credential only · configure: configuration only (the stored credential is kept). */
 type FormMode = 'connect' | 'reconnect' | 'configure';
 
-function ConnectForm({ workspaceId, type, view, mode, onDone }: { workspaceId: string; type: ConnectionTypeInfo; view?: ConnectionView; mode: FormMode; onDone: () => void }) {
+function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { workspaceId: string; type: ConnectionTypeInfo; view?: ConnectionView; mode: FormMode; onCancel: () => void; onSuccess: (connection: ConnectionView) => Promise<void> }) {
   const reconnect = mode === 'reconnect';
   const configure = mode === 'configure' && !!view;
   const toast = useToast();
@@ -253,7 +253,7 @@ function ConnectForm({ workspaceId, type, view, mode, onDone }: { workspaceId: s
       const r = reconnect && view ? await serverApi.reconnect(workspaceId, view.id, cred) : await serverApi.connect(workspaceId, connectRequest(type.provider, parsed, configure ? undefined : cred));
       toast({ tone: r.check.state === 'connected' && !r.check.warnings?.length ? 'success' : 'warning', title: `${type.name}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
       setCred({});
-      onDone();
+      await onSuccess(r.connection);
     } catch (e) {
       setError(why(e));
     } finally {
@@ -264,11 +264,11 @@ function ConnectForm({ workspaceId, type, view, mode, onDone }: { workspaceId: s
     <Modal
       open
       wide
-      onClose={onDone}
+      onClose={() => { if (!busy) onCancel(); }}
       title={`${reconnect ? 'Reconnect' : configure ? 'Edit configuration:' : 'Connect'} ${type.name}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onDone}>Cancel</Button>
+          <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
           <Button onClick={() => void submit()} disabled={busy || (!configure && type.credentialFields.some((f) => !cred[f.key]?.trim()))}>
             {busy ? 'Testing…' : reconnect || configure ? 'Save and test' : 'Connect and test'}
           </Button>
