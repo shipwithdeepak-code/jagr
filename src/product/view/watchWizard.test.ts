@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '../catalog';
 import { defaultConnections } from '../integrations/adapters';
 import type { ProviderId, SourceConnection } from '../types';
-import { canLeaveSourceStep, connectionsPending, initialWizardSources, sourceStepBlocker, templateAvailability, wizardSourceRows } from './watchWizard';
+import { canLeaveSourceStep, connectionsPending, firstCompatibleTemplate, initialWizardSources, sourceStepBlocker, templateAvailability, wizardSourceRows } from './watchWizard';
 
 /**
  * Regression: production Create Watch crashed on "Where should I look?" with
@@ -120,5 +120,34 @@ describe('Create Watch never dead-ends', () => {
     expect(sourceStepBlocker([], wizardSourceRows(gh, [], server))).toMatch(/loading|load/i);
     expect(sourceStepBlocker([], wizardSourceRows(gh, defaultConnections(), browser))).toMatch(/None of this watch’s sources is connected/);
     expect(sourceStepBlocker([], wizardSourceRows(checkout, defaultConnections(), browser))).toBe('Choose at least one source.');
+  });
+});
+
+describe('first compatible watch template', () => {
+  const templates = WIZARD_TEMPLATES.map((id) => WATCH_TEMPLATES.find((t) => t.id === id)!);
+  it('chooses GitHub changes for a GitHub-only workspace', () => {
+    expect(firstCompatibleTemplate(templates, githubOnly.filter((c) => c.provider !== 'email'), server)).toBe('github_changes');
+  });
+  it('chooses the first catalog match for a Jira-only workspace', () => {
+    const jiraOnly: SourceConnection[] = [{ provider: 'jira', state: 'connected', detail: 'Jira', updatedAt: AT }];
+    expect(firstCompatibleTemplate(templates, jiraOnly, server)).toBe('checkout_health');
+  });
+  it('does not invent templates for healthy providers absent from the catalog', () => {
+    for (const provider of ['amplitude', 'sentry', 'intercom'] as const) {
+      const connections: SourceConnection[] = [{ provider, state: 'connected', detail: provider, updatedAt: AT }];
+      expect(firstCompatibleTemplate(templates, connections, server)).toBeUndefined();
+    }
+  });
+  it('uses deterministic catalog order with multiple supported sources', () => {
+    const connections: SourceConnection[] = [
+      { provider: 'github', state: 'connected', detail: 'GitHub', updatedAt: AT },
+      { provider: 'jira', state: 'connected', detail: 'Jira', updatedAt: AT },
+    ];
+    expect(firstCompatibleTemplate(templates, connections, server)).toBe('checkout_health');
+  });
+  it('returns no recommendation without a compatible source or while connections load', () => {
+    const emailOnly: SourceConnection[] = [{ provider: 'email', state: 'simulated', detail: 'In-app alerts', updatedAt: AT }];
+    expect(firstCompatibleTemplate(templates, emailOnly, server)).toBeUndefined();
+    expect(firstCompatibleTemplate(templates, [], server)).toBeUndefined();
   });
 });

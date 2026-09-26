@@ -77,6 +77,12 @@ export function signalMeta(key: SignalKey): SignalMeta {
   return { key, label: 'Releases and changes', kind: 'changes', priority: 9 };
 }
 
+/** The neutral source role required to serve a watch signal. */
+export function roleForSignal(key: SignalKey): Role {
+  const kind = signalMeta(key).kind;
+  return kind === 'metric' ? 'metrics' : kind;
+}
+
 /** Metrics to consult when investigating an area (the area's funnel metric first). */
 export const AREA_METRICS: Record<Area, string[]> = {
   checkout: ['checkout_conversion', 'purchase_revenue'],
