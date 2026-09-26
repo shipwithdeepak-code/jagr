@@ -17,6 +17,8 @@ export interface ServerSessionApi {
   /** The open server workspace; undefined = the browser-local workspace. */
   activeId?: string;
   active?: ServerWorkspaceSummary;
+  /** True while a workspace remembered in this browser is still being confirmed by the first check. */
+  restoring: boolean;
   error?: string;
   open(id: string): void;
   useBrowserWorkspace(): void;
@@ -49,8 +51,10 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<ServerWorkspaceSummary[]>([]);
   const [activeId, setActiveId] = useState<string | undefined>(readActive);
   const [error, setError] = useState<string | undefined>();
+  const [checked, setChecked] = useState(false);
 
-  const refresh = useCallback(async () => {
+  // One pass: server health, then who is signed in and their workspaces.
+  const check = async () => {
     const h = await serverApi.health();
     setServer(h ?? null);
     if (!h) {
@@ -72,6 +76,14 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
       setError(undefined);
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+  // Uses only state setters and the API, so a stable callback around it is safe.
+  const refresh = useCallback(async () => {
+    try {
+      await check();
+    } finally {
+      setChecked(true);
     }
   }, []);
 
@@ -103,9 +115,10 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const active = workspaces.find((w) => w.id === activeId);
+  const restoring = !checked && !!activeId;
   const api = useMemo<ServerSessionApi>(
-    () => ({ server, user, workspaces, activeId: active ? activeId : undefined, active, error, open, useBrowserWorkspace, create, signOut, refresh }),
-    [server, user, workspaces, activeId, active, error, open, useBrowserWorkspace, create, signOut, refresh],
+    () => ({ server, user, workspaces, activeId: active ? activeId : undefined, active, restoring, error, open, useBrowserWorkspace, create, signOut, refresh }),
+    [server, user, workspaces, activeId, active, restoring, error, open, useBrowserWorkspace, create, signOut, refresh],
   );
   return <ServerSessionContext.Provider value={api}>{children}</ServerSessionContext.Provider>;
 }

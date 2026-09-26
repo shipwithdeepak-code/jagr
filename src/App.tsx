@@ -7,8 +7,11 @@ import { AppShell } from '@/components/AppShell';
 import { EmptyState } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProductProvider } from '@/state/product';
-import { ServerSessionProvider } from '@/state/serverSession';
+import { ServerSessionProvider, useServerSession } from '@/state/serverSession';
+import { useProduct } from '@/state/productContext';
+import { surfaceFor, type Surface } from '@/state/surface';
 import { ProductOverviewPage } from '@/pages/ProductOverview';
+import { LandingPage } from '@/pages/Landing';
 
 // Secondary screens load on demand to keep the first paint small.
 const InvestigationsPage = lazy(() => import('@/pages/Investigations').then((m) => ({ default: m.InvestigationsPage })));
@@ -47,14 +50,39 @@ const TITLES: Record<string, string> = {
   '/about': 'About Jagr',
 };
 
-function ScrollAndTitle() {
+function ScrollAndTitle({ surface }: { surface: Surface }) {
   const { pathname, hash } = useLocation();
   useEffect(() => {
     if (!hash) window.scrollTo(0, 0);
     const key = '/' + (pathname.split('/')[1] ?? '');
-    document.title = `${TITLES[pathname] ?? TITLES[key] ?? 'Investigation'} · Jagr`;
-  }, [pathname, hash]);
+    document.title = surface === 'public' ? 'Jagr — know what changed while you were away' : `${TITLES[pathname] ?? TITLES[key] ?? 'Investigation'} · Jagr`;
+  }, [pathname, hash, surface]);
   return null;
+}
+
+/**
+ * The one place the two surfaces split (see state/surface.ts): the public landing renders on its own,
+ * outside the application shell; everything else renders inside the single AppShell.
+ */
+function Surfaces() {
+  const { pathname } = useLocation();
+  const { mode, location } = useProduct();
+  const { restoring } = useServerSession();
+  const surface = surfaceFor(pathname, { mode, location, restoring });
+  return (
+    <>
+      <ScrollAndTitle surface={surface} />
+      {surface === 'public' ? (
+        <ErrorBoundary resetKey={pathname}>
+          <LandingPage />
+        </ErrorBoundary>
+      ) : (
+        <AppShell>
+          <Screens />
+        </AppShell>
+      )}
+    </>
+  );
 }
 
 function Screens() {
@@ -102,10 +130,7 @@ export default function App() {
         <WorkspaceProvider>
           <ServerSessionProvider>
             <ProductProvider>
-              <ScrollAndTitle />
-              <AppShell>
-                <Screens />
-              </AppShell>
+              <Surfaces />
             </ProductProvider>
           </ServerSessionProvider>
         </WorkspaceProvider>

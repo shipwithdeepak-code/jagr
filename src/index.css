@@ -62,7 +62,9 @@
   }
 }
 
-:root[data-theme='dark'] {
+/* The dark palette, also applied to any subtree marked .theme-dark (the public landing is always dark). */
+:root[data-theme='dark'],
+.theme-dark {
   --canvas: #0d0e11;
   --surface: #141518;
   --subtle: #1a1b1f;
@@ -268,4 +270,20 @@ body {
     animation: none !important;
     opacity: 0.35;
   }
+}
+
+/* Public landing: one quiet signal — Jagr is watching. Stilled by the reduced-motion rule above. */
+@keyframes signal-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+.signal-ping {
+  animation: signal-ping 3.6s var(--ease-out) infinite;
 }
