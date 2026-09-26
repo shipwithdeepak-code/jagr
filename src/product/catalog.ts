@@ -105,6 +105,7 @@ export const BUILTIN_SOURCE_ROLES: Record<SourceId, Role[]> = {
   github: ['changes'],
   amplitude: ['metrics', 'changes'],
   intercom: ['feedback'],
+  sentry: ['metrics', 'changes', 'work_items'],
 };
 
 export const BUILTIN_METRIC_SOURCE: Record<string, SourceId> = {

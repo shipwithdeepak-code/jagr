@@ -177,7 +177,7 @@ async function observe(
         findings.push({
           status: r.status,
           blockers: 0,
-          signal: { key: sig.key, provider, area: series.area, label: series.name, magnitude: fmtMagnitude(series, r), ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: [series.ref] },
+          signal: { key: sig.key, provider, area: series.area, label: series.name, magnitude: fmtMagnitude(series, r), ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: [series.ref], ...(series.telemetry ? { telemetry: series.telemetry } : {}) },
         });
       });
     } else if (meta.kind === 'work_items') {

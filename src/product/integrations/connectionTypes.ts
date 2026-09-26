@@ -19,6 +19,7 @@ const EXAMPLES: Record<string, Record<string, unknown>> = {
   github: { repos: ['owner/repo'], environments: ['production'] },
   jira: { site: 'https://your-site.atlassian.net', project: 'KEY' },
   intercom: { region: 'us' },
+  sentry: { region: 'us', organization: 'your-org', projects: [1234567], environment: 'production', metrics: [{ kind: 'errors', key: 'checkout_errors', name: 'Checkout errors', area: 'checkout', query: 'transaction:/checkout*', threshold: 100 }, { kind: 'crash_free', key: 'crash_free_sessions', name: 'Crash-free sessions', threshold: 0.5 }] },
   slack: { channel: 'C0123456789' },
 };
 
