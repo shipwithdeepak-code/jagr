@@ -29,6 +29,7 @@ import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decis
 import { useProduct } from '@/state/productContext';
 import { EnvironmentContext, environmentForPath, inEnvironment, taskEnvironment, type AppEnvironment } from '@/state/environment';
 import { monitoringStatus } from '@/product/view/watchCard';
+import { hasRunnableConnectedWatch, hasRunnableProductWatch } from '@/product/view/quickStart';
 import { Logo, LogoMark } from './Logo';
 import { RunProgressPanel } from './runProgress';
 import { RunPlayer } from './RunPlayer';
@@ -108,6 +109,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       : state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested').length;
   const openTasks = state.tasks.filter((t) => t.status !== 'done' && taskEnvironment(t) === env).length;
   const watchFindings = product.state.result?.investigations.filter((i) => i.status !== 'DISMISSED' && i.attention !== 'LOW').length ?? 0;
+  const canRun = product.location === 'server' && product.mode === 'connected' && product.server
+    ? !product.server.loading && hasRunnableConnectedWatch({ connections: product.server.connections, watches: product.state.watches })
+    : hasRunnableProductWatch({ productConnections: product.state.connections, watches: product.state.watches });
 
   // OPERATE — the daily loop. REVIEW — what waits for a person. ADVANCED — inspect and evaluate.
   const primary: NavItem[] = [
@@ -278,8 +282,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="ml-auto"
                   icon={RefreshCw}
                   aria-label="Run monitoring now"
-                  disabled={product.running || !product.mode || (product.mode === 'imported' && !product.state.watches.length)}
-                  title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : 'Check every active watch now'}
+                  disabled={product.running || !canRun}
+                  title={!canRun ? 'Create or resume a compatible watch first' : 'Check every active watch now'}
                   onClick={async () => {
                     let r;
                     try {

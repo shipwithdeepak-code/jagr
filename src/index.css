@@ -218,6 +218,11 @@ body {
 .animate-reveal {
   animation: rise var(--dur-slow) var(--ease-out) both;
 }
+/* Welcome's one-shot conceptual investigation: evidence resolves into a decision in ~3.5s. */
+.welcome-reveal {
+  animation: rise 280ms var(--ease-out) both;
+  animation-delay: var(--welcome-delay, 0ms);
+}
 /* One-time emphasis for HIGH / CRITICAL attention — a single soft ring, never a loop. */
 @keyframes attention-once {
   0% {

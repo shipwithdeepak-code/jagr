@@ -12,8 +12,8 @@ import { EmptyPanel, LinkArrow, LoadingState, MetricValue, SectionHeader, Status
 import { readingOf } from '@/product/presentation';
 import { findingState, investigationTitle, labelledTime } from '@/product/view/investigation';
 import { watchCardStatus } from '@/product/view/watchCard';
-import { runHasEvidenceGap } from '@/product/view/quickStart';
-import { ConnectedWorkspaceQuickStart, GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
+import { hasRunnableConnectedWatch, hasRunnableProductWatch, runHasEvidenceGap } from '@/product/view/quickStart';
+import { ConnectedWorkspaceFirstRun, GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import type { ProviderId, WatchInvestigation } from '@/product/types';
 
 /**
@@ -25,6 +25,9 @@ export function ProductOverviewPage() {
   const { state, runMonitoring, running, mode, storageError, clearWorkspace, importedWorld, location, server } = useProduct();
   const r = state.result;
   const activeWatches = state.watches.filter((w) => w.status === 'active');
+  const canRun = location === 'server' && mode === 'connected' && server
+    ? !server.loading && hasRunnableConnectedWatch({ connections: server.connections, watches: state.watches })
+    : hasRunnableProductWatch({ productConnections: state.connections, watches: state.watches });
   const open = (r?.investigations ?? []).filter((i) => i.status !== 'DISMISSED' && i.status !== 'RESOLVED' && i.attention !== 'LOW');
   const attention = [...open].sort((a, b) => ATTENTION_ORDER.indexOf(a.attention) - ATTENTION_ORDER.indexOf(b.attention));
   const closed = [...(r?.investigations ?? [])].filter((i) => !open.includes(i)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -51,7 +54,7 @@ export function ProductOverviewPage() {
     <div className="animate-fade-up">
       {storageError && <div className="mb-4 rounded-lg border border-crit/40 bg-crit-soft/60 px-4 py-3 text-[13px] text-ink">{storageError}</div>}
       {mode === 'imported' && <GettingStarted />}
-      {mode === 'connected' && location === 'server' && <ConnectedWorkspaceQuickStart />}
+      {mode === 'connected' && location === 'server' && <ConnectedWorkspaceFirstRun />}
 
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -76,7 +79,7 @@ export function ProductOverviewPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button icon={RefreshCw} onClick={() => void runMonitoring().catch(() => undefined)} disabled={running || !activeWatches.length}>
+          <Button icon={RefreshCw} onClick={() => void runMonitoring().catch(() => undefined)} disabled={running || !canRun}>
             {running ? 'Running…' : 'Run now'}
           </Button>
           <Link to="/watches?new=1" className="interactive inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle">

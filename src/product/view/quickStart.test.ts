@@ -3,7 +3,7 @@ import { BUILTIN_SOURCE_ROLES, watchFromTemplate } from '../catalog';
 import type { ConnectionView } from '../connections/model';
 import type { ConnectionHealth } from '../connections/model';
 import type { MonitoringResult, ProviderId, SourceConnection, WatchInvestigation } from '../types';
-import { connectedQuickStartState, runHasEvidenceGap, type ConnectedQuickStartInput } from './quickStart';
+import { connectedQuickStartState, hasRunnableConnectedWatch, hasRunnableProductWatch, runHasEvidenceGap, type ConnectedQuickStartInput } from './quickStart';
 
 const AT = '2026-09-25T10:00:00.000Z';
 const source = (health: ConnectionHealth, provider = 'github'): ConnectionView => ({
@@ -48,6 +48,21 @@ describe('connected workspace Quick Start state', () => {
     const jiraWatch = watchFromTemplate('w-jira', 'customer_issues', { sources: ['jira'] }, AT);
     expect(connectedQuickStartState(input({ watches: [jiraWatch] })).stage).toBe('watch');
     expect(connectedQuickStartState(input({ connections: [source('healthy', 'jira')], productConnections: [productSource('jira')], watches: [jiraWatch] })).stage).toBe('run');
+  });
+
+  it('exposes the same active, healthy, compatible qualification to Run controls', () => {
+    const incompatible = watchFromTemplate('w-issues', 'customer_issues', { sources: ['amplitude'] }, AT);
+    expect(hasRunnableConnectedWatch({ connections: [source('healthy')], watches: [watch] })).toBe(true);
+    expect(hasRunnableConnectedWatch({ connections: [source('healthy')], watches: [{ ...watch, status: 'paused' }] })).toBe(false);
+    expect(hasRunnableConnectedWatch({ connections: [source('degraded')], watches: [watch] })).toBe(false);
+    expect(hasRunnableConnectedWatch({ connections: [source('healthy', 'amplitude')], watches: [incompatible] })).toBe(false);
+  });
+
+  it('requires an active compatible usable source for browser and imported Run controls', () => {
+    expect(hasRunnableProductWatch({ productConnections: [productSource()], watches: [watch] })).toBe(true);
+    expect(hasRunnableProductWatch({ productConnections: [{ ...productSource(), state: 'unavailable' }], watches: [watch] })).toBe(false);
+    expect(hasRunnableProductWatch({ productConnections: [productSource('amplitude')], watches: [watch] })).toBe(false);
+    expect(hasRunnableProductWatch({ productConnections: [productSource()], watches: [{ ...watch, status: 'paused' }] })).toBe(false);
   });
 
   it('uses only healthy sources when healthy and unhealthy connections are mixed', () => {

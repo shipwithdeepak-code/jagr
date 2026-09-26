@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Info } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { ConnectionState, ProviderId, RecordKind } from '@/product/types';
 import { externalUrl, PROVIDERS, resolveRef } from '@/product/integrations/adapters';
 import { defaultWorld } from '@/product/integrations/world';
@@ -15,10 +15,13 @@ import { SourceGroups } from '@/components/sources';
 import { sourceViews, type SourceGroup } from '@/product/view/sources';
 import { TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import { ServerSources } from '@/components/serverWorkspace';
+import { shouldReturnToOverviewAfterConnection } from '@/state/firstRun';
 
 
 export function SourcesPage() {
   const { mode, location, server } = useProduct();
+  const route = useLocation();
+  const navigate = useNavigate();
   if (location === 'server' && mode === 'connected') {
     return (
       <>
@@ -27,7 +30,7 @@ export function SourcesPage() {
           description={`Live sources for ${server?.name ?? 'this workspace'}. Credentials are stored encrypted on the Jagr server and never sent to this browser. Every source reports its real health; a source that cannot be read is a gap in investigations, never “nothing found”.`}
           actions={<WorkspaceDataBadge />}
         />
-        <ServerSources />
+        <ServerSources onConnectionSaved={(connection) => { if (shouldReturnToOverviewAfterConnection(route.search, connection.health)) navigate('/'); }} />
       </>
     );
   }

@@ -1,6 +1,7 @@
 import type { ConnectionView } from '../connections/model.js';
 import type { ISO, MonitoringResult, SchedulerLogEntry, SourceConnection, Watch, WatchInvestigation, WatchTemplateId } from '../types.js';
-import { roleForSignal, WATCH_TEMPLATES, WIZARD_TEMPLATES } from '../catalog.js';
+import { BUILTIN_SOURCE_ROLES, roleForSignal, WATCH_TEMPLATES, WIZARD_TEMPLATES } from '../catalog.js';
+import { isSourceId } from '../roles/types.js';
 import { firstCompatibleTemplate } from './watchWizard.js';
 import { watchCardStatus } from './watchCard.js';
 
@@ -28,13 +29,35 @@ export interface ConnectedQuickStartInput {
   snapshotAt?: ISO;
 }
 
-/** Derived activation state only: no onboarding flags, persistence, or synthetic results. */
-export function connectedQuickStartState(input: ConnectedQuickStartInput): ConnectedQuickStartState {
-  // Completion is historical and monotonic: current source/watch changes must never restart onboarding.
-  const lastRun = [...(input.result?.log ?? [])]
+export function hasRunnableConnectedWatch(input: Pick<ConnectedQuickStartInput, 'connections' | 'watches'>): boolean {
+  const healthySources = input.connections.filter((connection) => connection.kind === 'source' && connection.health === 'healthy');
+  return input.watches.some(
+    (watch) => watch.status === 'active' && healthySources.some((source) => watch.sources.includes(source.source as SourceConnection['provider']) && watch.signals.some((signal) => source.roles.includes(roleForSignal(signal.key)))),
+  );
+}
+
+export function hasRunnableProductWatch(input: Pick<ConnectedQuickStartInput, 'productConnections' | 'watches'>): boolean {
+  const usable = input.productConnections.filter((connection) => ['connected', 'imported', 'simulated'].includes(connection.state));
+  return input.watches.some(
+    (watch) => watch.status === 'active' && usable.some((connection) => {
+      if (!watch.sources.includes(connection.provider) || !isSourceId(connection.provider)) return false;
+      const roles = BUILTIN_SOURCE_ROLES[connection.provider];
+      return watch.signals.some((signal) => roles.includes(roleForSignal(signal.key)));
+    }),
+  );
+}
+
+export function historicalQuickStartRun(result?: MonitoringResult): SchedulerLogEntry | undefined {
+  return [...(result?.log ?? [])]
     .filter((entry) => entry.type === 'watch_run' && !!entry.watchId)
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
     .at(-1);
+}
+
+/** Derived activation state only: no onboarding flags, persistence, or synthetic results. */
+export function connectedQuickStartState(input: ConnectedQuickStartInput): ConnectedQuickStartState {
+  // Completion is historical and monotonic: current source/watch changes must never restart onboarding.
+  const lastRun = historicalQuickStartRun(input.result);
   if (lastRun) {
     const investigationIds = new Set(lastRun.investigationIds);
     const investigation = [...(input.result?.investigations ?? [])].filter((candidate) => investigationIds.has(candidate.id)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
@@ -54,9 +77,7 @@ export function connectedQuickStartState(input: ConnectedQuickStartInput): Conne
   const healthyConnections = input.productConnections.filter((c) => healthyIds.has(c.provider));
   const templates = WIZARD_TEMPLATES.map((id) => WATCH_TEMPLATES.find((template) => template.id === id)!).filter(Boolean);
   const recommendedTemplate = firstCompatibleTemplate(templates, healthyConnections, { location: 'server' });
-  const runnable = input.watches.some(
-    (watch) => watch.status === 'active' && healthySources.some((source) => watch.sources.includes(source.source as SourceConnection['provider']) && watch.signals.some((signal) => source.roles.includes(roleForSignal(signal.key)))),
-  );
+  const runnable = hasRunnableConnectedWatch(input);
   return runnable ? { stage: 'run', showChecklist: true, running: input.running, recommendedTemplate } : { stage: 'watch', showChecklist: true, running: false, recommendedTemplate };
 }
 

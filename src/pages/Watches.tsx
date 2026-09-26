@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Check, Pause, Play, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AttentionLevel, MonitoringFrequency, NotificationPolicy, ProviderId, Watch, WatchTemplateId } from '@/product/types';
 import { metricKeyOf, signalMeta, WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '@/product/catalog';
 import { metricKeyOf as nativeMetricKey, nativeMetricSignal } from '@/product/integrations/bridge';
@@ -18,6 +18,7 @@ import { AttentionBadge, ConnectionBadge, ProviderName } from '@/components/prod
 import { Button, cx, Drawer, EmptyState, Mono, PageHeader, Toggle, useDialogFocus } from '@/components/ui';
 import { investigationTitle } from '@/product/view/investigation';
 import { useToast } from '@/components/toast';
+import { isQuickStartOrigin } from '@/state/firstRun';
 
 export function WatchesPage() {
   const { state, setWatchStatus, mode, importedWorld, location, server } = useProduct();
@@ -25,6 +26,7 @@ export function WatchesPage() {
   const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
   const signalLabel = (key: SignalKey) => signalMeta(key).label;
   const [params, setParams] = useSearchParams();
+  const quickStartOrigin = isQuickStartOrigin(`?${params.toString()}`);
   const [logFor, setLogFor] = useState<Watch | null>(null);
   const wizardOpen = params.get('new') === '1';
   const r = state.result;
@@ -166,7 +168,7 @@ export function WatchesPage() {
         )}
       </Drawer>
 
-      {wizardOpen && <CreateWatchWizard initialTemplate={params.get('template')} onClose={() => setParams({})} />}
+      {wizardOpen && <CreateWatchWizard initialTemplate={params.get('template')} quickStartOrigin={quickStartOrigin} onClose={() => setParams({})} />}
     </>
   );
 }
@@ -195,9 +197,15 @@ const INTERRUPT: { value: NotificationPolicy['interruptAt']; label: string; hint
   { value: 'MEDIUM', label: 'Any persistent change', hint: 'Also single-source changes. Expect more alerts.' },
 ];
 
-function CreateWatchWizard({ onClose, initialTemplate }: { onClose: () => void; initialTemplate: string | null }) {
+export async function runCreatedWatch(runMonitoring: () => Promise<unknown>, onSuccess: () => void): Promise<void> {
+  await runMonitoring();
+  onSuccess();
+}
+
+function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onClose: () => void; initialTemplate: string | null; quickStartOrigin: boolean }) {
   const { state, createWatch, runMonitoring, running, mode, importedWorld, location } = useProduct();
   const toast = useToast();
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const requestedTemplate = WIZARD_TEMPLATES.includes(initialTemplate as WatchTemplateId) ? (initialTemplate as WatchTemplateId) : 'checkout_health';
   const [template, setTemplate] = useState<WatchTemplateId>(requestedTemplate);
@@ -520,9 +528,15 @@ function CreateWatchWizard({ onClose, initialTemplate }: { onClose: () => void; 
                 variant="primary"
                 disabled={running}
                 onClick={async () => {
-                  await runMonitoring();
-                  toast({ tone: 'success', title: 'Monitoring re-run', body: `${created.name} is now part of the overnight schedule.` });
-                  onClose();
+                  try {
+                    await runCreatedWatch(runMonitoring, () => {
+                      toast({ tone: 'success', title: 'Monitoring re-run', body: `${created.name} is now part of the overnight schedule.` });
+                      onClose();
+                      if (quickStartOrigin) navigate('/');
+                    });
+                  } catch (error) {
+                    toast({ tone: 'warning', title: 'The run did not complete', body: (error as Error).message });
+                  }
                 }}
               >
                 {running ? 'Running…' : 'Run monitoring now'}
