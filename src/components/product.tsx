@@ -72,9 +72,9 @@ export function InvestigationStateBadge({ state }: { state: InvestigationState }
 }
 
 export function attentionRoute(level: AttentionLevel, interruptAt: AttentionLevel = 'HIGH') {
-  if (level === 'CRITICAL') return 'Alert sent immediately';
+  if (level === 'CRITICAL') return 'Alert raised immediately';
   if (level === 'LOW') return 'No interruption';
-  if ((interruptAt === 'MEDIUM' && level === 'MEDIUM') || level === 'HIGH') return 'Alert sent once confirmed';
+  if ((interruptAt === 'MEDIUM' && level === 'MEDIUM') || level === 'HIGH') return 'Alert raised once confirmed';
   return 'Morning brief';
 }
 
@@ -118,7 +118,7 @@ export function EmailPreview({ email }: { email: EmailNotification }) {
           <span className="font-medium text-ink-2">Alert</span>
         )}
         <span className="ml-auto">
-          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} UTC · {email.trigger === 'immediate' ? 'sent immediately' : email.trigger === 'escalated' ? 'escalation' : 'sent once confirmed'}
+          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} UTC · {email.trigger === 'immediate' ? 'raised immediately' : email.trigger === 'escalated' ? 'escalation' : 'raised once confirmed'}
         </span>
         {email.to && (
           <Badge tone="neutral" className="border border-dashed border-line-strong">

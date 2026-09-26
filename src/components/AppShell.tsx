@@ -29,6 +29,7 @@ import { useWorkspace } from '@/state/workspace';
 import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decisions';
 import { useProduct } from '@/state/productContext';
 import { EnvironmentContext, environmentForPath, inEnvironment, taskEnvironment, type AppEnvironment } from '@/state/environment';
+import { monitoringStatus } from '@/product/view/watchCard';
 import { Logo, LogoMark } from './Logo';
 import { RunProgressPanel } from './runProgress';
 import { RunPlayer } from './RunPlayer';
@@ -137,6 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: '/demo/settings', label: 'Demo settings', icon: Settings },
   ];
   const identity = workspaceIdentity(product);
+  const monitor = monitoringStatus(product.state.watches, { location: product.location, result: product.state.result, clock: product.state.clock, snapshotAt: product.server?.snapshotAt, running: product.running });
 
   const startRun = useCallback(async () => {
     setRunning(true);
@@ -268,6 +270,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : (
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="min-w-0 truncate text-[13px] text-ink-3 lg:hidden">{identity.name}</span>
+              {/* Orientation the pages do not repeat: is monitoring running, scheduled, or on demand? */}
+              {product.mode && (
+                <span role="status" className="hidden min-w-0 items-center gap-2 truncate text-[13px] text-ink-2 sm:inline-flex">
+                  <span aria-hidden className={cx('size-1.5 shrink-0 rounded-full', monitor.tone === 'running' ? 'animate-pulse-dot bg-ink' : monitor.tone === 'active' ? 'bg-ok' : 'bg-line-strong')} />
+                  <span className="truncate">{monitor.text}</span>
+                </span>
+              )}
               {/* Overview owns its own Run button; before a workspace exists there is nothing to run. */}
               {location.pathname !== '/' && product.mode && (
                 <Button

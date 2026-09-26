@@ -3,7 +3,7 @@ import { watchFromTemplate } from '../catalog';
 import type { AuditEntry } from '../ports/persistence';
 import type { MonitoringResult } from '../types';
 import { productStateFromSnapshot, runAuditDetail, watchRunsFromAudit, type WorkspaceSnapshot } from '../app/workspaceSnapshot';
-import { watchCardStatus } from './watchCard';
+import { monitoringStatus, watchCardStatus } from './watchCard';
 
 /**
  * Regression: a server workspace's watch showed "Not run yet" / "0 runs" after it had run, and its next
@@ -84,5 +84,36 @@ describe('server watch run history', () => {
     const result = { window: { start: '2026-09-23T18:00:00.000Z', end: '2026-09-24T08:05:00.000Z' }, investigations: [], emails: [], briefs: [], connections: [], actions: [], log: [{ jobId: 'j1', type: 'watch_run', watchId: 'w-checkout', scheduledAt: '2026-09-23T18:30:00.000Z', outcome: 'All signals within normal range', investigationIds: [], emailIds: [] }] } as MonitoringResult;
     const card = watchCardStatus(sample, { location: 'browser', result, clock: '2026-09-24T08:05:00.000Z' });
     expect(card).toEqual({ runs: result.log, nextRun: '2026-09-24T08:30:00.000Z', quiet: 'No meaningful changes last night' });
+  });
+});
+
+describe('shell monitoring status', () => {
+  it('server: the next scheduled check across active watches', () => {
+    expect(monitoringStatus([github, checkout], { location: 'server', clock: SNAPSHOT_AT, snapshotAt: SNAPSHOT_AT })).toEqual({ tone: 'active', text: 'Scheduled · next check 10:22 UTC' });
+  });
+
+  it('local: says it runs on demand — a browser workspace has no scheduler', () => {
+    expect(monitoringStatus([github, checkout], { location: 'browser', clock: SNAPSHOT_AT })).toEqual({ tone: 'idle', text: 'Local · runs on demand' });
+  });
+
+  it('running, paused and empty states', () => {
+    expect(monitoringStatus([github], { location: 'server', clock: SNAPSHOT_AT, running: true })).toEqual({ tone: 'running', text: 'Checking watches…' });
+    expect(monitoringStatus([{ ...github, status: 'paused' }], { location: 'server', clock: SNAPSHOT_AT })).toEqual({ tone: 'idle', text: 'All watches paused' });
+    expect(monitoringStatus([], { location: 'server', clock: SNAPSHOT_AT })).toEqual({ tone: 'idle', text: 'No watches yet' });
+  });
+});
+
+describe('historical runs are never attributed to a watch', () => {
+  it('audit entries recorded before per-watch runs (no target) stay out of every watch’s history', () => {
+    const legacy = [run(undefined, '2026-09-25T08:00:00.000Z', '1 signal outside normal range'), run(undefined, '2026-09-25T08:30:00.000Z', 'All signals within normal range')];
+    const state = productStateFromSnapshot(snapshot(legacy), { emailFrom: 'jagr@test' });
+    expect(state.result).toBeUndefined();
+    for (const w of [github, checkout]) expect(watchCardStatus(w, { location: 'server', result: state.result, clock: state.clock, snapshotAt: SNAPSHOT_AT })).toMatchObject({ runs: [], lastRun: undefined, quiet: 'Not run yet' });
+  });
+
+  it('a new run alongside legacy entries is attributed only to its own watch', () => {
+    const state = productStateFromSnapshot(snapshot([run(undefined, '2026-09-25T08:00:00.000Z', 'legacy'), run('w-gh', '2026-09-25T10:07:00.000Z', 'GitHub: 0 deployments, 0 releases in the last 6h')]), { emailFrom: 'jagr@test' });
+    expect(watchCardStatus(github, { location: 'server', result: state.result, clock: state.clock, snapshotAt: SNAPSHOT_AT }).runs.map((l) => l.outcome)).toEqual(['GitHub: 0 deployments, 0 releases in the last 6h']);
+    expect(watchCardStatus(checkout, { location: 'server', result: state.result, clock: state.clock, snapshotAt: SNAPSHOT_AT }).runs).toEqual([]);
   });
 });

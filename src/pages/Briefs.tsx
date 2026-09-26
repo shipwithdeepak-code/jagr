@@ -32,7 +32,7 @@ export function BriefsPage() {
             onChange={(v) => setParams(v === 'briefs' ? {} : { tab: v })}
             items={[
               { value: 'briefs', label: 'Briefs' },
-              { value: 'alerts', label: `Alerts sent (${emails.length})` },
+              { value: 'alerts', label: `Alerts (${emails.length})` },
             ]}
           />
         }
@@ -91,7 +91,7 @@ export function BriefsPage() {
           </div>
         </div>
       ) : emails.length === 0 ? (
-        <EmptyState icon={Inbox} title="No alerts sent">
+        <EmptyState icon={Inbox} title="No alerts">
           Jagr only alerts you when something matters: HIGH findings once confirmed, CRITICAL immediately. Everything else waits for the brief.
         </EmptyState>
       ) : (
@@ -144,7 +144,7 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-ink-3">
                   <StatusBadge kind="attention" value={it.attention} size="md" />
                   <span>{it.watchNames.join(' + ')}</span>
-                  <span>{it.emailedAt ? `Alert sent ${fmtTime(it.emailedAt)} UTC` : 'New in this brief'}</span>
+                  <span>{it.emailedAt ? `Alert recorded ${fmtTime(it.emailedAt)} UTC` : 'New in this brief'}</span>
                 </div>
                 <h3 className="mt-2.5 text-[20px] leading-snug font-semibold tracking-[-0.01em]">{it.headline}</h3>
                 {!compact && (
@@ -228,7 +228,7 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
       </section>
 
       <p className="num mt-4 text-[13px] text-ink-3">
-        {view.stats.watchRuns} watch runs · {view.stats.sourcesChecked} sources · {view.stats.emailsSent} alert{view.stats.emailsSent === 1 ? '' : 's'} sent · {view.stats.dismissed} fluctuation{view.stats.dismissed === 1 ? '' : 's'} dismissed without interrupting you
+        {view.stats.watchRuns} watch runs · {view.stats.sourcesChecked} sources · {view.stats.emailsSent} alert{view.stats.emailsSent === 1 ? '' : 's'} recorded · {view.stats.dismissed} fluctuation{view.stats.dismissed === 1 ? '' : 's'} dismissed without interrupting you
       </p>
     </article>
   );
