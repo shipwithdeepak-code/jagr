@@ -19,7 +19,7 @@ export type ISO = string;
  * on these. The Sample workspace uses jira / ga4 / app_store / google_play; `amplitude`, `github` and
  * `intercom` are connector sources; `email` and `slack` are outbound notification channels, never sources.
  */
-export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github' | 'amplitude' | 'intercom' | 'email' | 'slack';
+export type ProviderId = 'jira' | 'ga4' | 'app_store' | 'google_play' | 'github' | 'amplitude' | 'intercom' | 'sentry' | 'email' | 'slack';
 /** Delivery channels: ids in ProviderId that carry notifications out, never evidence in. */
 export const CHANNEL_IDS = ['email', 'slack'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
@@ -161,6 +161,8 @@ export interface DetectedSignal {
   onsetAt: ISO;
   detectedAt: ISO;
   refs: SourceRef[];
+  /** Set for error / crash telemetry series (see MetricDefinition.telemetry). */
+  telemetry?: 'errors' | 'crash_free';
 }
 
 export type EvidenceDirection = 'degraded' | 'stable' | 'change' | 'gap';
@@ -202,7 +204,7 @@ export interface EvidenceProvenance {
   /** The source's data was complete only up to here at read time. */
   freshAsOf?: ISO;
   /** Metric readings the statement rests on. */
-  values?: { metric: string; current: number; baseline: number; baselineWindow: string; unit: 'percent' | 'count' | 'currency' };
+  values?: { metric: string; current: number; baseline: number; baselineWindow: string; unit: 'percent' | 'count' | 'currency'; telemetry?: 'errors' | 'crash_free' };
 }
 
 /**

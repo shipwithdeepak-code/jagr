@@ -4,6 +4,7 @@ import { AREA_LABEL, signalMeta } from '../catalog.js';
 import { labelOf, makeLink, type ProviderLabels } from '../integrations/adapters.js';
 import type { ChangeKind, ChangeRecord, ChangeTiming, FeedbackItem, MetricSeries, WorkItem } from '../roles/types.js';
 import { fmtMagnitude, type MetricReading } from './detect.js';
+import { telemetryFindings, telemetryReadings, type TelemetrySignalKind } from './telemetry.js';
 
 /**
  * Correlation and write-up. Evidence is gathered by the agent (src/product/agent/investigator.ts);
@@ -101,7 +102,7 @@ export function metricEvidence(series: MetricSeries, reading: MetricReading, sim
     refs: [ref],
     link,
     // Snapshot: the readings the statement rests on, as read.
-    provenance: { mode: p?.mode, sources: [series.source], fetchedAt: p?.fetchedAt ?? series.points[series.points.length - 1]?.t ?? '', records: p ? [{ externalId: p.externalId, url: p.url, observedAt: p.observedAt }] : [], values: { metric: series.name, current: degraded ? reading.currentSinceOnset : reading.current, baseline: series.baseline.mean, baselineWindow: series.baseline.window, unit: series.unit } },
+    provenance: { mode: p?.mode, sources: [series.source], fetchedAt: p?.fetchedAt ?? series.points[series.points.length - 1]?.t ?? '', records: p ? [{ externalId: p.externalId, url: p.url, observedAt: p.observedAt }] : [], values: { metric: series.name, current: degraded ? reading.currentSinceOnset : reading.current, baseline: series.baseline.mean, baselineWindow: series.baseline.window, unit: series.unit, ...(series.telemetry ? { telemetry: series.telemetry } : {}) } },
   };
 }
 
@@ -124,6 +125,8 @@ export interface Reasoning {
   recommendedNextStep: string;
   title: string;
   sourceLinks: SourceLink[];
+  /** Error and crash telemetry findings, when a telemetry source was part of the investigation. */
+  telemetrySignals: TelemetrySignalKind[];
 }
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
@@ -131,7 +134,10 @@ const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Gathered, area: Area, onsetAt: string, critical: boolean, persistent = true, labels?: ProviderLabels, simulatedLinks: (p: ProviderId) => boolean = () => true): Reasoning {
   const P = labelOf(labels);
   const degraded = g.evidence.filter((e) => e.direction === 'degraded');
-  const correlatedProviders = [...new Set([primary.provider, ...degraded.map((e) => e.provider)])];
+  // Error / crash telemetry the monitor detected is an independent observation in its own right, even
+  // when the agent's budget went on other questions: it corroborates, and it is stated as observed.
+  const telemetrySignals = signals.filter((s) => s.telemetry && s !== primary);
+  const correlatedProviders = [...new Set([primary.provider, ...degraded.map((e) => e.provider), ...telemetrySignals.map((s) => s.provider)])];
   const corroborating = correlatedProviders.filter((p) => p !== primary.provider).length;
   const areaLabel = AREA_LABEL[area].toLowerCase();
 
@@ -157,6 +163,9 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
   const confidenceReason = `${correlatedProviders.length} ${correlatedProviders.length === 1 ? 'source shows' : 'independent sources show'} the degradation${g.gaps.length ? `; ${g.gaps.length} source${g.gaps.length === 1 ? ' was' : 's were'} unavailable, which lowers confidence` : ''}. This is confidence that the ${areaLabel} problem is real, not that its cause is known.`;
 
   const observed = g.evidence.filter((e) => e.direction !== 'gap').map((e) => e.statement);
+  for (const s of telemetrySignals) {
+    if (!degraded.some((e) => e.provider === s.provider && e.provenance?.values?.metric === s.label)) observed.push(`${P(s.provider).short}: ${s.label} moved ${s.magnitude} from its baseline since ${fmtTime(s.onsetAt)}.`);
+  }
 
   const inferred: string[] = [];
   // When each source first degraded — the spread of first signals is what indicates a shared problem.
@@ -183,9 +192,27 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
           ? 'What is behind the change — no release or other change was found in the window.'
           : 'Whether a release or change is involved — release history was not checked in this investigation.',
   );
+  // Error and crash telemetry: what it adds, when a telemetry source was read in this investigation.
+  const readings = telemetryReadings(signals, g.evidence);
+  const telemetryEvidence = g.evidence.filter((e) => e.provenance?.values?.telemetry && e.direction !== 'gap');
+  const telemetryProviders = new Set([...readings.map((r) => r.provider), ...telemetryEvidence.map((e) => e.provider)]);
+  const telemetryChecked = telemetryProviders.size > 0;
+  const telemetry = telemetryFindings({
+    readings,
+    sourceNames: [...telemetryProviders].map((p) => P(p).short),
+    telemetryStable: telemetryEvidence.some((e) => e.direction === 'stable'),
+    otherDegraded: correlatedProviders.filter((p) => !telemetryProviders.has(p)).map((p) => P(p).short),
+    change: releaseAssociation ? { phrase: assocPhrase, minutesBeforeOnset: releaseAssociation.minutesBeforeOnset } : undefined,
+    areaLabel,
+  });
+  inferred.push(...telemetry.inferred);
+  unknowns.push(...telemetry.unknowns);
+
   for (const gap of g.gaps) unknowns.push(gap.detail);
   for (const p of g.notInWatch) unknowns.push(`${P(p).name} is not part of this watch, so it was not checked.`);
-  if (area === 'checkout') unknowns.push('Payment-provider and server error data are not connected to Jagr.');
+  if (telemetryChecked) {
+    if (area === 'checkout') unknowns.push('Payment-provider data is not connected to Jagr.');
+  } else if (area === 'checkout') unknowns.push('Payment-provider and server error data are not connected to Jagr.');
   else unknowns.push('Server-side error data is not connected to Jagr.');
 
   const hypotheses: Hypothesis[] = [];
@@ -247,5 +274,5 @@ export function reason(primary: DetectedSignal, signals: DetectedSignal[], g: Ga
     }
   }
 
-  return { correlatedProviders, corroborating, releaseAssociation, confidence, confidenceReason, observed, inferred, unknowns, hypotheses, likelyExplanation, uncertainty, recommendedNextStep, title, sourceLinks };
+  return { correlatedProviders, corroborating, releaseAssociation, confidence, confidenceReason, observed, inferred, unknowns, hypotheses, likelyExplanation, uncertainty, recommendedNextStep, title, sourceLinks, telemetrySignals: telemetry.kinds };
 }

@@ -31,6 +31,7 @@ export const PROVIDERS: Record<ProviderId, { name: string; short: string; capabi
   github: { name: 'GitHub', short: 'GitHub', capabilities: ['releases', 'changes'], externalBase: 'https://github.com', realApi: 'GitHub REST API (deployments, releases)' },
   amplitude: { name: 'Amplitude', short: 'Amplitude', capabilities: ['metrics', 'changes'], externalBase: 'https://app.amplitude.com', realApi: 'Amplitude Dashboard REST API' },
   intercom: { name: 'Intercom', short: 'Intercom', capabilities: ['reviews'], externalBase: 'https://app.intercom.com', realApi: 'Intercom REST API (conversations)' },
+  sentry: { name: 'Sentry', short: 'Sentry', capabilities: ['metrics', 'releases', 'issues', 'changes'], externalBase: 'https://sentry.io', realApi: 'Sentry REST API (events-stats, sessions, releases, issues)' },
   slack: { name: 'Slack', short: 'Slack', capabilities: ['send_email'], externalBase: 'https://slack.com', realApi: 'Slack Web API (chat.postMessage)' },
   email: { name: 'Email', short: 'Email', capabilities: ['send_email'], externalBase: 'mailto:', realApi: 'SMTP / transactional email provider' },
 };

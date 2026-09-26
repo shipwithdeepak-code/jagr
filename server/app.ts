@@ -143,7 +143,8 @@ export function createApp(rt: Runtime) {
       const unknown = sources.filter((s) => !connected.has(s));
       if (unknown.length || !sources.length) return json(400, { error: unknown.length ? `Not a source in this workspace: ${unknown.join(', ')}.` : 'None of this template’s sources is connected; pass sources explicitly.' });
       // Connected workspaces define their own metrics: keep the template's metric signals the sources serve.
-      // Metrics configured for the template's area that the template does not name are added too.
+      // Metrics configured for the template's area that the template does not name are added too, and
+      // error / crash telemetry whatever its area (a crash regression matters to every product area).
       const served = ws.mode === 'connected' ? (await sourcesForRun(rt, ws, rt.clock.now())).registry.metrics(sources.filter((x): x is SourceId => isSourceId(x as ProviderId))) : undefined;
       const { templateId: _t, sources: _s, ...overrides } = body.data;
       void _t;
@@ -151,7 +152,7 @@ export function createApp(rt: Runtime) {
       const watch = watchFromTemplate(newId('watch'), tpl.id, { ...overrides, sources: sources as ProviderId[], metricKeys: served?.map((m) => m.def.key) }, rt.clock.now());
       for (const m of served ?? []) {
         const key = `metric:${m.def.key}` as const;
-        if ((tpl.area === '*' || m.def.area === tpl.area) && !watch.signals.some((x) => x.key === key)) watch.signals.unshift({ key });
+        if ((tpl.area === '*' || m.def.area === tpl.area || m.def.telemetry) && !watch.signals.some((x) => x.key === key)) watch.signals.unshift({ key });
       }
       await rt.repos.watches.save(id, watch);
       await audit(id, p, 'watch.created', watch.id, tpl.name);

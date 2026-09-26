@@ -62,6 +62,12 @@ export interface MetricDefinition {
   /** Default detection threshold (% or points, depending on mode). */
   threshold: number;
   platform?: 'ios' | 'android' | 'web';
+  /**
+   * Error / crash telemetry: `errors` is a count of application errors (bad when it rises), `crash_free`
+   * a crash-free rate (bad when it falls). Lets the engine recognise error spikes and crash regressions
+   * whichever source reports them.
+   */
+  telemetry?: 'errors' | 'crash_free';
 }
 
 export interface MetricPoint {

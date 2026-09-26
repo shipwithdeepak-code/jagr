@@ -69,7 +69,7 @@ describe('connection lifecycle API', () => {
     const s = await signIn(app, 'code-ana');
     const r = await app(req('GET', '/api/connection-types', s));
     const types = (r.body as { types: { provider: string; credentialFields: { key: string }[]; roles: string[] }[] }).types;
-    expect(types.map((t) => t.provider).sort()).toEqual(['amplitude', 'github', 'intercom', 'jira', 'slack']);
+    expect(types.map((t) => t.provider).sort()).toEqual(['amplitude', 'github', 'intercom', 'jira', 'sentry', 'slack']);
     expect(types.find((t) => t.provider === 'jira')!.credentialFields.map((f) => f.key)).toEqual(['email', 'apiToken']);
     expect(types.find((t) => t.provider === 'slack')!.roles).toEqual([]);
   });
