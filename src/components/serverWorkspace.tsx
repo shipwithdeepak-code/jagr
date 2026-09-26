@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cloud, LogOut, Monitor, Plus, Server } from 'lucide-react';
+import { LogOut, Monitor, Server } from 'lucide-react';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
 import type { ConnectionView } from '@/product/connections/model';
 import { connectRequest, githubConfigFromFields, githubFieldsFromConfig, type GitHubFields } from '@/product/view/connectionForm';
@@ -8,9 +8,10 @@ import { isSourceId, type SourceId } from '@/product/roles/types';
 import { useProduct } from '@/state/productContext';
 import { markSigningIn, useServerSession } from '@/state/serverSession';
 import { serverApi, ServerError } from '@/state/serverApi';
-import { Badge, Button, Card, Modal, SectionTitle, Select, Toggle, cx } from '@/components/ui';
+import { Badge, Button, Card, Modal, SectionTitle, Toggle, cx } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { SourceGroups, SourcesOverview } from '@/components/sources';
+import { useSignOut } from '@/components/signOut';
 
 /**
  * Server workspaces in the browser: where the workspace lives, sign-in, and connecting live sources.
@@ -20,120 +21,101 @@ import { SourceGroups, SourcesOverview } from '@/components/sources';
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[14px] text-ink';
 
-/** Account and workspace location (Settings page). Absent when there is no Jagr server. */
-export function WorkspaceLocationPanel() {
-  const session = useServerSession();
+/** Where the open workspace lives, and — for this browser's workspace — how to get to a server one. */
+export function workspacePanelNote({ onServer, hasServer, signedIn }: { onServer: boolean; hasServer: boolean; signedIn: boolean }): string {
+  if (onServer) return 'Stored on this Jagr server. Watches run on their schedule without this browser open.';
+  if (!hasServer) return 'Stored in this browser only. Server workspaces — live connections, scheduled monitoring, shared approvals — are available where a Jagr server is deployed.';
+  // Signed in but in this browser's workspace: they need to open a server workspace, not sign in.
+  if (signedIn) return 'Stored in this browser only. Open a server workspace, with live sources and scheduled monitoring, from the workspace menu at the top of the sidebar.';
+  return 'Stored in this browser only. Sign in to use server workspaces with live sources and scheduled monitoring.';
+}
+
+/**
+ * Settings → Workspace: what the open workspace is — its name, where it lives, and your role.
+ * Switching and creating live in the workspace menu at the top of the sidebar, not here.
+ */
+export function WorkspacePanel() {
   const product = useProduct();
-  const toast = useToast();
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<'connected' | 'imported'>('connected');
-  const [busy, setBusy] = useState(false);
-  if (session.server === undefined) return null;
-  if (session.server === null)
-    return (
-      <Card>
-        <p className="text-[14px] text-ink">
-          <Monitor size={14} className="mr-1.5 inline text-ink-3" aria-hidden />
-          Local workspace — stored in this browser.
-        </p>
-        <p className="mt-1 text-[13px] text-ink-2">This copy of Jagr runs without a server. Server workspaces — live connections, scheduled monitoring without a browser open, shared approvals — are available where a Jagr server is deployed.</p>
-      </Card>
-    );
+  const session = useServerSession();
+  const server = product.location === 'server' ? product.server : undefined;
   return (
     <Card>
-      {!session.user && <p className="mb-3 text-[13px] text-ink-2">{session.server.mode === 'single-tenant' ? 'Only this deployment’s configured owners can sign in.' : 'Sign in to use workspaces stored on this Jagr server.'}</p>}
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
-        {product.location === 'server' ? (
+        {server ? (
           <Badge tone="accent">
-            <Server size={12} aria-hidden /> Server workspace · {product.server?.name}
+            <Server size={12} aria-hidden /> Server workspace
           </Badge>
         ) : (
           <Badge>
             <Monitor size={12} aria-hidden /> Browser workspace
           </Badge>
         )}
-        {session.user && <span className="text-ink-3">Signed in as {session.user.displayName}</span>}
+        <span className="font-medium text-ink">{server ? server.name : 'Local workspace'}</span>
+        {server && <span className="text-ink-3">· {server.role}</span>}
       </div>
-      {session.error && <p className="mt-2 text-[13px] text-crit">{session.error}</p>}
+      <p className="mt-2 text-[13px] text-ink-2">{workspacePanelNote({ onServer: !!server, hasServer: !!session.server, signedIn: !!session.user })}</p>
+      <p className="mt-2 text-[13px] text-ink-3">To switch or create a workspace, use the workspace menu at the top of the sidebar.</p>
+    </Card>
+  );
+}
 
-      {!session.user ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {session.server.signIn.length ? (
-            session.server.signIn.map((p) => (
-              <a key={p} className="inline-flex h-8 items-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle" href={serverApi.signInUrl(p, '/settings')} onClick={markSigningIn}>
-                Sign in with {p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p}
-              </a>
-            ))
-          ) : (
-            <p className="text-[13px] text-ink-3">No sign-in provider is configured on this server.</p>
-          )}
+/** Settings → AI: the server workspace's policy on sending evidence to an AI provider. */
+export function AiEgressSetting() {
+  const product = useProduct();
+  if (product.location !== 'server' || !product.server) return null;
+  const { server } = product;
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3 text-[13px]">
+        <div>
+          <div className="font-medium">Allow AI planning</div>
+          <p className="text-[13px] text-ink-3">When off, this workspace never sends evidence to an AI provider; the deterministic planner runs instead.</p>
+        </div>
+        <Toggle label="Allow AI planning" checked={server.settings.aiEgressAllowed} disabled={server.role === 'member'} onChange={(v) => void server.setAiEgressAllowed(v)} />
+      </div>
+    </Card>
+  );
+}
+
+/** Settings → Account: who is signed in, and the same Sign out as the account menu. */
+export function AccountPanel() {
+  const session = useServerSession();
+  const signOut = useSignOut();
+  if (session.server === undefined) return null;
+  if (session.server === null)
+    return (
+      <Card>
+        <p className="text-[13px] text-ink-2">This copy of Jagr runs in the browser only, so there is no account to sign in to.</p>
+      </Card>
+    );
+  return (
+    <Card>
+      {session.user ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-[13px]">
+          <span>
+            Signed in as <span className="font-medium text-ink">{session.user.displayName}</span>
+          </span>
+          <Button size="sm" variant="secondary" icon={LogOut} onClick={() => void signOut()}>
+            Sign out
+          </Button>
         </div>
       ) : (
         <>
-          <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
-            <li className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
-              <span>
-                <Monitor size={13} className="mr-1.5 inline text-ink-3" aria-hidden />
-                Browser workspace <span className="text-ink-3">· this browser only</span>
-              </span>
-              <Button size="sm" variant="secondary" disabled={product.location === 'browser'} onClick={session.useBrowserWorkspace}>
-                {product.location === 'browser' ? 'Open' : 'Switch'}
-              </Button>
-            </li>
-            {session.workspaces.map((w) => (
-              <li key={w.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
-                <span className="min-w-0 truncate">
-                  <Cloud size={13} className="mr-1.5 inline text-ink-3" aria-hidden />
-                  {w.name} <span className="text-ink-3">· {w.mode === 'connected' ? 'live sources' : w.mode === 'imported' ? 'imported data' : 'sample'} · {w.role}</span>
-                </span>
-                <Button size="sm" variant="secondary" disabled={session.activeId === w.id} onClick={() => session.open(w.id)}>
-                  {session.activeId === w.id ? 'Open' : 'Switch'}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="mt-3 flex flex-wrap items-end gap-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!name.trim()) return;
-              setBusy(true);
-              try {
-                await session.create(name.trim(), mode);
-                setName('');
-                toast({ tone: 'success', title: 'Server workspace created', body: mode === 'connected' ? 'Connect sources on the Sources page, then create a watch.' : 'Upload your files on the Sources page, then create a watch.' });
-              } catch (err) {
-                toast({ tone: 'warning', title: 'Could not create the workspace', body: (err as Error).message });
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <label className="min-w-[12rem] flex-1 text-[13px] text-ink-2">
-              New server workspace
-              <input className={inputCls} value={name} maxLength={80} placeholder="e.g. Checkout team" onChange={(e) => setName(e.target.value)} />
-            </label>
-            <Select label="Data" value={mode} onChange={setMode} options={[{ value: 'connected', label: 'Live sources' }, { value: 'imported', label: 'Imported files' }]} />
-            <Button type="submit" size="sm" icon={Plus} disabled={busy || !name.trim()}>
-              Create
-            </Button>
-          </form>
-          {product.location === 'server' && product.server && (
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-[13px]">
-              <div>
-                <div className="font-medium">Allow AI planning</div>
-                <p className="text-[13px] text-ink-3">When off, this workspace never sends evidence to an AI provider; the deterministic planner runs instead.</p>
-              </div>
-              <Toggle label="Allow AI planning" checked={product.server.settings.aiEgressAllowed} disabled={product.server.role === 'member'} onChange={(v) => void product.server!.setAiEgressAllowed(v)} />
-            </div>
-          )}
-          <div className="mt-3">
-            <Button size="sm" variant="secondary" icon={LogOut} onClick={() => void session.signOut()}>
-              Sign out
-            </Button>
+          <p className="text-[13px] text-ink-2">{session.server.mode === 'single-tenant' ? 'Only this deployment’s configured owners can sign in.' : 'Sign in to use workspaces stored on this Jagr server.'}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {session.server.signIn.length ? (
+              session.server.signIn.map((p) => (
+                <a key={p} className="inline-flex h-8 items-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle" href={serverApi.signInUrl(p, '/settings')} onClick={markSigningIn}>
+                  Sign in with {p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p}
+                </a>
+              ))
+            ) : (
+              <p className="text-[13px] text-ink-3">No sign-in provider is configured on this server.</p>
+            )}
           </div>
         </>
       )}
+      {session.error && <p className="mt-2 text-[13px] text-crit">{session.error}</p>}
     </Card>
   );
 }

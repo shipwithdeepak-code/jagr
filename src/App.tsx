@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
 import { Compass } from 'lucide-react';
 import { WorkspaceProvider } from '@/state/store';
@@ -78,6 +78,8 @@ function Surfaces() {
   const { pathname, search } = useLocation();
   const { mode, location, server } = useProduct();
   const session = useServerSession();
+  // Whether the application is already on screen with a workspace: switching then keeps the shell.
+  const shownWorkspace = useRef(false);
   const { surface, autoOpen } = resolveSurface(
     pathname,
     search,
@@ -89,9 +91,12 @@ function Surfaces() {
       choice: session.choice,
       signingIn: session.signingIn,
       failed: !!session.error || (session.server === null && session.choice === 'server'),
+      expired: session.expired,
     },
-    { location, mode, serverFailed: !!server?.error && !server.loading },
+    { location, mode, serverFailed: !!server?.error && !server.loading, keepShell: shownWorkspace.current },
   );
+  if (surface === 'app' && mode) shownWorkspace.current = true;
+  else if (surface !== 'app' && surface !== 'resolving') shownWorkspace.current = false;
   // A signed-in person's only workspace opens by itself. The URL is left as it is (no new history
   // entry), so they land on the route they asked for.
   const { open } = session;

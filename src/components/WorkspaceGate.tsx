@@ -4,8 +4,9 @@ import { Link, useLocation } from 'react-router-dom';
 import type { Surface } from '@/state/surface';
 import { markSigningIn, useServerSession } from '@/state/serverSession';
 import { serverApi } from '@/state/serverApi';
-import { useProduct } from '@/state/productContext';
+import { useExploreLocally } from '@/state/exploreLocally';
 import { Logo } from './Logo';
+import { useSignOut } from './signOut';
 import { Button, Select, cx } from './ui';
 
 /**
@@ -56,23 +57,14 @@ function Resolving() {
   );
 }
 
-/** Opens this browser's sample workspace — an explicit choice to stay local. */
-function useExploreLocally() {
-  const { createWorkspace } = useProduct();
-  const { useBrowserWorkspace } = useServerSession();
-  return () => {
-    useBrowserWorkspace();
-    createWorkspace('sample');
-  };
-}
-
 function Alternatives({ children }: { children?: ReactNode }) {
   const session = useServerSession();
+  const signOut = useSignOut();
   return (
     <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-5">
       {children}
       {session.user && (
-        <button type="button" className={quiet} onClick={() => void session.signOut()}>
+        <button type="button" className={quiet} onClick={() => void signOut()}>
           Sign out
         </button>
       )}
@@ -82,7 +74,8 @@ function Alternatives({ children }: { children?: ReactNode }) {
 
 function Choose() {
   const session = useServerSession();
-  const explore = useExploreLocally();
+  const exploreLocally = useExploreLocally();
+  const explore = () => exploreLocally();
   const [creating, setCreating] = useState(false);
   return (
     <section aria-labelledby="gate-h">
@@ -125,7 +118,8 @@ function Choose() {
 
 function Create() {
   const session = useServerSession();
-  const explore = useExploreLocally();
+  const exploreLocally = useExploreLocally();
+  const explore = () => exploreLocally();
   return (
     <section aria-labelledby="gate-h">
       <h1 id="gate-h" className={heading}>
@@ -147,7 +141,7 @@ function Create() {
 }
 
 /** The existing server call (session.create), which opens the new workspace when it succeeds. */
-function CreateForm() {
+export function CreateForm({ onCreated }: { onCreated?: () => void }) {
   const session = useServerSession();
   const [name, setName] = useState('');
   const [mode, setMode] = useState<'connected' | 'imported'>('connected');
@@ -163,6 +157,7 @@ function CreateForm() {
         setError(undefined);
         try {
           await session.create(name.trim(), mode);
+          onCreated?.();
         } catch (err) {
           setError((err as Error).message);
           setBusy(false);
@@ -191,8 +186,9 @@ function CreateForm() {
 function NoWorkspace() {
   const session = useServerSession();
   const { pathname, search, hash } = useLocation();
-  const explore = useExploreLocally();
-  const failed = !!session.error || (session.server === null && session.choice === 'server');
+  const exploreLocally = useExploreLocally();
+  const explore = () => exploreLocally();
+  const failed = !session.expired && (!!session.error || (session.server === null && session.choice === 'server'));
   const google = session.server?.signIn.includes('google');
   return (
     <section aria-labelledby="gate-h">
@@ -225,7 +221,9 @@ function NoWorkspace() {
         </>
       ) : (
         <>
-          <p className={lede}>Sign in to open your workspace on this page, or look around Jagr without an account.</p>
+          <p className={lede}>
+            {session.expired ? 'Your session has ended. Sign in again to continue on this page.' : 'Sign in to open your workspace on this page, or look around Jagr without an account.'}
+          </p>
           {google && (
             <div className="mt-8">
               <a href={serverApi.signInUrl('google', `${pathname}${search}${hash}`)} onClick={markSigningIn} className="interactive inline-flex h-10 items-center gap-2 rounded-lg bg-ink px-4 text-[14px] font-medium text-canvas hover:opacity-90">

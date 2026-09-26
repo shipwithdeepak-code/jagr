@@ -16,7 +16,7 @@ import { exportLocalWorkspace, localWorkspaceFromExport, planImport, type Import
 import { EMAIL_FROM } from '@/product/catalog';
 import { productStateFromSnapshot, type WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
 import { useServerSession } from './serverSession';
-import { serverApi } from './serverApi';
+import { serverApi, ServerError } from './serverApi';
 
 /** Recorded in exports this browser produces. */
 const APP_VERSION = '1.1.0';
@@ -95,6 +95,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const [srv, setSrv] = useState<{ id: string; snapshot: WorkspaceSnapshot; state: ProductState } | undefined>();
   const [serverLoading, setServerLoading] = useState(false);
   const [serverError, setServerError] = useState<string | undefined>();
+  // A 401 from a workspace call means the session ended mid-use: re-check it, so the person gets the
+  // signed-out screen with sign-in back to this route instead of a stale workspace and an error.
+  const { sessionLost } = session;
+  const authLost = useCallback((e: unknown) => {
+    if (e instanceof ServerError && e.status === 401) void sessionLost();
+  }, [sessionLost]);
   const loadServer = useCallback(async (id: string) => {
     setServerLoading(true);
     try {
@@ -103,10 +109,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       setServerError(undefined);
     } catch (e) {
       setServerError((e as Error).message);
+      authLost(e);
     } finally {
       setServerLoading(false);
     }
-  }, []);
+  }, [authLost]);
   useEffect(() => {
     if (serverId) void loadServer(serverId);
     else setSrv(undefined);
@@ -121,11 +128,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         return r;
       } catch (e) {
         setServerError((e as Error).message);
+        authLost(e);
         await loadServer(serverId).catch(() => undefined);
         return undefined;
       }
     },
-    [serverId, loadServer],
+    [serverId, loadServer, authLost],
   );
   const inServer = !!serverId;
   const view: ProductState = inServer ? (srv?.id === serverId ? srv.state : { ...initial(), connections: [], watches: [] }) : state;
@@ -276,6 +284,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       setPlannerChoice,
       mode,
       createWorkspace,
+      localMode: mode,
+      createLocalWorkspace: createWorkspace,
       addImport,
       removeImport,
       importedWorld,
@@ -305,6 +315,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           setServerError(undefined);
         } catch (e) {
           setServerError((e as Error).message);
+          authLost(e);
           throw e;
         } finally {
           setServerRunning(false);
@@ -331,6 +342,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       mode,
       // New workspaces are created from the account panel; this leaves the server workspace for the browser one.
       createWorkspace: () => session.useBrowserWorkspace(),
+      localMode: state.workspace?.mode,
+      createLocalWorkspace: createWorkspace,
       addImport: (kind: ImportKind, filename: string, text: string) => {
         // Parsed here for the immediate report (same core parser); the server parses again and stores its own result.
         const ds = importFile(kind, filename, text, new Date().toISOString(), `preview-${kind}`);
@@ -362,7 +375,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         setAiEgressAllowed: async (allowed: boolean) => void (await onServer((id) => serverApi.updateWorkspace(id, { aiEgressAllowed: allowed }))),
       },
     };
-  }, [serverId, session, srv, view, serverRunning, onServer, health, mode, importedWorld, previewImport, serverLoading, serverError, loadServer]);
+  }, [serverId, session, srv, view, serverRunning, onServer, health, mode, importedWorld, previewImport, serverLoading, serverError, loadServer, authLost, state.workspace?.mode, createWorkspace]);
 
   const api = server ?? local;
   return <ProductContext.Provider value={api}>{children}</ProductContext.Provider>;

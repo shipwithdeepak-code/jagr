@@ -67,7 +67,7 @@ function SampleSources() {
       <div className="mb-8 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-[13px]">
         <Info size={15} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
         <p className="text-ink-2">
-          <span className="font-medium text-ink">This local workspace reads sample data.</span> Every source below is simulated, and every fact from it is labelled simulated. To connect GitHub, Jira, Amplitude, Intercom or Slack, use a server workspace — <Link to="/settings#workspace" className="font-medium text-accent hover:underline">sign in</Link>. Credentials are stored encrypted on the server, never in this browser.
+          <span className="font-medium text-ink">This local workspace reads sample data.</span> Every source below is simulated, and every fact from it is labelled simulated. To connect GitHub, Jira, Amplitude, Intercom or Slack, use a server workspace — <Link to="/settings#account" className="font-medium text-accent hover:underline">sign in</Link>. Credentials are stored encrypted on the server, never in this browser.
         </p>
       </div>
       <SourceGroups

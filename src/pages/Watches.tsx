@@ -330,7 +330,7 @@ function CreateWatchWizard({ onClose }: { onClose: () => void }) {
                         {location === 'server' ? '' : ' Live connections belong to server workspaces.'}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Link to={location === 'server' ? '/sources' : '/settings#workspace'} onClick={onClose} className="interactive inline-flex h-8 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas hover:opacity-90">
+                        <Link to={location === 'server' ? '/sources' : '/settings#account'} onClick={onClose} className="interactive inline-flex h-8 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas hover:opacity-90">
                           {location === 'server' ? `Connect ${PROVIDERS[availability.missing[0]].short}` : 'Sign in to a server workspace'}
                         </Link>
                         <Button size="sm" onClick={() => setTemplate(WIZARD_TEMPLATES.find((id) => templateAvailability(WATCH_TEMPLATES.find((x) => x.id === id)!.sources, state.connections, { location }).status === 'ready') ?? 'checkout_health')}>
