@@ -8,11 +8,11 @@ import { fmtDateTime, fmtTime } from '@/lib/time';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { pendingApprovals } from '@/product/agent/decisions';
 import { Button, cx } from '@/components/ui';
-import { EmptyPanel, LinkArrow, MetricValue, SectionHeader, StatusBadge } from '@/components/primitives';
+import { EmptyPanel, LinkArrow, LoadingState, MetricValue, SectionHeader, StatusBadge } from '@/components/primitives';
 import { readingOf } from '@/product/presentation';
 import { findingState, investigationTitle, labelledTime } from '@/product/view/investigation';
 import { watchCardStatus } from '@/product/view/watchCard';
-import { GettingStarted, TryYourOwnData, Welcome, WorkspaceDataBadge } from '@/components/onboarding';
+import { GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
 import type { ProviderId, WatchInvestigation } from '@/product/types';
 
 /**
@@ -38,7 +38,8 @@ export function ProductOverviewPage() {
   const lastChecked = location === 'server' ? cards.flatMap((c) => c.card.runs.map((l) => l.scheduledAt)).sort().at(-1) : r?.window.end;
   const healthy = cards.filter(({ w }) => w.status === 'active' && !open.some((i) => i.watchIds.includes(w.id))).length;
 
-  if (!mode) return <Welcome />;
+  // Before a workspace is entered, `/` is the public landing (App); here only while one is opening.
+  if (!mode) return <LoadingState label="Opening your workspace…" />;
 
   const headline = running ? 'Jagr is checking your watches…' : !r ? (mode === 'imported' && !state.watches.length ? 'Create a watch to start monitoring' : 'Jagr is ready') : attention.length ? `${attention.length} ${attention.length === 1 ? 'investigation needs' : 'investigations need'} your attention` : 'Nothing needs your attention';
 

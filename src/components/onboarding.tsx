@@ -1,97 +1,11 @@
-import { ArrowRight, Check, Download, FlaskConical, Monitor, Moon, Plus, RefreshCw, Server, Upload } from 'lucide-react';
+import { Check, Download, FlaskConical, Plus, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { acceptedCount } from '@/product/imports/schemas';
-import { useServerSession } from '@/state/serverSession';
-import { serverApi } from '@/state/serverApi';
 import { Badge, Button, Card, cx } from './ui';
 
 export const PRIVACY_NOTICE =
   'Your imported data is used to run investigations in this workspace and is stored in this browser. If AI planning is enabled, investigation context (including summaries of your evidence) may be sent to the configured model provider.';
-
-/**
- * First run: what Jagr is, in one sentence, and the two real ways in.
- *   Server workspace — connect sources and let Jagr monitor on a schedule (sign in; shown whenever a
- *                      Jagr server with a sign-in provider is present).
- *   Local            — this browser only, with sample or imported data.
- * Demo night is a separate scripted replay, offered as a link, not as a third product.
- */
-export function Welcome() {
-  const { createWorkspace } = useProduct();
-  const session = useServerSession();
-  const navigate = useNavigate();
-  const providers = session.server?.signIn ?? [];
-  return (
-    <div className="animate-fade-up mx-auto max-w-3xl py-6">
-      <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-balance sm:text-[40px] sm:leading-[1.1]">Your product keeps changing. Jagr watches it while you’re away.</h1>
-      <p className="mt-4 max-w-2xl text-[16px] text-ink-2">It investigates meaningful changes across your tools and tells you what needs your attention — with the evidence, and with what it does not know.</p>
-
-      <div className="mt-10 grid gap-8 md:grid-cols-2 md:gap-10">
-        <section aria-labelledby="welcome-server">
-          <h2 id="welcome-server" className="flex items-center gap-2 text-[16px] font-semibold">
-            <Server size={16} aria-hidden className="text-ink-3" /> Server workspace
-          </h2>
-          <p className="mt-1 text-[14px] text-ink-2">Connect your sources and let Jagr monitor them on a schedule — without this browser open.</p>
-          <div className="mt-4">
-            {session.server === undefined ? (
-              <p role="status" className="text-[13px] text-ink-3">Checking for a Jagr server…</p>
-            ) : session.user ? (
-              <div className="space-y-2">
-                <p className="text-[13px] text-ink-2">Signed in as {session.user.displayName}.</p>
-                {session.workspaces.map((w) => (
-                  <Button key={w.id} variant="primary" className="w-full justify-between" onClick={() => session.open(w.id)}>
-                    <span className="truncate">Open {w.name}</span> <ArrowRight size={14} aria-hidden />
-                  </Button>
-                ))}
-                <Link to="/settings#workspace" className="interactive inline-flex h-8.5 w-full items-center justify-center rounded-lg border border-line bg-surface text-[13px] font-medium hover:bg-subtle">
-                  Create a server workspace
-                </Link>
-              </div>
-            ) : providers.length ? (
-              <div className="flex flex-col gap-2">
-                {providers.map((p, i) => (
-                  <a key={p} href={serverApi.signInUrl(p, '/')} className={cx('interactive inline-flex h-9 items-center justify-center rounded-lg px-3 text-[14px] font-medium', i === 0 ? 'bg-ink text-canvas hover:opacity-90' : 'border border-line bg-surface hover:bg-subtle')}>
-                    Continue with {p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p}
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[13px] text-ink-3">{session.server ? 'This Jagr server has no sign-in provider configured.' : 'Not available here: this copy of Jagr runs without a server.'}</p>
-            )}
-          </div>
-        </section>
-
-        <section aria-labelledby="welcome-local">
-          <h2 id="welcome-local" className="flex items-center gap-2 text-[16px] font-semibold">
-            <Monitor size={16} aria-hidden className="text-ink-3" /> Explore locally
-          </h2>
-          <p className="mt-1 text-[14px] text-ink-2">Runs in this browser with sample or imported data. No account; nothing leaves the browser unless you turn on AI planning.</p>
-          <div className="mt-4 flex flex-col gap-2">
-            <Button variant={providers.length && !session.user ? 'secondary' : 'primary'} className="h-9 w-full text-[14px]" onClick={() => createWorkspace('sample')}>
-              Explore the sample workspace
-            </Button>
-            <Button
-              className="h-9 w-full text-[14px]"
-              icon={Upload}
-              onClick={() => {
-                createWorkspace('imported');
-                navigate('/sources?upload=1');
-              }}
-            >
-              Use my own data
-            </Button>
-          </div>
-          <p className="mt-2 text-[13px] text-ink-3">The sample is a simulated night where checkout conversion drops 18% after a release — labelled simulated everywhere.</p>
-        </section>
-      </div>
-
-      <p className="mt-12 border-t border-line pt-4 text-[13px] text-ink-3">
-        <Moon size={13} aria-hidden className="mr-1 inline" />
-        Want to see Jagr work first? <Link to="/demo" className="font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">Watch Demo night</Link> — a 30-second scripted replay, separate from any workspace.
-      </p>
-    </div>
-  );
-}
 
 /** "My data" workspaces: the four steps to a first investigation, with the next one highlighted. */
 export function GettingStarted() {
