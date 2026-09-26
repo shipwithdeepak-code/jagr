@@ -14,6 +14,7 @@ import { EmptyState, Mono } from '@/components/ui';
 import type { TaskDraft } from '@/domain/types';
 import { buildEvidenceChain } from '@/product/view/evidenceChain';
 import { canonicalReading, findingState, investigationTitle, investigationWatches } from '@/product/view/investigation';
+import { truthfulNotificationText } from '@/product/presentation';
 import { EvidenceChain } from '@/components/evidenceChain';
 import { InvestigationReplay } from '@/components/replay';
 import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
@@ -277,7 +278,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                   {inv.runs.map((r, i) => (
                     <div key={i} className="grid grid-cols-[64px_1fr] gap-3 border-b border-line px-3 py-1.5 text-[13px] last:border-b-0">
                       <span className="num text-ink-3">{fmtTime(r.at)} UTC</span>
-                      <span className={r.watchId !== inv.watchId ? 'text-accent' : r.anomalous ? 'text-ink-2' : 'text-ink-3'}>{r.note}</span>
+                      <span className={r.watchId !== inv.watchId ? 'text-accent' : r.anomalous ? 'text-ink-2' : 'text-ink-3'}>{truthfulNotificationText(r.note)}</span>
                     </div>
                   ))}
                 </div>

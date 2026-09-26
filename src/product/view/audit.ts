@@ -1,4 +1,5 @@
 import type { ISO, ProviderId, ToolName, TraceStep } from '../types';
+import { truthfulNotificationText } from '../presentation';
 
 /**
  * The Agent Trace as an audit trail: what Jagr did, when, with which source, and what came back —
@@ -194,7 +195,7 @@ export function auditEvents(steps: TraceStep[]): AuditEvent[] {
         out.push({ ...base, stage: 'awaiting_approval', action: s.title, result: s.detail, detail: why });
         break;
       case 'notify':
-        out.push({ ...base, stage: 'notified', action: s.title, result: s.detail, detail: [] });
+        out.push({ ...base, stage: 'notified', action: truthfulNotificationText(s.title), result: s.detail, detail: [] });
         break;
       case 'recheck':
         out.push({ ...base, stage: 'rechecked', action: s.title, result: s.detail, detail: [] });

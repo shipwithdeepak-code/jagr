@@ -1,4 +1,5 @@
 import type { ActionDecision, ProposedAction, TraceStep, WatchInvestigation } from '../types.js';
+import { presentTraceStep } from '../presentation.js';
 import { ApprovalRequiredError, executeAction } from './actions.js';
 
 /**
@@ -54,7 +55,7 @@ export function traceWithDecisions(inv: WatchInvestigation, decisions: Record<st
       },
     ];
   });
-  return [...inv.trace, ...human].sort((x, y) => x.at.localeCompare(y.at));
+  return [...inv.trace.map(presentTraceStep), ...human].sort((x, y) => x.at.localeCompare(y.at));
 }
 
 export function pendingApprovals(invs: WatchInvestigation[], decisions: Record<string, ActionDecision>): EffectiveAction[] {

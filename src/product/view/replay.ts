@@ -1,4 +1,5 @@
 import type { ActionDecision, ISO, ProviderId, TraceStep, WatchInvestigation } from '../types.js';
+import { presentTraceStep } from '../presentation.js';
 import { traceWithDecisions } from '../agent/decisions.js';
 
 /**
@@ -90,7 +91,7 @@ function framesOf(step: TraceStep): ReplayFrame[] {
 
 export function replayPasses(inv: WatchInvestigation): ReplayPass[] {
   const byPass = new Map<number, TraceStep[]>();
-  for (const s of inv.trace) byPass.set(s.pass, [...(byPass.get(s.pass) ?? []), s]);
+  for (const s of inv.trace.map(presentTraceStep)) byPass.set(s.pass, [...(byPass.get(s.pass) ?? []), s]);
   return [...byPass.entries()]
     .sort(([a], [b]) => a - b)
     .map(([pass, steps]) => {
