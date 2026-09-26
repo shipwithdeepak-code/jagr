@@ -17,12 +17,11 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  Sun,
   Telescope,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { OvernightRun } from '@/domain/types';
 import { useWorkspace } from '@/state/workspace';
@@ -35,7 +34,9 @@ import { RunProgressPanel } from './runProgress';
 import { RunPlayer } from './RunPlayer';
 import { ShellContext } from './shell';
 import { useToast } from './toast';
-import { Button, cx, Modal } from './ui';
+import { Button, cx, Modal, useDialogFocus } from './ui';
+import { LoadingState } from './primitives';
+import { AccountMenu, WorkspaceSwitcher, workspaceIdentity } from './WorkspaceMenu';
 
 interface NavItem {
   to: string;
@@ -52,8 +53,7 @@ function useTheme() {
     if (explicit === 'light' || explicit === 'dark') return explicit;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const toggle = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
+  const set = (next: 'light' | 'dark') => {
     document.documentElement.dataset.theme = next;
     try {
       localStorage.setItem('nightwatch:theme', next);
@@ -62,15 +62,7 @@ function useTheme() {
     }
     setTheme(next);
   };
-  return { theme, toggle };
-}
-
-/** Where the open workspace lives and what data it reads — the answer to "what am I looking at?". */
-function workspaceIdentity(product: ReturnType<typeof useProduct>): { name: string; detail: string } {
-  if (product.location === 'server') {
-    return { name: product.server?.name ?? 'Server workspace', detail: product.mode === 'connected' ? 'Server · live sources' : product.mode === 'imported' ? 'Server · imported data' : 'Server workspace' };
-  }
-  return { name: 'Local workspace', detail: product.mode === 'imported' ? 'This browser · your imported data' : product.mode === 'sample' ? 'This browser · sample data' : 'This browser · not set up' };
+  return { theme, set };
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -79,8 +71,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, toggle } = useTheme();
+  const { theme, set: setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  // The mobile menu is a modal dialog: focus moves in, stays in, Escape closes, focus returns to its button.
+  const drawer = useRef<HTMLElement>(null);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  useDialogFocus(menuOpen, closeMenu, drawer);
   // Desktop sidebar can collapse to icons; a per-browser preference, like the theme.
   const [collapsed, setCollapsedState] = useState(() => {
     try {
@@ -120,7 +116,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: '/investigations', label: 'Investigations', icon: Telescope, count: watchFindings || undefined, alert: watchFindings > 0 },
     { to: '/briefs', label: 'Briefs', icon: Newspaper },
     { to: '/sources', label: 'Sources', icon: Plug },
-    { to: '/settings', label: 'Settings', icon: Settings },
   ];
   const review: NavItem[] = [
     { to: inEnvironment('/approvals', env), label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
@@ -137,7 +132,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: '/integrations', label: 'Integrations', icon: Plug },
     { to: '/demo/settings', label: 'Demo settings', icon: Settings },
   ];
-  const identity = workspaceIdentity(product);
+  const identity = workspaceIdentity(product, env);
+  // Switching to another server workspace: the shell stays, and only the content waits for its data —
+  // nothing from the previous workspace is shown as the new one.
+  const opening = env === 'workspace' && product.location === 'server' && !product.mode;
   const monitor = monitoringStatus(product.state.watches, { location: product.location, result: product.state.result, clock: product.state.clock, snapshotAt: product.server?.snapshotAt, running: product.running });
 
   const startRun = useCallback(async () => {
@@ -180,12 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <X size={16} />
         </button>
       </div>
-      {!compact && (
-        <Link to="/settings#workspace" className="interactive mb-3 block rounded-lg border border-line px-2.5 py-2 hover:bg-subtle" title="Switch or manage workspaces">
-          <span className="block truncate text-[13px] font-medium text-ink">{identity.name}</span>
-          <span className="block truncate text-[12px] text-ink-3">{identity.detail}</span>
-        </Link>
-      )}
+      <WorkspaceSwitcher compact={compact} env={env} />
       {primary.map((it) => (
         <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
@@ -207,11 +200,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
       </div>
-      <div className="mt-auto flex flex-col gap-0.5 pt-4">
-        <button onClick={toggle} title={compact ? (theme === 'dark' ? 'Light theme' : 'Dark theme') : undefined} className={cx('interactive flex h-8 items-center gap-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-subtle hover:text-ink', compact ? 'justify-center' : 'px-2.5')} aria-label="Toggle theme">
-          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          {!compact && (theme === 'dark' ? 'Light theme' : 'Dark theme')}
-        </button>
+      {/* Configuration and the session, apart from the product pages above. */}
+      <div className={cx('mt-auto flex flex-col gap-0.5 border-t border-line pt-3', compact && 'mx-1')}>
+        <NavRow item={{ to: '/settings', label: 'Settings', icon: Settings }} compact={compact} env={env} />
+        <AccountMenu compact={compact} theme={theme} setTheme={setTheme} />
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cx('interactive hidden h-8 items-center gap-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-subtle hover:text-ink lg:flex', compact ? 'justify-center' : 'px-2.5')}
@@ -231,12 +223,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className={cx('fixed inset-y-0 left-0 z-30 hidden border-r border-line bg-canvas transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block', collapsed ? 'w-16' : 'w-60')}>{renderSidebar(collapsed)}</aside>
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMenuOpen(false)} />
-          <aside className="animate-slide-in absolute inset-y-0 left-0 w-72 border-r border-line bg-canvas">{renderSidebar(false)}</aside>
+          <div className="absolute inset-0 bg-black/30" onClick={closeMenu} />
+          <aside ref={drawer} role="dialog" aria-modal="true" aria-label="Menu" tabIndex={-1} className="animate-slide-in absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-line bg-canvas outline-none">
+            {renderSidebar(false)}
+          </aside>
         </div>
       )}
 
-      <div className={cx('transition-[padding] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'lg:pl-16' : 'lg:pl-60')}>
+      {/* While the mobile menu is open, the page behind it is out of reach (inert) as well as covered. */}
+      <div inert={menuOpen} className={cx('transition-[padding] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'lg:pl-16' : 'lg:pl-60')}>
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-canvas px-4 sm:px-6">
           <button className="-ml-1 rounded p-1.5 text-ink-2 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu size={18} />
@@ -323,7 +318,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
           <ShellContext.Provider value={{ startRun: () => void startRun(), requestDemo, running }}>
-            <EnvironmentContext.Provider value={{ environment: env }}>{children}</EnvironmentContext.Provider>
+            <EnvironmentContext.Provider value={{ environment: env }}>{opening ? !product.server?.error && <LoadingState label={`Opening ${identity.name}…`} /> : children}</EnvironmentContext.Provider>
           </ShellContext.Provider>
         </main>
       </div>

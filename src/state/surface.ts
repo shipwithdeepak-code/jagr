@@ -10,7 +10,8 @@ import type { WorkspaceChoice } from './serverSession';
  *                 Nothing else renders, so neither the landing nor sample data can flash first.
  *   choose        signed in, several server workspaces, none chosen yet.
  *   create        signed in, no server workspace yet.
- *   no-workspace  an application route with no workspace to show (signed out, or chose to leave).
+ *   no-workspace  an application route with no workspace to show (signed out, chose to leave, or the
+ *                 session expired — sign-in then returns to the same route).
  *   app           the application shell with a local or server workspace — and always for Demo night
  *                 and the pages that need no workspace (About, Evaluations).
  *
@@ -32,6 +33,8 @@ export interface SurfaceSession {
   signingIn: boolean;
   /** The check failed (other than "not signed in"). */
   failed?: boolean;
+  /** The session ended while a server workspace was open. */
+  expired?: boolean;
 }
 
 export interface SurfaceWorkspace {
@@ -40,6 +43,11 @@ export interface SurfaceWorkspace {
   mode?: string;
   /** The server workspace could not be loaded — show the application with its error, not a spinner forever. */
   serverFailed?: boolean;
+  /**
+   * The application is already on screen with a workspace (switching, not arriving). The shell then
+   * stays while the next workspace loads, and only its content shows a loading state.
+   */
+  keepShell?: boolean;
 }
 
 export interface Resolution {
@@ -56,6 +64,11 @@ export function resolveSurface(pathname: string, search: string, s: SurfaceSessi
   if (needsNoWorkspace(pathname, search)) return { surface: 'app' };
   const local = ws.location === 'browser' ? ws.mode : undefined;
 
+  // 0 · Explicit exits. Signed out: the landing at `/` — even when this browser has a local workspace —
+  //     and never an automatic reopening. Expired: say so where they are, with sign-in back to this route.
+  if (s.expired) return { surface: 'no-workspace' };
+  if (s.choice === 'exit') return { surface: pathname === '/' ? 'public' : 'no-workspace' };
+
   // 1 · Still checking. A server workspace may be about to open: show nothing that could be wrong.
   if (!s.checked) {
     if (s.choice === 'server' || s.signingIn) return { surface: 'resolving' };
@@ -63,8 +76,9 @@ export function resolveSurface(pathname: string, search: string, s: SurfaceSessi
     return { surface: pathname === '/' ? 'public' : 'resolving' };
   }
 
-  // 2 · A confirmed server workspace: the application, once its data has arrived.
-  if (s.activeId) return { surface: ws.location === 'server' && !ws.mode && !ws.serverFailed ? 'resolving' : 'app' };
+  // 2 · A confirmed server workspace: the application, once its data has arrived — or at once when
+  //     switching from another workspace (the shell stays; its content shows the loading state).
+  if (s.activeId) return { surface: ws.location === 'server' && !ws.mode && !ws.serverFailed && !ws.keepShell ? 'resolving' : 'app' };
 
   // 3 · Signed in, no workspace open, and no choice to stay in this browser: take them to their workspaces.
   //     A local workspace wins only when they didn't just sign in. (A remembered server workspace that

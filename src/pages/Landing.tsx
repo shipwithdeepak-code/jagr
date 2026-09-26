@@ -1,8 +1,8 @@
 import { ArrowRight, Lock } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useProduct } from '@/state/productContext';
+import { Link } from 'react-router-dom';
 import { markSigningIn, useServerSession } from '@/state/serverSession';
+import { useExploreLocally } from '@/state/exploreLocally';
 import { serverApi } from '@/state/serverApi';
 import { Logo } from '@/components/Logo';
 import { GoogleMark } from '@/components/WorkspaceGate';
@@ -100,14 +100,14 @@ function ServerEntry({ compact = false }: { compact?: boolean }) {
 }
 
 function Entry() {
-  const { createWorkspace } = useProduct();
-  const navigate = useNavigate();
+  // Reopens this browser's workspace if it exists (imports intact); creates it only when there is none.
+  const explore = useExploreLocally();
   const quiet = 'interactive underline-offset-4 hover:text-ink hover:underline';
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <ServerEntry />
-        <button type="button" className={btnSecondary} onClick={() => createWorkspace('sample')}>
+        <button type="button" className={btnSecondary} onClick={() => explore('sample')}>
           Explore locally
         </button>
         <Link to="/demo" className="interactive inline-flex items-center gap-1 text-[14px] whitespace-nowrap text-ink-2 hover:text-ink">
@@ -118,10 +118,7 @@ function Entry() {
         <button
           type="button"
           className={quiet}
-          onClick={() => {
-            createWorkspace('imported');
-            navigate('/sources?upload=1');
-          }}
+          onClick={() => explore('imported')}
         >
           Explore locally with your own data
         </button>

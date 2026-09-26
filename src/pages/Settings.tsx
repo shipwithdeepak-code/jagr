@@ -1,9 +1,8 @@
-import { ArrowRight, Moon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { Card, PageHeader, Toggle } from '@/components/ui';
-import { WorkspaceLocationPanel } from '@/components/serverWorkspace';
+import { AccountPanel, AiEgressSetting, WorkspacePanel } from '@/components/serverWorkspace';
 import { WorkspaceTransfer } from '@/components/workspaceTransfer';
 
 const TIMEZONES = ['UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata'];
@@ -17,8 +16,8 @@ export function SettingsPage() {
     <>
       <PageHeader title="Settings" description="How this workspace monitors, notifies and plans investigations. Demo night has its own settings." />
       <div className="space-y-8">
-        <Section id="workspace" title="Workspace and account" hint="Where this workspace lives, who is signed in, and the other workspaces you can open.">
-          <WorkspaceLocationPanel />
+        <Section id="workspace" title="Workspace" hint="The workspace these settings apply to.">
+          <WorkspacePanel />
         </Section>
         <Section id="monitoring" title="Monitoring" hint="Each watch sets its own frequency and thresholds. The morning brief runs on its own schedule.">
           <BriefSchedule />
@@ -26,18 +25,17 @@ export function SettingsPage() {
         <Section id="notifications" title="Notifications" hint="Where Jagr tells you about findings.">
           <NotificationChannels />
         </Section>
-        <Section id="ai" title="AI planning" hint="Which planner chooses the next check during an investigation. Every proposal passes the same policy validator either way.">
-          <PlannerSetting />
+        <Section id="ai" title="AI" hint="Which planner chooses the next check during an investigation, and whether this workspace may use an AI provider. Every proposal passes the same policy validator either way.">
+          <div className="space-y-3">
+            <PlannerSetting />
+            <AiEgressSetting />
+          </div>
         </Section>
         <Section id="data" title="Data">
           <WorkspaceTransfer />
         </Section>
-        <Section id="advanced" title="Advanced">
-          <Card padded={false} className="divide-y divide-line">
-            <AdvancedLink to="/evaluations" title="Evaluations" body="Replay fixture nights through the real engine and check its behaviour." />
-            <AdvancedLink to="/trace" title="Agent trace" body="Every planner decision, validator verdict and tool call, as recorded." />
-            <AdvancedLink to="/demo" title="Demo night" body="A scripted replay of the original agent, separate from this workspace." icon={<Moon size={14} aria-hidden className="text-ink-3" />} />
-          </Card>
+        <Section id="account" title="Account" hint="Who is signed in on this browser.">
+          <AccountPanel />
         </Section>
       </div>
     </>
@@ -54,21 +52,6 @@ function Section({ id, title, hint, children }: { id: string; title: string; hin
       {!hint && <div className="mb-3" />}
       {children}
     </section>
-  );
-}
-
-function AdvancedLink({ to, title, body, icon }: { to: string; title: string; body: string; icon?: ReactNode }) {
-  return (
-    <Link to={to} className="interactive group flex items-center gap-3 px-4 py-3 hover:bg-subtle">
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 text-[14px] font-medium">
-          {icon}
-          {title}
-        </span>
-        <span className="block text-[13px] text-ink-2">{body}</span>
-      </span>
-      <ArrowRight size={14} aria-hidden className="text-ink-3 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
-    </Link>
   );
 }
 
@@ -116,7 +99,7 @@ function NotificationChannels() {
           <Row title="Slack" status="Not connected" body={<>Post alerts and the morning brief to a Slack channel. <Link to="/sources" className="font-medium text-accent hover:underline">Connect Slack in Sources</Link>.</>} />
         )
       ) : (
-        <Row title="Slack" status="Server workspaces" body="Sending alerts to Slack needs a server workspace — sign in above." />
+        <Row title="Slack" status="Server workspaces" body="Sending alerts to Slack needs a server workspace — sign in under Account below." />
       )}
       <Row title="Email" status="Not available" body="Jagr does not send email yet. Alerts are shown in Jagr and, when connected, in Slack." />
     </Card>
@@ -156,7 +139,7 @@ function PlannerSetting() {
             <span>
               <span className="font-medium">AI planner</span>
               <span className="block text-[13px] text-ink-2">
-                {!llmOption.available ? (llmOption.reason ?? 'No AI provider is configured on this server.') : egressOff ? 'Turned off for this workspace: AI planning is not allowed (see Workspace and account).' : `${llmOption.label}. Investigation context, including summaries of evidence, is sent to this provider.`}
+                {!llmOption.available ? (llmOption.reason ?? 'No AI provider is configured on this server.') : egressOff ? 'Turned off for this workspace: AI planning is not allowed (see below).' : `${llmOption.label}. Investigation context, including summaries of evidence, is sent to this provider.`}
               </span>
             </span>
           </label>

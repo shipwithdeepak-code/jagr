@@ -8,18 +8,20 @@ import { serverApi, type ServerHealth, type ServerWorkspaceSummary } from './ser
  *
  * The last explicit choice is one of:
  *   server  a server workspace was opened (its id is remembered)
- *   local   the person chose this browser's workspace — Start over, Switch, or Sign out. Jagr then
- *           never opens a server workspace on its own until they sign in again or pick one.
+ *   local   the person chose this browser's workspace — Explore locally, Start over, or Switch. Jagr
+ *           then never opens a server workspace on its own until they sign in again or pick one.
+ *   exit    the person signed out: the public landing until they explore locally or sign in again
  *   none    no choice yet (a fresh browser, or a remembered workspace that no longer exists)
  * `signingIn` marks the return from Continue with Google, so the first check can open the right
- * workspace instead of showing the public landing. See state/surface.ts for how these decide the screen.
+ * workspace instead of showing the public landing. `expired` marks a session that ended while the
+ * person was using a server workspace. See state/surface.ts for how these decide the screen.
  */
 
 const ACTIVE_KEY = 'jagr:server-workspace';
 const LOCAL_CHOICE_KEY = 'jagr:workspace-choice';
 const SIGNING_IN_KEY = 'jagr:signing-in';
 
-export type WorkspaceChoice = 'server' | 'local' | 'none';
+export type WorkspaceChoice = 'server' | 'local' | 'exit' | 'none';
 
 export interface ServerSessionApi {
   /** Undefined until the first health check; null when there is no server. */
@@ -35,6 +37,8 @@ export interface ServerSessionApi {
   choice: WorkspaceChoice;
   /** This page load is the return from Continue with Google. */
   signingIn: boolean;
+  /** The session ended while a server workspace was open (a workspace call answered 401). */
+  expired: boolean;
   error?: string;
   open(id: string): void;
   /** Leave any server workspace for this browser's workspace — an explicit choice that stops auto-opening. */
@@ -42,7 +46,14 @@ export interface ServerSessionApi {
   /** Forget an explicit "this browser" choice, so the signed-in person is taken to their workspaces again. */
   clearChoice(): void;
   create(name: string, mode: 'connected' | 'imported'): Promise<void>;
+  /**
+   * End the session on the server. Throws if the server did not confirm — nothing is changed then.
+   * On success the remembered workspace is forgotten and the explicit "exit" is recorded. Call it
+   * through useSignOut (components/signOut.ts), which also takes the person to the public landing.
+   */
   signOut(): Promise<void>;
+  /** A workspace call answered 401: re-check, and if the session is gone, mark it expired. */
+  sessionLost(): Promise<void>;
   refresh(): Promise<void>;
 }
 
@@ -63,21 +74,28 @@ const writeActive = (id?: string) => {
     // storage blocked: the choice lasts for this tab only
   }
 };
-const readLocalChoice = () => {
+type StoredChoice = 'local' | 'exit' | undefined;
+const readStoredChoice = (): StoredChoice => {
   try {
-    return localStorage.getItem(LOCAL_CHOICE_KEY) === 'local';
+    const v = localStorage.getItem(LOCAL_CHOICE_KEY);
+    return v === 'local' || v === 'exit' ? v : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 };
-const writeLocalChoice = (local: boolean) => {
+const writeStoredChoice = (v: StoredChoice) => {
   try {
-    if (local) localStorage.setItem(LOCAL_CHOICE_KEY, 'local');
+    if (v) localStorage.setItem(LOCAL_CHOICE_KEY, v);
     else localStorage.removeItem(LOCAL_CHOICE_KEY);
   } catch {
     // storage blocked: the choice lasts for this tab only
   }
 };
+
+/** The last explicit choice, from the remembered server workspace and the stored local/exit choice. */
+export function choiceFrom(rememberedId: string | undefined, stored: StoredChoice): WorkspaceChoice {
+  return rememberedId ? 'server' : (stored ?? 'none');
+}
 /** Read once per page load: was this load the return from Continue with Google? */
 const consumeSigningIn = () => {
   try {
@@ -91,7 +109,8 @@ const consumeSigningIn = () => {
 
 /**
  * Call when Continue with Google is clicked (before the browser leaves for the sign-in page).
- * Signing in is itself a choice to use server workspaces, so an earlier "this browser" choice is cleared.
+ * Signing in is itself a choice to use server workspaces, so an earlier "this browser" or "exit"
+ * choice is cleared.
  */
 export function markSigningIn() {
   try {
@@ -99,7 +118,7 @@ export function markSigningIn() {
   } catch {
     // storage blocked: the return still works, it just lands without the sign-in hint
   }
-  writeLocalChoice(false);
+  writeStoredChoice(undefined);
 }
 
 export function ServerSessionProvider({ children }: { children: ReactNode }) {
@@ -109,8 +128,13 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | undefined>(readActive);
   const [error, setError] = useState<string | undefined>();
   const [checked, setChecked] = useState(false);
-  const [localChoice, setLocalChoice] = useState(readLocalChoice);
+  const [storedChoice, setStoredChoice] = useState<StoredChoice>(readStoredChoice);
   const [signingIn, setSigningIn] = useState(consumeSigningIn);
+  const [expired, setExpired] = useState(false);
+  const remember = useCallback((v: StoredChoice) => {
+    writeStoredChoice(v);
+    setStoredChoice(v);
+  }, []);
 
   // One pass: server health, then who is signed in and their workspaces.
   const check = async () => {
@@ -150,24 +174,24 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const open = useCallback((id: string) => {
-    writeActive(id);
-    setActiveId(id);
-    writeLocalChoice(false);
-    setLocalChoice(false);
-    setSigningIn(false);
-  }, []);
+  const open = useCallback(
+    (id: string) => {
+      writeActive(id);
+      setActiveId(id);
+      remember(undefined);
+      setSigningIn(false);
+      setExpired(false);
+    },
+    [remember],
+  );
   const useBrowserWorkspace = useCallback(() => {
     writeActive(undefined);
     setActiveId(undefined);
-    writeLocalChoice(true);
-    setLocalChoice(true);
+    remember('local');
     setSigningIn(false);
-  }, []);
-  const clearChoice = useCallback(() => {
-    writeLocalChoice(false);
-    setLocalChoice(false);
-  }, []);
+    setExpired(false);
+  }, [remember]);
+  const clearChoice = useCallback(() => remember(undefined), [remember]);
   const create = useCallback(
     async (name: string, mode: 'connected' | 'imported') => {
       const id = await serverApi.createWorkspace(name, mode);
@@ -177,17 +201,32 @@ export function ServerSessionProvider({ children }: { children: ReactNode }) {
     [open, refresh],
   );
   const signOut = useCallback(async () => {
-    await serverApi.signOut().catch(() => undefined);
-    useBrowserWorkspace();
+    // Throws when the server does not confirm: the person is still signed in, so nothing changes here.
+    await serverApi.signOut();
+    // Confirmed: the session is gone. Update everything in the same tick as the caller's navigation,
+    // so no screen in between can show "signed in" or a workspace.
+    writeActive(undefined);
+    setActiveId(undefined);
+    remember('exit');
+    setUser(undefined);
+    setWorkspaces([]);
+    setSigningIn(false);
+    setExpired(false);
+    void refresh();
+  }, [refresh, remember]);
+  const sessionLost = useCallback(async () => {
+    // me() answers undefined only for 401 — the session really ended (not a network failure).
+    const me = await serverApi.me().catch(() => null);
+    if (me === undefined) setExpired(true);
     await refresh();
-  }, [refresh, useBrowserWorkspace]);
+  }, [refresh]);
 
   const active = workspaces.find((w) => w.id === activeId);
   // Until the first check confirms it, a remembered id still counts as the server choice.
-  const choice: WorkspaceChoice = activeId ? 'server' : localChoice ? 'local' : 'none';
+  const choice = choiceFrom(activeId, storedChoice);
   const api = useMemo<ServerSessionApi>(
-    () => ({ server, user, workspaces, activeId: active ? activeId : undefined, active, checked, choice, signingIn, error, open, useBrowserWorkspace, clearChoice, create, signOut, refresh }),
-    [server, user, workspaces, activeId, active, checked, choice, signingIn, error, open, useBrowserWorkspace, clearChoice, create, signOut, refresh],
+    () => ({ server, user, workspaces, activeId: active ? activeId : undefined, active, checked, choice, signingIn, expired, error, open, useBrowserWorkspace, clearChoice, create, signOut, sessionLost, refresh }),
+    [server, user, workspaces, activeId, active, checked, choice, signingIn, expired, error, open, useBrowserWorkspace, clearChoice, create, signOut, sessionLost, refresh],
   );
   return <ServerSessionContext.Provider value={api}>{children}</ServerSessionContext.Provider>;
 }

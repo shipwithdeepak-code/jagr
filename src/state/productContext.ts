@@ -61,6 +61,10 @@ export interface ProductApi {
   setPlannerChoice(choice: 'deterministic' | 'llm'): void;
   mode?: WorkspaceMode;
   createWorkspace(mode: WorkspaceMode): void;
+  /** This browser's workspace mode, whichever workspace is open (undefined = not set up). */
+  localMode?: WorkspaceMode;
+  /** Create this browser's workspace, whichever workspace is open. Replaces the existing one. */
+  createLocalWorkspace(mode: WorkspaceMode): void;
   /** Parse, validate and store an uploaded file. Returns the result (including rejected rows) for display. */
   addImport(kind: ImportKind, filename: string, text: string): ImportedDataset;
   removeImport(id: string): void;
