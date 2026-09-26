@@ -20,6 +20,7 @@ const ApprovalsPage = lazy(() => import('@/pages/Approvals').then((m) => ({ defa
 const EvaluationsPage = lazy(() => import('@/pages/Evaluations').then((m) => ({ default: m.EvaluationsPage })));
 const IntegrationsPage = lazy(() => import('@/pages/Integrations').then((m) => ({ default: m.IntegrationsPage })));
 const SettingsPage = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.SettingsPage })));
+const DemoSettingsPage = lazy(() => import('@/pages/DemoSettings').then((m) => ({ default: m.DemoSettingsPage })));
 const DemoNightPage = lazy(() => import('@/pages/Overview').then((m) => ({ default: m.OverviewPage })));
 const WatchesPage = lazy(() => import('@/pages/Watches').then((m) => ({ default: m.WatchesPage })));
 const SourcesPage = lazy(() => import('@/pages/Sources').then((m) => ({ default: m.SourcesPage })));
@@ -37,12 +38,13 @@ const TITLES: Record<string, string> = {
   '/demo': 'Demo night',
   '/tasks': 'Tasks',
   '/signals': 'Signals',
-  '/trace': 'Agent Trace',
+  '/trace': 'Agent trace',
   '/approvals': 'Approvals',
   '/evaluations': 'Evaluations',
   '/integrations': 'Integrations',
   '/settings': 'Settings',
-  '/about': 'About this build',
+  '/demo/settings': 'Demo night settings',
+  '/about': 'About Jagr',
 };
 
 function ScrollAndTitle() {
@@ -50,7 +52,7 @@ function ScrollAndTitle() {
   useEffect(() => {
     if (!hash) window.scrollTo(0, 0);
     const key = '/' + (pathname.split('/')[1] ?? '');
-    document.title = `${TITLES[key] ?? 'Investigation'} · JAGR`;
+    document.title = `${TITLES[pathname] ?? TITLES[key] ?? 'Investigation'} · Jagr`;
   }, [pathname, hash]);
   return null;
 }
@@ -77,6 +79,7 @@ function Screens() {
               <Route path="/evaluations" element={<EvaluationsPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/demo/settings" element={<DemoSettingsPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route
                 path="*"

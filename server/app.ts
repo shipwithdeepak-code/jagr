@@ -17,7 +17,7 @@ import { WriteConflict } from '../src/product/ports/persistence.js';
 import type { Runtime } from './runtime.js';
 import type { ApiRequest, ApiResponse } from './http/types.js';
 import { json, redirect } from './http/types.js';
-import { authenticate, clearCookie, cookie, CSRF_COOKIE, csrfOk, OAUTH_COOKIE, openOAuthState, parseCookies, sealOAuthState, SESSION_COOKIE, startSession, hashToken, type Principal } from './auth.js';
+import { authenticate, clearCookie, cookie, CSRF_COOKIE, csrfOk, OAUTH_COOKIE, openOAuthState, parseCookies, sealOAuthState, SESSION_COOKIE, startSession, type Principal } from './auth.js';
 import { randomToken } from './identity/pkce.js';
 import { OWNER_WORKSPACE_ID } from './singleTenant.js';
 import { connectionView } from '../src/product/connections/model.js';
@@ -407,6 +407,3 @@ export function createApp(rt: Runtime) {
     }
   };
 }
-
-/** Exposed for tests: the session id stored for a cookie token. */
-export const sessionIdFor = hashToken;

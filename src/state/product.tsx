@@ -347,6 +347,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         role: snap?.membership.role ?? summary?.role ?? 'member',
         canApprove: snap?.membership.canApprove ?? summary?.canApprove ?? false,
         connections: snap?.connections ?? [],
+        snapshotAt: snap?.at,
         settings: { planner: snap?.workspace.settings.planner ?? 'deterministic', aiEgressAllowed: snap?.workspace.settings.aiEgressAllowed ?? true },
         loading: serverLoading,
         error: serverError,

@@ -69,7 +69,7 @@ describe('Sources view-model', () => {
     const record: Connection = { id: 'conn-gh', workspaceId: 'ws1', source: 'github', provider: 'github', roles: ['changes'], authKind: 'api_key', state: 'needs_reconnect', detail: 'Token rejected', config: {}, updatedAt: ASOF };
     const server = { github: connectionView(record, ASOF) };
     const member = sourceViews(conns, { asOf: ASOF, server })[0];
-    expect(member.actions.map((a) => [a.id, a.available])).toEqual([['reconnect', false], ['test', true], ['disconnect', false]]);
+    expect(member.actions.map((a) => [a.id, a.available])).toEqual([['reconnect', false], ['configure', false], ['test', true], ['disconnect', false]]);
     expect(member.actions[0].reason).toMatch(/owners and admins/);
     const owner = sourceViews(conns, { asOf: ASOF, server, canManage: true })[0];
     expect(owner.actions.every((a) => a.available)).toBe(true);
@@ -101,11 +101,20 @@ describe('Sources view-model', () => {
     const mk = (over: Partial<Connection>): Connection => ({ id: 'conn-jira', workspaceId: 'ws1', source: 'jira', provider: 'jira', roles: ['work_items', 'changes'], authKind: 'api_key', state: 'needs_reconnect', detail: '', config: {}, updatedAt: ASOF, ...over });
     const conns: SourceConnection[] = [{ provider: 'jira', state: 'needs_reconnect', detail: '', updatedAt: ASOF }];
     const avail = (c: Connection, manage: boolean) => Object.fromEntries(sourceViews(conns, { asOf: ASOF, server: { jira: connectionView(c, ASOF) }, canManage: manage })[0].actions.map((a) => [a.id, a.available]));
-    expect(avail(mk({}), true)).toEqual({ reconnect: true, test: true, disconnect: true });
-    expect(avail(mk({}), false)).toEqual({ reconnect: false, test: true, disconnect: false });
-    expect(avail(mk({ authKind: 'owner_env' }), true)).toEqual({ reconnect: false, test: true, disconnect: false });
+    expect(avail(mk({}), true)).toEqual({ reconnect: true, configure: true, test: true, disconnect: true });
+    expect(avail(mk({}), false)).toEqual({ reconnect: false, configure: false, test: true, disconnect: false });
+    expect(avail(mk({ authKind: 'owner_env' }), true)).toEqual({ reconnect: false, configure: false, test: true, disconnect: false });
     const off: SourceConnection[] = [{ provider: 'jira', state: 'not_configured', detail: '', updatedAt: ASOF }];
     const v = sourceViews(off, { asOf: ASOF, server: { jira: connectionView(mk({ state: 'not_configured' }), ASOF) }, canManage: true })[0];
     expect(v.actions.map((a) => [a.id, a.available])).toEqual([['connect', true]]);
+  });
+
+  it('a connected server source offers "Edit configuration" (kept credential); browser-local sources do not', () => {
+    const conns: SourceConnection[] = [{ provider: 'github', state: 'connected', detail: '', updatedAt: ASOF }];
+    const record: Connection = { id: 'conn-gh', workspaceId: 'ws1', source: 'github', provider: 'github', roles: ['changes'], authKind: 'api_key', state: 'connected', detail: 'GitHub', config: { repos: ['acme/web'] }, lastSuccessfulCheckAt: ASOF, updatedAt: ASOF };
+    const owner = sourceViews(conns, { asOf: ASOF, server: { github: connectionView(record, ASOF) }, canManage: true })[0];
+    expect(owner.actions.map((a) => [a.id, a.label, a.available])).toEqual([['test', 'Test', true], ['configure', 'Edit configuration', true], ['disconnect', 'Disconnect', true]]);
+    expect(owner.actions.find((a) => a.id === 'configure')!.reason).toMatch(/stored credential is kept/);
+    expect(sourceViews(conns, { asOf: ASOF })[0].actions.map((a) => a.id)).not.toContain('configure');
   });
 });

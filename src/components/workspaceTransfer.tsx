@@ -43,7 +43,7 @@ export function WorkspaceTransfer() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[14px] font-semibold">Workspace export</div>
-          <p className="mt-0.5 max-w-prose text-[12.5px] text-ink-3">
+          <p className="mt-0.5 max-w-prose text-[13px] text-ink-3">
             A portable copy of this workspace — watches, imports and their rejected rows, investigations with their evidence and trace, and your decisions. It never contains credentials, sessions or email addresses. Demo night is not included.
           </p>
         </div>
@@ -59,7 +59,7 @@ export function WorkspaceTransfer() {
       </div>
       {server.available && <MoveToAccount server={server} exportDoc={exportWorkspace} />}
       {r && (
-        <div className="mt-4 rounded-lg border border-line bg-subtle px-4 py-3 text-[12.5px]" role="status">
+        <div className="mt-4 rounded-lg border border-line bg-subtle px-4 py-3 text-[13px]" role="status">
           {r.ok ? (
             <>
               <div className="font-medium text-ink">
@@ -97,7 +97,7 @@ export function WorkspaceTransfer() {
               <ul className="mt-1 space-y-0.5 text-ink-2">
                 {r.problems.slice(0, 8).map((p) => (
                   <li key={p.path + p.message}>
-                    <code className="font-mono text-[11.5px]">{p.path}</code> — {p.message}
+                    <code className="font-mono text-[12px]">{p.path}</code> — {p.message}
                   </li>
                 ))}
               </ul>
@@ -155,7 +155,7 @@ function MoveToAccount({ server, exportDoc }: { server: ServerAccount; exportDoc
   const label: Record<string, string> = { google: 'Google', github: 'GitHub' };
   if (!server.user) {
     return (
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
         <span>Keep this workspace in an account (monitoring then runs without this tab open):</span>
         {server.signIn.map((p) => (
           <a key={p} className="font-medium text-accent hover:underline" href={`/api/auth/${p}/start?returnTo=/sources`}>
@@ -178,7 +178,7 @@ function MoveToAccount({ server, exportDoc }: { server: ServerAccount; exportDoc
     setState(r.ok ? { done: body.workspace?.name } : { ...state, error: body.error ?? 'The server refused the import.' });
   };
   return (
-    <div className="mt-4 rounded-lg border border-line px-4 py-3 text-[12.5px]">
+    <div className="mt-4 rounded-lg border border-line px-4 py-3 text-[13px]">
       <div className="text-ink-2">
         Signed in as <span className="font-medium text-ink">{server.user.displayName}</span>.{' '}
         {state.done ? (

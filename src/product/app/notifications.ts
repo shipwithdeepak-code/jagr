@@ -7,6 +7,8 @@ import type { Connection, NotificationRecord, Repositories, Workspace } from '..
 import { uniqueId } from './ids.js';
 import type { SecretPayload, SecretStore } from '../ports/secrets.js';
 import { redactPersonalData } from '../lib/redact.js';
+import { fmtTime } from '../lib/time.js';
+import { PROVIDERS } from '../integrations/adapters.js';
 import type { ConnectorCheck } from '../integrations/connectors/types.js';
 
 /**
@@ -67,6 +69,10 @@ export function briefMessage(workspaceId: string, brief: MorningBriefDoc, ctx: {
   const v = briefView(brief, { investigations: ctx.investigations, watches: ctx.watches, decisions: ctx.decisions ?? {} });
   const byId = new Map(ctx.investigations.map((i) => [i.id, i]));
   const quiet = v.quiet.signals ? `Quiet: ${v.quiet.signals} monitored signal${v.quiet.signals === 1 ? '' : 's'} showed no meaningful change.` : v.quiet.note;
+  // Changes shipped, as in the app's brief: what the change sources reported, not findings and not causes.
+  const shippedLines = v.shipped.slice(0, SHIPPED_MAX).map((c) => clean(`${fmtTime(c.at)} UTC · ${c.title} — ${c.kind === 'release' ? 'release published' : 'deployment succeeded'}`));
+  if (v.shipped.length > SHIPPED_MAX) shippedLines.push(`and ${v.shipped.length - SHIPPED_MAX} more in Jagr`);
+  const shippedUnavailable = v.shippedUnavailable.map((p) => PROVIDERS[p as keyof typeof PROVIDERS]?.name ?? p);
   return {
     kind: 'morning_brief',
     workspaceId,
@@ -83,8 +89,12 @@ export function briefMessage(workspaceId: string, brief: MorningBriefDoc, ctx: {
       }),
       { label: 'Open the brief', href: absolute(ctx.appBaseUrl, '/briefs', 'https://jagr.vercel.app/briefs') },
     ],
+    ...(shippedLines.length || shippedUnavailable.length ? { shipped: { lines: shippedLines, unavailable: shippedUnavailable } } : {}),
   };
 }
+
+/** Shipped changes listed in a brief message; the rest are counted. */
+const SHIPPED_MAX = 10;
 
 /** A claim still 'sending' after this long was interrupted (a send takes seconds). */
 export const STUCK_CLAIM_MS = 15 * 60_000;

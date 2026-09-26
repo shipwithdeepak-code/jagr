@@ -1,17 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, CircleSlash, Lock, ShieldAlert, Wrench, X } from 'lucide-react';
 import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, PlannerRunInfo, SourceConnection, TraceStep, WatchInvestigation } from '@/product/types';
-import { HYPOTHESIS_ID } from '@/product/agent/planner';
 import { StatusBadge, strengthOf } from './primitives';
 import type { EffectiveAction } from '@/product/agent/decisions';
 import { hypothesisLabel } from '@/product/agent/investigator';
-import { confidenceBand } from '@/product/engine/monitor';
 import { fmtTime } from '@/lib/time';
 import { useProduct } from '@/state/productContext';
 import { useToast } from './toast';
-import { Badge, Button, Card, cx, Eyebrow, Mono, type Tone } from './ui';
-import { AttentionBadge, attentionRoute, ProviderName } from './product';
+import { Badge, Button, Card, cx, Eyebrow, Mono } from './ui';
+import { ProviderName } from './product';
 import { AuditTrail } from './auditTrail';
+import { investigationTitle } from '@/product/view/investigation';
 
 // ─────────────────────────────────────────────────────────────
 // Source label
@@ -20,10 +19,10 @@ import { AuditTrail } from './auditTrail';
 /** Every tool result says where it came from. Simulated data is never presented as live. */
 export function SourceStateTag({ state }: { state?: SourceConnection['state'] }) {
   if (!state || state === 'connected') return state ? <Badge tone="ok">CONNECTED</Badge> : null;
-  if (state === 'imported') return <span className="rounded bg-accent-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-accent">USER IMPORT</span>;
-  if (state === 'not_configured') return <span className="rounded bg-subtle px-1.5 py-px text-[10px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">NOT CONFIGURED</span>;
-  if (state === 'simulated') return <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>;
-  return <span className="rounded bg-high-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-high">{state === 'error' ? 'SOURCE ERROR' : 'SOURCE UNAVAILABLE'}</span>;
+  if (state === 'imported') return <span className="rounded bg-accent-soft px-1.5 py-px text-[12px] font-semibold tracking-wide text-accent">USER IMPORT</span>;
+  if (state === 'not_configured') return <span className="rounded bg-subtle px-1.5 py-px text-[12px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">NOT CONFIGURED</span>;
+  if (state === 'simulated') return <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[12px] font-semibold tracking-wide text-info">SIMULATED SOURCE</span>;
+  return <span className="rounded bg-high-soft px-1.5 py-px text-[12px] font-semibold tracking-wide text-high">{state === 'error' ? 'SOURCE ERROR' : 'SOURCE UNAVAILABLE'}</span>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -80,8 +79,8 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
               {isOpen ? <ChevronDown size={14} className="text-ink-3" /> : <ChevronRight size={14} className="text-ink-3" />}
               <Mono className="text-ink-3">{fmtTime(p.at)}</Mono>
               <span className="text-[13px] font-medium">Pass {p.pass}</span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-2">{headline}</span>
-              <span className="flex items-center gap-2 text-[11.5px] text-ink-3">
+              <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">{headline}</span>
+              <span className="flex items-center gap-2 text-[12px] text-ink-3">
                 {p.calls > 0 && (
                   <span className="inline-flex items-center gap-1">
                     <Wrench size={11} /> {p.calls} tool {p.calls === 1 ? 'call' : 'calls'}
@@ -114,8 +113,6 @@ export function AgentTraceTimeline({ steps, connections, defaultOpen }: { steps:
 // ─────────────────────────────────────────────────────────────
 
 const STRENGTH_STEPS: EvidenceStrength[] = ['weak', 'moderate', 'strong'];
-const STATUS_TONE: Record<AgentHypothesis['status'], Tone> = { untested: 'neutral', open: 'info', supported: 'accent', contested: 'med', ruled_out: 'neutral' };
-const STATUS_LABEL: Record<AgentHypothesis['status'], string> = { untested: 'Untested', open: 'Open', supported: 'Supported', contested: 'Contested', ruled_out: 'Ruled out' };
 
 export function StrengthMeter({ strength }: { strength: EvidenceStrength }) {
   const n = STRENGTH_STEPS.indexOf(strength) + 1;
@@ -126,71 +123,31 @@ export function StrengthMeter({ strength }: { strength: EvidenceStrength }) {
           <span key={i} className={cx('h-1.5 w-4 rounded-full', i < n ? 'bg-accent' : 'bg-line-strong/60')} />
         ))}
       </span>
-      <span className="text-[11.5px] text-ink-2">{strength === 'none' ? 'no evidence' : strength}</span>
+      <span className="text-[12px] text-ink-2">{strength === 'none' ? 'no evidence' : strength}</span>
     </span>
   );
 }
 
-export function HypothesisCards({ hypotheses, evidence }: { hypotheses: AgentHypothesis[]; evidence: EvidenceItem[] }) {
-  const byId = new Map(evidence.map((e) => [e.id, e]));
-  const order: AgentHypothesis['status'][] = ['supported', 'contested', 'open', 'untested', 'ruled_out'];
-  const sorted = [...hypotheses].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || STRENGTH_STEPS.indexOf(b.strength) - STRENGTH_STEPS.indexOf(a.strength));
-  return (
-    <div className="space-y-3">
-      <p className="text-[12px] text-ink-3">
-        <span className="font-medium text-ink-2">Evidence strength</span> is how much independent evidence lines up with an explanation — not the probability that it is the cause. Timing alone never makes an explanation strong.
-      </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        {sorted.map((h) => (
-          <Card key={h.kind} className={cx(h.status === 'ruled_out' && 'opacity-60')}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Mono className="text-[11px] text-ink-3">{HYPOTHESIS_ID[h.kind]}</Mono>
-              <span className="text-[13px] font-semibold">{hypothesisLabel(h.kind)}</span>
-              <Badge tone={STATUS_TONE[h.status]}>{STATUS_LABEL[h.status]}</Badge>
-              <span className="ml-auto">{h.status !== 'ruled_out' && h.status !== 'untested' && <StrengthMeter strength={h.strength} />}</span>
-            </div>
-            <p className="mt-1 text-[12.5px] text-ink-2">{h.statement}</p>
-            <EvidenceList label="For" tone="text-ok" ids={h.evidenceFor} byId={byId} empty="Nothing yet" />
-            <EvidenceList label="Against" tone="text-crit" ids={h.evidenceAgainst} byId={byId} empty="Nothing against" />
-            {h.unknowns.length > 0 && (
-              <div className="mt-2">
-                <Eyebrow className="mb-0.5 text-high">Unknown</Eyebrow>
-                <ul className="space-y-0.5 text-[12px] text-ink-2">
-                  {h.unknowns.map((u) => (
-                    <li key={u}>{u}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Compact, scannable hypotheses: one row each; open a row to inspect its evidence. */
 export function HypothesisList({ hypotheses, evidence }: { hypotheses: AgentHypothesis[]; evidence: EvidenceItem[] }) {
   const byId = new Map(evidence.map((e) => [e.id, e]));
   const order = ['strong', 'moderate', 'weak', 'unknown', 'ruled_out'];
   const sorted = [...hypotheses].sort((a, b) => order.indexOf(strengthOf(a)) - order.indexOf(strengthOf(b)));
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+    <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
       {sorted.map((h) => (
         <details key={h.kind} className={cx('group', strengthOf(h) === 'ruled_out' && 'opacity-70')}>
           <summary className="interactive flex cursor-pointer list-none items-start gap-3 px-4 py-3 hover:bg-subtle/50 [&::-webkit-details-marker]:hidden">
             <ChevronRight size={14} className="mt-0.5 shrink-0 text-ink-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13.5px] font-semibold">{hypothesisLabel(h.kind)}</span>
-                <Mono className="text-[11px] text-ink-3">{HYPOTHESIS_ID[h.kind]}</Mono>
-                {h.status === 'contested' && <span className="text-[11px] font-medium text-med">contested</span>}
+                <span className="text-[14px] font-semibold">{hypothesisLabel(h.kind)}</span>
+                {h.status === 'contested' && <span className="text-[12px] font-medium text-med">contested</span>}
               </div>
-              <p className="mt-0.5 text-[12.5px] text-ink-2">{h.statement}</p>
+              <p className="mt-0.5 text-[13px] text-ink-2">{h.statement}</p>
             </div>
             <span className="flex shrink-0 flex-col items-end gap-1">
               <StatusBadge kind="strength" value={strengthOf(h)} />
-              <span className="num text-[11px] text-ink-3">
+              <span className="num text-[12px] text-ink-3">
                 {h.evidenceFor.length} for · {h.evidenceAgainst.length} against
               </span>
             </span>
@@ -199,7 +156,7 @@ export function HypothesisList({ hypotheses, evidence }: { hypotheses: AgentHypo
             <EvidenceList label="For" tone="text-ok" ids={h.evidenceFor} byId={byId} empty="Nothing yet" />
             <EvidenceList label="Against" tone="text-crit" ids={h.evidenceAgainst} byId={byId} empty="Nothing against" />
             <div className="mt-2">
-              <Eyebrow className="mb-0.5 text-high">Unknown</Eyebrow>
+              <Eyebrow className="mb-0.5">Unknown</Eyebrow>
               {h.unknowns.length ? (
                 <ul className="space-y-0.5 text-[12px] text-ink-2">
                   {h.unknowns.map((u) => (
@@ -241,43 +198,6 @@ function EvidenceList({ label, tone, ids, byId, empty }: { label: string; tone: 
 }
 
 // ─────────────────────────────────────────────────────────────
-// Attention decision
-// ─────────────────────────────────────────────────────────────
-
-const BAND_TEXT = {
-  high: 'Several independent sources agree the problem is real.',
-  moderate: 'The problem is probably real, but corroboration is partial.',
-  low: 'The signal may be noise or a measurement issue; Jagr has not confirmed it.',
-};
-
-export function AttentionDecision({ inv, interruptAt }: { inv: WatchInvestigation; interruptAt?: WatchInvestigation['attention'] }) {
-  const band = confidenceBand(inv.confidence);
-  return (
-    <Card>
-      <Eyebrow className="mb-2">Attention decision</Eyebrow>
-      <div className="flex items-center gap-2">
-        <AttentionBadge level={inv.attention} />
-        <span className="text-[13px] font-medium">{attentionRoute(inv.attention, interruptAt)}</span>
-      </div>
-      <p className="mt-2 text-[12.5px] text-ink-2">{inv.attentionReason}</p>
-      <div className="mt-3 border-t border-line pt-3">
-        <div className="text-[12px] text-ink-3">Investigation confidence</div>
-        <div className="text-[15px] font-semibold capitalize">{band}</div>
-        <p className="mt-1 text-[12px] text-ink-2">
-          {BAND_TEXT[band]} This is confidence that <em>the problem is real</em> — never that any explanation is the cause.
-        </p>
-      </div>
-      {inv.stopReason && (
-        <div className="mt-3 border-t border-line pt-3 text-[12px]">
-          <div className="text-ink-3">Why Jagr stopped · {inv.toolCalls} tool calls</div>
-          <p className="mt-0.5 text-ink-2">{inv.stopReason}</p>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
 // Actions & approvals
 // ─────────────────────────────────────────────────────────────
 
@@ -293,7 +213,7 @@ export function RiskBadge({ risk }: { risk: ActionRisk }) {
 }
 
 export function ActionRow({ action, onDo }: { action: EffectiveAction; onDo?: () => void }) {
-  const { decide } = useProduct();
+  const { decide, location } = useProduct();
   const toast = useToast();
   const done = action.effective === 'executed' || action.effective === 'done' || action.effective === 'approved';
   const doIt = () => {
@@ -314,11 +234,11 @@ export function ActionRow({ action, onDo }: { action: EffectiveAction; onDo?: ()
           <Badge tone="neutral">Rejected</Badge>
         ) : action.risk === 'MEDIUM' ? (
           <Button size="sm" icon={Check} onClick={doIt}>
-            Do it (simulated)
+            {location === 'browser' ? 'Do it (simulated)' : 'Do it'}
           </Button>
         ) : (
-          <a href={`#approve-${action.id}`} className="text-[12px] font-medium text-high hover:underline">
-            Awaiting approval ↓
+          <a href={`#approve-${action.id}`} className="text-[13px] font-medium text-accent hover:underline">
+            Review approval
           </a>
         )}
       </div>
@@ -343,20 +263,20 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
   };
 
   return (
-    <Card padded={false} className={cx('overflow-hidden', !decided && 'ring-1 ring-high/40')}>
+    <Card padded={false} className="overflow-hidden">
       <div id={`approve-${action.id}`} className="flex scroll-mt-20 flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <ShieldAlert size={15} className={action.risk === 'CRITICAL' ? 'text-crit' : 'text-high'} />
         <span className="text-[14px] font-semibold">{action.title}</span>
         <RiskBadge risk={action.risk} />
         {!action.reversible && <Badge tone="crit">Not easily reversible</Badge>}
-        <span className="ml-auto text-[11.5px] text-ink-3">
-          Proposed {fmtTime(action.proposedAt)}
-          {inv && <> · {inv.title}</>}
+        <span className="ml-auto text-[12px] text-ink-3">
+          Proposed {fmtTime(action.proposedAt)} UTC
+          {inv && <> · {investigationTitle(inv)}</>}
         </span>
       </div>
       <div className="grid gap-4 px-4 py-4 md:grid-cols-2">
         <Field label="Why">{action.why}</Field>
-        <Field label="Evidence">
+        <Field label={`Evidence at proposal, ${fmtTime(action.proposedAt)} UTC`}>
           <ul className="space-y-0.5">
             {action.evidence.map((e) => (
               <li key={e} className="flex gap-1.5">
@@ -376,7 +296,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
       </div>
 
       {decided ? (
-        <div className={cx('flex flex-wrap items-center gap-2 border-t border-line px-4 py-3 text-[12.5px]', decided.status === 'approved' ? 'bg-ok-soft/50' : 'bg-subtle')}>
+        <div className={cx('flex flex-wrap items-center gap-2 border-t border-line px-4 py-3 text-[13px]', decided.status === 'approved' ? 'bg-ok-soft/50' : 'bg-subtle')}>
           {decided.status === 'approved' ? <Check size={14} className="text-ok" /> : <CircleSlash size={14} className="text-ink-3" />}
           <span className="font-medium">{decided.status === 'approved' ? `Approved${option ? `: ${option.label}` : ''}` : 'Rejected'}</span>
           <span className="text-ink-2">{decided.result}</span>
@@ -386,10 +306,10 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
         <div className="space-y-3 border-t border-line bg-subtle/40 px-4 py-3">
           {action.options && action.options.length > 1 && (
             <fieldset>
-              <legend className="mb-1 text-[11.5px] font-semibold uppercase tracking-wider text-ink-3">Modify — choose what to approve</legend>
+              <legend className="mb-1 text-[12px] font-medium text-ink-3">Modify — choose what to approve</legend>
               <div className="flex flex-wrap gap-2">
                 {action.options.map((o) => (
-                  <label key={o.id} className={cx('flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[12.5px]', optionId === o.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface')}>
+                  <label key={o.id} className={cx('flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[13px]', optionId === o.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface')}>
                     <input type="radio" name={`opt-${action.id}`} className="mt-0.5" checked={optionId === o.id} onChange={() => setOptionId(o.id)} />
                     <span>
                       <span className="font-medium">{o.label}</span>
@@ -405,7 +325,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
             onChange={(e) => setNote(e.target.value)}
             placeholder="Note for the audit trail (optional)"
             aria-label="Decision note"
-            className="h-8 w-full rounded-lg border border-line bg-surface px-3 text-[12.5px] outline-none focus:border-accent"
+            className="h-8 w-full rounded-lg border border-line bg-surface px-3 text-[13px] outline-none focus:border-accent"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="success" icon={Check} onClick={() => act('approved')}>
@@ -414,7 +334,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
             <Button variant="danger" icon={X} onClick={() => act('rejected')}>
               Reject
             </Button>
-            <span className="flex items-center gap-1 text-[11.5px] text-ink-3">
+            <span className="flex items-center gap-1 text-[12px] text-ink-3">
               <Lock size={11} /> Simulated environment — approving changes no production system.
             </span>
           </div>
@@ -426,7 +346,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
 
 function Field({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) {
   return (
-    <div className="text-[12.5px]">
+    <div className="text-[13px]">
       <Eyebrow className={cx('mb-1', tone)}>{label}</Eyebrow>
       <div className="text-ink">{children}</div>
     </div>
@@ -446,19 +366,19 @@ export function AgentWorkingLine({ inv }: { inv: WatchInvestigation }) {
 
 /** Which planner chose the tools for this run — model, scripted test planner, or deterministic. */
 export function PlannerModeLine({ info }: { info?: PlannerRunInfo }) {
-  const i = info ?? { mode: 'deterministic' as const, label: 'Deterministic planner', reason: 'No LLM planner is configured in this build.' };
+  const i = info ?? { mode: 'deterministic' as const, label: 'Deterministic planner', reason: 'No AI planner is configured on this server.' };
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2">
       <span className="text-ink-3">Environment:</span>
-      <span className="rounded bg-subtle px-1.5 py-px text-[10px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">WORKSPACE</span>
+      <span className="rounded bg-subtle px-1.5 py-px text-[12px] font-semibold tracking-wide text-ink-2 ring-1 ring-inset ring-line">WORKSPACE</span>
       <span className="ml-1 text-ink-3">Data:</span>
       {i.data === 'imported' ? (
-        <span className="rounded bg-accent-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-accent">USER IMPORT</span>
+        <span className="rounded bg-accent-soft px-1.5 py-px text-[12px] font-semibold tracking-wide text-accent">USER IMPORT</span>
       ) : (
-        <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-info">{(i.data ?? 'simulated').toUpperCase()}</span>
+        <span className="rounded border border-dashed border-info/50 bg-info-soft px-1.5 py-px text-[12px] font-semibold tracking-wide text-info">{(i.data ?? 'simulated').toUpperCase()}</span>
       )}
       <span className="ml-1 text-ink-3">Planner:</span>
-      <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold tracking-wide', i.mode === 'llm' ? 'bg-accent-soft text-accent' : i.mode === 'test_double' ? 'bg-high-soft text-high' : 'bg-subtle text-ink-2 ring-1 ring-inset ring-line')}>
+      <span className={cx('rounded px-1.5 py-px text-[12px] font-semibold tracking-wide', i.mode === 'llm' ? 'bg-accent-soft text-accent' : i.mode === 'test_double' ? 'bg-high-soft text-high' : 'bg-subtle text-ink-2 ring-1 ring-inset ring-line')}>
         {i.mode === 'llm' ? 'MODEL' : i.mode === 'test_double' ? 'SCRIPTED TEST PLANNER' : 'DETERMINISTIC'}
       </span>
       <span>

@@ -47,7 +47,7 @@ export function PlannerEvaluations() {
           <span className="text-ink-3">Running…</span>
         )}
       </div>
-      <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
         {PLANNER_CASES.map((c) => {
           const r = results?.find((x) => x.id === c.id);
           return (
@@ -55,14 +55,14 @@ export function PlannerEvaluations() {
               <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-3 hover:bg-subtle">
                 <span className="tabular w-16 font-mono text-[12px] text-ink-3">{c.id}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-medium">{c.title}</span>
+                  <span className="block text-[14px] font-medium">{c.title}</span>
                   <span className="block text-[12px] text-ink-3">Attack: {c.attack}</span>
                 </span>
                 {r ? <StatusBadge status={evalStatus(r)} /> : <Badge>…</Badge>}
               </summary>
-              <div className="border-t border-dashed border-line bg-canvas/50 px-4 py-3 text-[12.5px]">
+              <div className="border-t border-dashed border-line bg-canvas/50 px-4 py-3 text-[13px]">
                 {c.knownFailure && <p className="mb-2 rounded-lg bg-high-soft px-3 py-2 text-ink">{c.knownFailure}</p>}
-                {r && <p className="mb-2 text-[11.5px] text-ink-3">{r.plannerLabel}</p>}
+                {r && <p className="mb-2 text-[12px] text-ink-3">{r.plannerLabel}</p>}
                 <ul className="space-y-1">
                   {(r?.checks ?? []).map((k) => (
                     <li key={k.label} className="grid grid-cols-[18px_150px_260px_1fr] gap-2 max-md:grid-cols-[18px_1fr]">

@@ -8,7 +8,7 @@ import { watchFromTemplate } from '../../catalog';
 import { connectorContract, response, scriptedHttp, type Reply } from '../../testkit/connectorContract';
 import { githubConnector } from './github';
 import { amplitudeConnector } from './amplitude';
-import { connectorFactory } from './runtime';
+import { checkConnector, connectorFactory } from './runtime';
 import { connectorsFrom } from './index';
 import type { ConnectorDescriptor } from './types';
 import { ConnectorRateLimited } from './errors';
@@ -126,6 +126,38 @@ describe('GitHub mapping', () => {
   it('a 403 with no remaining quota is a rate limit, not a credential problem', async () => {
     const http: HttpClient = async () => response({ status: 403, body: { message: 'API rate limit exceeded' }, headers: { 'x-ratelimit-remaining': '0', 'retry-after': '60' } });
     await expect(build(http).changes!.getChanges({ window })).rejects.toBeInstanceOf(ConnectorRateLimited);
+  });
+
+  it('deployments carry a structured target (repository and environment), whatever the ref', async () => {
+    const deploys = (await build().changes!.getChanges({ window })).filter((c) => c.kind === 'deploy');
+    expect(new Set(deploys.map((d) => d.target))).toEqual(new Set(['acme/web:production']));
+    // Branch and tag refs stay the version; the target does not depend on them.
+    expect(new Set(deploys.map((d) => d.version))).toEqual(new Set(['main', 'v2.3.0']));
+  });
+
+  it('connection check: reports the deployments found for each configured environment', async () => {
+    const check = await checkConnector(githubConnector, connection, { secret, http: scriptedHttp(route).http, clock: manualClock(NOW) });
+    expect(check.state).toBe('connected');
+    expect(check.detail).toBe('GitHub · 1 repository · production · acme/web production: 7 deployments found');
+    expect(check.warnings).toBeUndefined();
+  });
+
+  it('connection check: zero deployments for an environment is a named warning, not a plain healthy result', async () => {
+    const conn = { ...connection, config: { repos: ['acme/web'], environments: ['production', 'Staging'], auth: 'token' } };
+    const check = await checkConnector(githubConnector, conn, { secret, http: scriptedHttp(route).http, clock: manualClock(NOW) });
+    // The credential and repository work (still connected); the environment reads nothing.
+    expect(check.state).toBe('connected');
+    expect(check.warnings).toEqual(["no deployments found for environment 'Staging' in acme/web; check the environment name/configuration"]);
+    expect(check.detail).toMatch(/acme\/web production: 7 deployments found/);
+    expect(check.detail).toMatch(/no deployments found for environment 'Staging' in acme\/web; check the environment name\/configuration/);
+  });
+
+  it('connection check: GitHub unavailable while reading deployments is unavailable, not "no deployments"', async () => {
+    const down = scriptedHttp((u) => (u.pathname.endsWith('/deployments') ? { status: 503, body: {} } : route(u))).http;
+    const check = await checkConnector(githubConnector, connection, { secret, http: down, clock: manualClock(NOW) });
+    expect(check.state).toBe('unavailable');
+    expect(check.warnings).toBeUndefined();
+    expect(check.detail).not.toMatch(/no deployments found/);
   });
 
   it('sends the token as a bearer header to api.github.com only', async () => {

@@ -179,7 +179,9 @@ sustained drop is detected after about 3 complete hours; one Amplitude project p
 
 REST API (`api.github.com`), read-only, with a **fine-grained personal access token** (Deployments: read,
 Contents: read, Metadata: read) in `JAGR_GITHUB_TOKEN`. Repositories in `JAGR_GITHUB_REPOS`, environments in
-`JAGR_GITHUB_ENVIRONMENTS` (default `production`).
+`JAGR_GITHUB_ENVIRONMENTS` (default `production`). Environment names must match the deployment environment as
+the deployer records it in GitHub (Vercel: `Production`, `Preview`); an unknown name returns no deployments rather
+than an error.
 
 - **Deployments** — `GET /repos/{repo}/deployments?environment=…` (newest first, up to 3 pages, back to 6 h before
   the window), then `GET …/deployments/{id}/statuses`. The time is the first `success` status: **actual** timing,
@@ -188,6 +190,13 @@ Contents: read, Metadata: read) in `JAGR_GITHUB_TOKEN`. Repositories in `JAGR_GI
   its start. Deep link: the commit. A `ref` that is a full commit SHA (Vercel sends one) is shown as the short SHA.
 - **Releases** — `GET /repos/{repo}/releases`. Published, non-draft only; `reported` timing at publication. GitHub
   does not know when users received a release, and the record says so.
+- **Connection test** — `GET /repos/{repo}`, then one page of deployments per configured environment: the result
+  reports the deployments found for each, and a named warning for an environment with none (still connected —
+  the credential works, but that environment reads nothing).
+- **Deployment target** — each deployment carries `target: "<owner/repo>:<environment>"`; a failed deployment is
+  closed by a later successful one with the same target, whatever its ref (SHA, branch or tag).
+- A watch that only reads changes reports what it read on each run (`GitHub: N deployments, M releases in the
+  last 6h`), not "within normal range".
 - A 403 with `x-ratelimit-remaining: 0` is a rate limit, not a credential problem.
 - A GitHub outage during an investigation is a recorded gap ("GitHub could not be checked"); the release question
   is never closed by it.

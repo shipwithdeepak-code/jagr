@@ -33,17 +33,6 @@ export function ProviderName({ provider, short, className }: { provider: Provide
   );
 }
 
-/** One vocabulary for source status, everywhere. Never blur simulated, imported and connected data. */
-export const CONNECTION: Record<ConnectionState, { tone: Tone; label: string }> = {
-  connected: { tone: 'ok', label: 'Connected' },
-  simulated: { tone: 'info', label: 'Simulated' },
-  imported: { tone: 'accent', label: 'User import' },
-  not_configured: { tone: 'neutral', label: 'Not configured' },
-  unavailable: { tone: 'high', label: 'Unavailable' },
-  error: { tone: 'crit', label: 'Error' },
-  needs_reconnect: { tone: 'high', label: 'Needs reconnection' },
-};
-
 export function ConnectionBadge({ state }: { state: ConnectionState }) {
   // One source-status vocabulary everywhere: USER IMPORT / CONNECTED / SIMULATED / NOT CONFIGURED / UNAVAILABLE / ERROR.
   return <StatusBadge kind="source" value={state} />;
@@ -54,7 +43,7 @@ export function EnvironmentBadge({ env }: { env: 'workspace' | 'demo' }) {
   return env === 'workspace' ? (
     <Badge tone="info">Workspace</Badge>
   ) : (
-    <span className="inline-flex items-center rounded-md border border-dashed border-high/50 px-1.5 py-px text-[11px] font-medium text-high">Demo night</span>
+    <span className="inline-flex items-center rounded border border-dashed border-high/50 px-1.5 py-px text-[12px] font-medium text-high">Demo night</span>
   );
 }
 
@@ -83,9 +72,9 @@ export function InvestigationStateBadge({ state }: { state: InvestigationState }
 }
 
 export function attentionRoute(level: AttentionLevel, interruptAt: AttentionLevel = 'HIGH') {
-  if (level === 'CRITICAL') return 'Emailed immediately';
+  if (level === 'CRITICAL') return 'Alert sent immediately';
   if (level === 'LOW') return 'No interruption';
-  if ((interruptAt === 'MEDIUM' && level === 'MEDIUM') || level === 'HIGH') return 'Emailed once confirmed';
+  if ((interruptAt === 'MEDIUM' && level === 'MEDIUM') || level === 'HIGH') return 'Alert sent once confirmed';
   return 'Morning brief';
 }
 
@@ -97,10 +86,10 @@ export function SourceLinkButton({ link, compact }: { link: SourceLink; compact?
     <Link
       to={link.href}
       title={`Opens the ${link.simulated ? 'simulated ' : ''}record. With a live connector: ${link.externalUrl}`}
-      className={cx('inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface font-medium shadow-card hover:bg-subtle', compact ? 'h-7 px-2 text-[12px]' : 'h-8 px-2.5 text-[12.5px]')}
+      className={cx('inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface font-medium shadow-card hover:bg-subtle', compact ? 'h-7 px-2 text-[12px]' : 'h-8 px-2.5 text-[13px]')}
     >
       <ProviderName provider={link.provider} short />
-      {tag && <span className={cx('rounded px-1 text-[10px] font-semibold', tag === 'IMPORT' ? 'bg-accent-soft text-accent' : 'bg-info-soft text-info')}>{tag}</span>}
+      {tag && <span className={cx('rounded px-1 text-[12px] font-semibold', tag === 'IMPORT' ? 'bg-accent-soft text-accent' : 'bg-info-soft text-info')}>{tag}</span>}
       <ExternalLink size={11} className="text-ink-3" />
     </Link>
   );
@@ -110,32 +99,38 @@ export function SourceLinkButton({ link, compact }: { link: SourceLink; compact?
 function EmailButtonTag({ provider, simulated }: { provider?: ProviderId; simulated: boolean }) {
   const ctx = useContext(ProductContext);
   const state = provider ? ctx?.state.connections.find((c) => c.provider === provider)?.state : undefined;
-  if (state === 'imported') return <span className="rounded bg-accent-soft px-1 text-[10px] font-semibold text-accent">IMPORT</span>;
-  return simulated ? <span className="rounded bg-info-soft px-1 text-[10px] font-semibold text-info">SIM</span> : null;
+  if (state === 'imported') return <span className="rounded bg-accent-soft px-1 text-[12px] font-semibold text-accent">IMPORT</span>;
+  return simulated ? <span className="rounded bg-info-soft px-1 text-[12px] font-semibold text-info">SIM</span> : null;
 }
 
 /** Renders an email the way the PM would receive it. */
 export function EmailPreview({ email }: { email: EmailNotification }) {
   const s = email.sections;
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-subtle/60 px-4 py-2 text-[11.5px] text-ink-3">
-        <Mail size={13} />
-        <span>
-          <span className="font-medium text-ink-2">{email.from}</span> → {email.to}
-        </span>
+    <div className="overflow-hidden rounded-lg border border-line bg-surface">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-subtle/60 px-4 py-2 text-[12px] text-ink-3">
+        <Mail size={13} aria-hidden />
+        {email.to ? (
+          <span>
+            <span className="font-medium text-ink-2">{email.from}</span> → {email.to}
+          </span>
+        ) : (
+          <span className="font-medium text-ink-2">Alert</span>
+        )}
         <span className="ml-auto">
-          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} · {email.trigger === 'immediate' ? 'sent immediately' : email.trigger === 'escalated' ? 'escalation' : 'sent once confirmed'}
+          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} UTC · {email.trigger === 'immediate' ? 'sent immediately' : email.trigger === 'escalated' ? 'escalation' : 'sent once confirmed'}
         </span>
-        <Badge tone="info" className="border border-dashed border-info/40">
-          Simulated · not delivered
-        </Badge>
+        {email.to && (
+          <Badge tone="neutral" className="border border-dashed border-line-strong">
+            Simulated · not delivered
+          </Badge>
+        )}
       </div>
       <div className="px-5 py-4">
         <div className="text-[16px] font-semibold tracking-tight">{email.subject}</div>
-        <div className="mt-4 space-y-4 text-[13.5px]">
+        <div className="mt-4 space-y-4 text-[14px]">
           <Section label="What changed">
-            <div className="text-[15px] font-semibold">{s.whatChanged}</div>
+            <div className="text-[16px] font-semibold">{s.whatChanged}</div>
           </Section>
           <Section label="What Jagr found">
             <ul className="space-y-1">
@@ -159,7 +154,7 @@ export function EmailPreview({ email }: { email: EmailNotification }) {
               key={b.label}
               to={b.href}
               className={cx(
-                'inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium',
+                'inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium',
                 b.kind === 'jagr' ? 'bg-ink text-canvas hover:opacity-90' : 'border border-line bg-surface shadow-card hover:bg-subtle',
               )}
             >

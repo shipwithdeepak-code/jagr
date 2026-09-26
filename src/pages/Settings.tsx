@@ -1,248 +1,167 @@
-import { Lock, RotateCcw } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
-import type { AlertSeverity, EscalationRoute, GatedCategory, GateSetting, SignalCategory, WatchArea, WorkspaceSettings } from '@/domain/types';
-import { AREA_LABELS, TEAMS } from '@/domain/defaults';
-import { AUTONOMY_LEVELS, GATE_LABELS } from '@/agents/policy';
-import { useWorkspace } from '@/state/workspace';
-import { Badge, Button, Card, cx, Modal, PageHeader, Select, Toggle } from '@/components/ui';
+import { ArrowRight, Moon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { useProduct } from '@/state/productContext';
+import { Card, PageHeader, Toggle } from '@/components/ui';
 import { WorkspaceLocationPanel } from '@/components/serverWorkspace';
-import { useToast } from '@/components/toast';
+import { WorkspaceTransfer } from '@/components/workspaceTransfer';
 
-const WATCH: { key: WatchArea; label: string; category?: SignalCategory; hint: string }[] = [
-  { key: 'activation', label: 'Activation', category: 'activation', hint: 'Activation by platform, onboarding, signups' },
-  { key: 'conversion', label: 'Conversion', category: 'conversion', hint: 'Subscription & checkout funnel, trials' },
-  { key: 'retention', label: 'Retention', category: 'retention', hint: 'D1 / D7 / D30, reactivation' },
-  { key: 'revenue', label: 'Revenue', category: 'revenue', hint: 'Gross revenue, ARPU, refunds, cancellations' },
-  { key: 'payment_failures', label: 'Payment failures', category: 'payments', hint: 'Failure rate, chargebacks, retries' },
-  { key: 'support_volume', label: 'Support volume', category: 'support', hint: 'Tickets, response time, CSAT' },
-  { key: 'engagement', label: 'Engagement', category: 'engagement', hint: 'Active users, sessions, feature usage' },
-  { key: 'reliability', label: 'Reliability', category: 'reliability', hint: 'API errors & latency, crash rates' },
-  { key: 'releases', label: 'Releases', hint: 'Correlate deploys and merged PRs during investigations' },
-  { key: 'experiments', label: 'Experiments', hint: 'Correlate experiment ramps and results' },
-];
+const TIMEZONES = ['UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata'];
 
-const ROUTES: { value: EscalationRoute; label: string }[] = [
-  { value: 'immediate', label: 'Immediate' },
-  { value: 'morning_brief', label: 'Morning brief' },
-  { value: 'daily_digest', label: 'Daily digest' },
-  { value: 'none', label: 'No interruption' },
-];
-
+/**
+ * Settings for the open workspace — never for Demo night (that has its own settings page), and
+ * opening this page never changes which environment the app is in.
+ */
 export function SettingsPage() {
-  const { state, updateSettings, reset } = useWorkspace();
-  const toast = useToast();
-  const [confirmReset, setConfirmReset] = useState(false);
-  const s = state.settings;
-
-  const save = (next: WorkspaceSettings, description: string) => {
-    updateSettings(next, description);
-    toast({ tone: 'success', title: 'Saved', body: `${description}. Applies to the next overnight run.` });
-  };
-
-  const a = s.autonomy;
-  const setAutonomy = (patch: Partial<WorkspaceSettings['autonomy']>, description: string) => save({ ...s, autonomy: { ...a, ...patch } }, description);
-
   return (
     <>
-      <PageHeader title="Settings" description="What JAGR watches, who owns what, how much it may do on its own, and when it interrupts people. Changes apply to the next run and are recorded in the audit log." />
-
-      <div className="space-y-6">
-        <WorkspaceLocationPanel />
-        <Panel title="What JAGR watches" hint="Thresholds are the relative move (in the bad direction) required before a signal can be anomalous.">
-          <div className="divide-y divide-line">
-            {WATCH.map((w) => (
-              <div key={w.key} className="flex flex-wrap items-center gap-3 py-2.5">
-                <input
-                  type="checkbox"
-                  id={`watch-${w.key}`}
-                  checked={s.watch[w.key]}
-                  onChange={(e) => save({ ...s, watch: { ...s.watch, [w.key]: e.target.checked } }, `${w.label} ${e.target.checked ? 'watched' : 'not watched'}`)}
-                  className="size-4 accent-[var(--ink)]"
-                />
-                <label htmlFor={`watch-${w.key}`} className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-medium">{w.label}</span>
-                  <span className="block text-[12px] text-ink-3">{w.hint}</span>
-                </label>
-                {w.category && (
-                  <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-                    Threshold
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      step={1}
-                      value={s.thresholds[w.category]}
-                      onChange={(e) => {
-                        const v = Math.max(1, Math.min(100, Number(e.target.value) || 1));
-                        updateSettings({ ...s, thresholds: { ...s.thresholds, [w.category!]: v } });
-                      }}
-                      onBlur={() => save(s, `${w.label} threshold set to ${s.thresholds[w.category!]}%`)}
-                      className="tabular h-8 w-16 rounded-lg border border-line bg-surface px-2 text-right text-[13px]"
-                      aria-label={`${w.label} threshold`}
-                    />
-                    %
-                  </label>
-                )}
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Who owns what" hint="JAGR files work to the team that owns the implicated component — not the metric that moved.">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {s.owners.map((o) => (
-              <div key={o.area} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
-                <span className="text-[13.5px] font-medium">{AREA_LABELS[o.area]}</span>
-                <span className="flex items-center gap-2 text-ink-3">
-                  →
-                  <Select
-                    label={`Owner for ${AREA_LABELS[o.area]}`}
-                    value={o.teamId}
-                    onChange={(teamId) => save({ ...s, owners: s.owners.map((x) => (x.area === o.area ? { ...x, teamId } : x)) }, `${AREA_LABELS[o.area]} now owned by ${TEAMS.find((t) => t.id === teamId)?.name}`)}
-                    options={TEAMS.map((t) => ({ value: t.id, label: t.name }))}
-                  />
-                </span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Autonomy policy" hint="Each level requires the ones below it. Turning one off disables everything above.">
-          <div className="divide-y divide-line">
-            <PolicyRow level={0} label="Observe" desc="Read product signals" checked={a.observe} onChange={(v) => setAutonomy({ observe: v }, `Observe ${v ? 'on' : 'off'}`)} />
-            <PolicyRow level={1} label="Investigate" desc="Query other systems for evidence" checked={a.investigate} disabled={!a.observe} onChange={(v) => setAutonomy({ investigate: v }, `Investigate ${v ? 'on' : 'off'}`)} />
-            <PolicyRow level={2} label="Recommend" desc="Form hypotheses and recommend actions" checked={a.recommend} disabled={!a.investigate} onChange={(v) => setAutonomy({ recommend: v }, `Recommend ${v ? 'on' : 'off'}`)} />
-            <PolicyRow level={3} label="Create tasks" desc="File engineering tasks in the issue tracker" checked={a.createTasks} disabled={!a.recommend} onChange={(v) => setAutonomy({ createTasks: v }, `Create tasks ${v ? 'on' : 'off'}`)}>
-              <Select
-                label="Auto-file tasks for"
-                value={a.autoFileMinSeverity}
-                onChange={(v) => setAutonomy({ autoFileMinSeverity: v }, `Auto-file tasks: ${v}`)}
-                options={[
-                  { value: 'critical', label: 'Auto-file critical; draft the rest' },
-                  { value: 'high', label: 'Auto-file high and above' },
-                  { value: 'medium', label: 'Auto-file medium and above' },
-                  { value: 'never', label: 'Draft only — I file them' },
-                ]}
-              />
-            </PolicyRow>
-            <PolicyRow level={3} label="Create incidents" desc="Draft incident records for critical findings" checked={a.createIncidents} disabled={!a.recommend} onChange={(v) => setAutonomy({ createIncidents: v }, `Create incidents ${v ? 'on' : 'off'}`)} />
-            {(Object.keys(GATE_LABELS) as GatedCategory[]).map((g) => (
-              <div key={g} className="flex flex-wrap items-center gap-3 py-3">
-                <Badge tone="high">L4</Badge>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-[13.5px] font-medium">
-                    {GATE_LABELS[g]} <Lock size={12} className="text-ink-3" />
-                  </div>
-                  <div className="text-[12px] text-ink-3">Hard limit: can require approval or be disabled — never autonomous.</div>
-                </div>
-                <Select<GateSetting>
-                  label={`${GATE_LABELS[g]} policy`}
-                  value={a.gates[g]}
-                  onChange={(v) => setAutonomy({ gates: { ...a.gates, [g]: v } }, `${GATE_LABELS[g]}: ${v === 'require_approval' ? 'requires approval' : 'disabled'}`)}
-                  options={[
-                    { value: 'require_approval', label: 'Requires approval' },
-                    { value: 'disabled', label: 'Disabled — recommend only' },
-                  ]}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 grid grid-cols-5 gap-1 text-center text-[11px]">
-            {AUTONOMY_LEVELS.map((l) => (
-              <div key={l.level} className="rounded-md bg-subtle px-1 py-1.5" title={l.description}>
-                <div className="font-semibold text-ink">L{l.level} {l.name}</div>
-                <div className="hidden text-ink-3 sm:block">{l.description}</div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Escalation" hint="How each severity reaches people. Critical + Immediate notifies the owning team’s on-call (simulated).">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(['critical', 'high', 'medium', 'low'] as AlertSeverity[]).map((sev) => (
-              <div key={sev} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
-                <span className="text-[13.5px] font-medium capitalize">{sev}</span>
-                <Select label={`${sev} escalation`} value={s.escalation[sev]} onChange={(v) => save({ ...s, escalation: { ...s.escalation, [sev]: v } }, `${sev} → ${ROUTES.find((r) => r.value === v)?.label}`)} options={ROUTES} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Schedule">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <TimeField label="Watch starts" value={s.schedule.start} onChange={(v) => save({ ...s, schedule: { ...s.schedule, start: v } }, `Watch starts ${v}`)} />
-            <TimeField label="Watch ends" value={s.schedule.end} onChange={(v) => save({ ...s, schedule: { ...s.schedule, end: v } }, `Watch ends ${v}`)} />
-            <TimeField label="Morning briefing" value={s.schedule.briefAt} onChange={(v) => save({ ...s, schedule: { ...s.schedule, briefAt: v } }, `Morning brief at ${v}`)} />
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5">
-            <div>
-              <div className="text-[13.5px] font-medium">Critical escalation</div>
-              <div className="text-[12px] text-ink-3">Allow JAGR to notify on-call during the night for critical findings.</div>
-            </div>
-            <Toggle checked={s.criticalEscalation} onChange={(v) => save({ ...s, criticalEscalation: v }, `Critical escalation ${v ? 'on' : 'off'}`)} label="Critical escalation" />
-          </div>
-          <p className="mt-3 text-[12px] text-ink-3">The demo night is simulated at a fixed 18:00 → 08:00 window; schedule changes are stored for a real deployment’s scheduler.</p>
-        </Panel>
-
-        <Panel title="Demo night data">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-[13px] text-ink-2">Restore Demo night’s default settings and backlog, and clear its run, decisions and evaluation results. Your workspace (watches, investigations, their decisions and filed tasks, planner selection) is not affected.</div>
-            <Button variant="danger" icon={RotateCcw} onClick={() => setConfirmReset(true)}>
-              Reset Demo night
-            </Button>
-          </div>
-        </Panel>
+      <PageHeader title="Settings" description="How this workspace monitors, notifies and plans investigations. Demo night has its own settings." />
+      <div className="space-y-8">
+        <Section id="workspace" title="Workspace and account" hint="Where this workspace lives, who is signed in, and the other workspaces you can open.">
+          <WorkspaceLocationPanel />
+        </Section>
+        <Section id="monitoring" title="Monitoring" hint="Each watch sets its own frequency and thresholds. The morning brief runs on its own schedule.">
+          <BriefSchedule />
+        </Section>
+        <Section id="notifications" title="Notifications" hint="Where Jagr tells you about findings.">
+          <NotificationChannels />
+        </Section>
+        <Section id="ai" title="AI planning" hint="Which planner chooses the next check during an investigation. Every proposal passes the same policy validator either way.">
+          <PlannerSetting />
+        </Section>
+        <Section id="data" title="Data">
+          <WorkspaceTransfer />
+        </Section>
+        <Section id="advanced" title="Advanced">
+          <Card padded={false} className="divide-y divide-line">
+            <AdvancedLink to="/evaluations" title="Evaluations" body="Replay fixture nights through the real engine and check its behaviour." />
+            <AdvancedLink to="/trace" title="Agent trace" body="Every planner decision, validator verdict and tool call, as recorded." />
+            <AdvancedLink to="/demo" title="Demo night" body="A scripted replay of the original agent, separate from this workspace." icon={<Moon size={14} aria-hidden className="text-ink-3" />} />
+          </Card>
+        </Section>
       </div>
-
-      <Modal
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        title="Reset Demo night?"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmReset(false)}>Cancel</Button>
-            <Button variant="danger" onClick={() => { reset(); setConfirmReset(false); toast({ tone: 'info', title: 'Demo night reset' }); }}>Reset</Button>
-          </>
-        }
-      >
-        This clears Demo night’s simulated data in this browser. Your workspace and any external system are not affected.
-      </Modal>
     </>
   );
 }
 
-function Panel({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+function Section({ id, title, hint, children }: { id: string; title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-20">
+      <h2 id={`${id}-title`} className="text-[16px] font-semibold tracking-tight">
+        {title}
+      </h2>
+      {hint && <p className="mt-0.5 mb-3 max-w-2xl text-[13px] text-ink-2">{hint}</p>}
+      {!hint && <div className="mb-3" />}
+      {children}
+    </section>
+  );
+}
+
+function AdvancedLink({ to, title, body, icon }: { to: string; title: string; body: string; icon?: ReactNode }) {
+  return (
+    <Link to={to} className="interactive group flex items-center gap-3 px-4 py-3 hover:bg-subtle">
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 text-[14px] font-medium">
+          {icon}
+          {title}
+        </span>
+        <span className="block text-[13px] text-ink-2">{body}</span>
+      </span>
+      <ArrowRight size={14} aria-hidden className="text-ink-3 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
+    </Link>
+  );
+}
+
+function BriefSchedule() {
+  const { state, setBrief, location } = useProduct();
   return (
     <Card>
-      <div className="mb-3">
-        <h2 className="text-[14px] font-semibold tracking-tight">{title}</h2>
-        {hint && <p className="mt-0.5 text-[12.5px] text-ink-3">{hint}</p>}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-[14px] font-medium">Morning brief</div>
+          <p className="text-[13px] text-ink-2">What needs your attention, and what stayed quiet — once a day.</p>
+        </div>
+        <Toggle checked={state.brief.enabled} onChange={(v) => setBrief({ ...state.brief, enabled: v })} label="Send a morning brief" />
       </div>
-      {children}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="block text-[13px] text-ink-2" htmlFor="brief-time">
+          Time
+          <input id="brief-time" type="time" value={state.brief.time} disabled={!state.brief.enabled} onChange={(e) => e.target.value && setBrief({ ...state.brief, time: e.target.value })} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[14px] text-ink disabled:opacity-50" />
+        </label>
+        <label className="block text-[13px] text-ink-2" htmlFor="brief-tz">
+          Timezone
+          <select id="brief-tz" value={state.brief.timezone} disabled={!state.brief.enabled} onChange={(e) => setBrief({ ...state.brief, timezone: e.target.value })} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[14px] text-ink disabled:opacity-50">
+            {TIMEZONES.map((tz) => (
+              <option key={tz}>{tz}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {location === 'browser' && <p className="mt-3 text-[13px] text-ink-3">The sample night runs 18:00–08:05 UTC; a brief scheduled outside that window appears after the next sample night.</p>}
     </Card>
   );
 }
 
-function PolicyRow({ level, label, desc, checked, onChange, disabled, children }: { level: number; label: string; desc: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; children?: ReactNode }) {
+/** Only channels that actually deliver are offered; email delivery is not built, so it is not promised. */
+function NotificationChannels() {
+  const { location, server } = useProduct();
+  const channels = server?.connections.filter((c) => c.kind === 'channel') ?? [];
   return (
-    <div className={cx('flex flex-wrap items-center gap-3 py-3', disabled && 'opacity-50')}>
-      <Badge tone={level === 3 ? 'accent' : 'neutral'}>L{level}</Badge>
+    <Card padded={false} className="divide-y divide-line">
+      <Row title="In Jagr" status="Always on" body="Findings appear on the Overview, in Investigations and in the morning brief." />
+      {location === 'server' ? (
+        channels.length ? (
+          channels.map((c) => <Row key={c.id} title={c.displayName} status={c.health === 'healthy' ? 'Connected' : c.health.replace('_', ' ')} body={`Alerts and the morning brief are posted here${c.account ? ` (${c.account})` : ''}.`} />)
+        ) : (
+          <Row title="Slack" status="Not connected" body={<>Post alerts and the morning brief to a Slack channel. <Link to="/sources" className="font-medium text-accent hover:underline">Connect Slack in Sources</Link>.</>} />
+        )
+      ) : (
+        <Row title="Slack" status="Server workspaces" body="Sending alerts to Slack needs a server workspace — sign in above." />
+      )}
+      <Row title="Email" status="Not available" body="Jagr does not send email yet. Alerts are shown in Jagr and, when connected, in Slack." />
+    </Card>
+  );
+}
+
+function Row({ title, status, body }: { title: string; status: string; body: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] font-medium">{label}</div>
-        <div className="text-[12px] text-ink-3">{desc}</div>
+        <div className="text-[14px] font-medium">{title}</div>
+        <p className="text-[13px] text-ink-2">{body}</p>
       </div>
-      {children}
-      <span className="w-8 text-right text-[12px] font-medium text-ink-2">{checked ? 'ON' : 'OFF'}</span>
-      <Toggle checked={checked} onChange={onChange} disabled={disabled} label={label} />
+      <span className="text-[13px] text-ink-3">{status}</span>
     </div>
   );
 }
 
-function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function PlannerSetting() {
+  const { plannerChoice, llmOption, setPlannerChoice, running, location, server } = useProduct();
+  const value = plannerChoice === 'llm' && llmOption.available ? 'llm' : 'deterministic';
+  const egressOff = location === 'server' && server && !server.settings.aiEgressAllowed;
   return (
-    <label className="block">
-      <span className="text-[12.5px] text-ink-3">{label}</span>
-      <input type="time" value={value} onChange={(e) => e.target.value && onChange(e.target.value)} className="tabular mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[14px]" />
-    </label>
+    <Card>
+      <fieldset>
+        <legend className="sr-only">Planner</legend>
+        <div className="space-y-2">
+          <label className="flex items-start gap-3 text-[14px]">
+            <input type="radio" name="planner" className="mt-1 accent-[var(--ink)]" checked={value === 'deterministic'} disabled={running} onChange={() => setPlannerChoice('deterministic')} />
+            <span>
+              <span className="font-medium">Deterministic planner</span>
+              <span className="block text-[13px] text-ink-2">Fixed investigation rules. Nothing leaves this workspace.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-[14px]">
+            <input type="radio" name="planner" className="mt-1 accent-[var(--ink)]" checked={value === 'llm'} disabled={running || !llmOption.available || !!egressOff} onChange={() => setPlannerChoice('llm')} />
+            <span>
+              <span className="font-medium">AI planner</span>
+              <span className="block text-[13px] text-ink-2">
+                {!llmOption.available ? (llmOption.reason ?? 'No AI provider is configured on this server.') : egressOff ? 'Turned off for this workspace: AI planning is not allowed (see Workspace and account).' : `${llmOption.label}. Investigation context, including summaries of evidence, is sent to this provider.`}
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+    </Card>
   );
 }

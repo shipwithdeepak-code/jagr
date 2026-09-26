@@ -55,10 +55,10 @@ export function EvaluationLab() {
 
   return (
     <section aria-label="Evaluation Lab" className="mb-12">
-      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-line bg-surface px-4 py-4 shadow-card sm:px-5">
+      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-line bg-surface px-4 py-4 shadow-card sm:px-5">
         <div className="min-w-0 flex-1" role="status" aria-live="polite">
           {error ? (
-            <p className="text-[13.5px] text-crit">The suites could not finish: {error}. Nothing below is a result — run them again.</p>
+            <p className="text-[14px] text-crit">The suites could not finish: {error}. Nothing below is a result — run them again.</p>
           ) : golden && adversarial ? (
             <p className="num text-[14px] text-ink">
               <span className="font-semibold">{golden.passed}</span> of {golden.cases.length} golden cases pass · <span className="font-semibold">{adversarial.passed}</span> of {adversarial.results.length} adversarial cases pass
@@ -66,7 +66,7 @@ export function EvaluationLab() {
               <span className={regressions ? 'text-crit' : 'text-ok'}> · {regressions} regression{regressions === 1 ? '' : 's'}</span>
             </p>
           ) : (
-            <p className="text-[13.5px] text-ink-2">Running every case through the real engine…</p>
+            <p className="text-[14px] text-ink-2">Running every case through the real engine…</p>
           )}
           <p className="mt-0.5 text-[12px] text-ink-3">Deterministic fixture nights, run in this browser. The same suites run in npm test.</p>
         </div>
@@ -76,7 +76,7 @@ export function EvaluationLab() {
       </div>
 
       <h2 className="mb-1 text-[13px] font-semibold tracking-tight">Dimensions</h2>
-      <p className="mb-3 text-[12.5px] text-ink-3">Each dimension lists the measurements behind it, in the evaluators’ own counts. Different units are never added together.</p>
+      <p className="mb-3 text-[13px] text-ink-3">Each dimension lists the measurements behind it, in the evaluators’ own counts. Different units are never added together.</p>
       <div className="stagger mb-10 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {dims.map((d, i) => (
           <DimensionCard key={d.key} d={d} index={i} />
@@ -86,7 +86,7 @@ export function EvaluationLab() {
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-[13px] font-semibold tracking-tight">Scenarios</h2>
-          <p className="text-[12.5px] text-ink-3">Expected against actual, the checks as evidence, and the trace behind the verdict.</p>
+          <p className="text-[13px] text-ink-3">Expected against actual, the checks as evidence, and the trace behind the verdict.</p>
         </div>
         <Tabs
           value={filter}
@@ -102,9 +102,9 @@ export function EvaluationLab() {
       {!golden && !adversarial && running ? (
         <LoadingState label="Running the golden and adversarial sets…" />
       ) : shown.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line-strong px-4 py-8 text-center text-[13px] text-ink-2">{filter === 'attention' ? 'Every scenario passes — no regressions and no documented limitations failing.' : 'No scenarios in this view.'}</p>
+        <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-[13px] text-ink-2">{filter === 'attention' ? 'Every scenario passes — no regressions and no documented limitations failing.' : 'No scenarios in this view.'}</p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
           {shown.map((s) => (
             <ScenarioRow key={s.id} s={s} />
           ))}
@@ -120,8 +120,8 @@ export function EvaluationLab() {
 function DimensionCard({ d, index }: { d: LabDimension; index: number }) {
   const st = DIM_STATUS[d.status];
   return (
-    <article className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-card" style={{ ['--i' as string]: index }}>
-      <h3 className="text-[13.5px] font-semibold tracking-tight">{d.label}</h3>
+    <article className="min-w-0 rounded-lg border border-line bg-surface p-4 shadow-card" style={{ ['--i' as string]: index }}>
+      <h3 className="text-[14px] font-semibold tracking-tight">{d.label}</h3>
       <p className={cx('mt-1 inline-flex items-center gap-1.5 text-[12px] font-medium', st.tone)}>
         <st.Icon size={13} aria-hidden className={d.status === 'pending' ? 'animate-spin motion-reduce:animate-none' : undefined} />
         {st.label}
@@ -150,26 +150,26 @@ function ScenarioRow({ s }: { s: LabScenario }) {
         <ChevronRight size={14} aria-hidden className="mt-1 shrink-0 text-ink-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="num font-mono text-[11.5px] text-ink-3">{s.id}</span>
-            <span className="text-[13.5px] font-medium">{s.title}</span>
-            <span className="text-[11.5px] text-ink-3">{s.suite}</span>
+            <span className="num font-mono text-[12px] text-ink-3">{s.id}</span>
+            <span className="text-[14px] font-medium">{s.title}</span>
+            <span className="text-[12px] text-ink-3">{s.suite}</span>
           </span>
           <span className="mt-0.5 block text-[12px] text-ink-3">Expected: {s.expected}</span>
         </span>
         <span className="shrink-0">{s.status === 'pending' ? <Badge>…</Badge> : <EvalBadge status={s.status} />}</span>
       </summary>
-      <div className="space-y-4 border-t border-dashed border-line bg-canvas/50 px-4 py-4 text-[12.5px] sm:px-5">
+      <div className="space-y-4 border-t border-dashed border-line bg-canvas/50 px-4 py-4 text-[13px] sm:px-5">
         {s.knownFailure && <p className="rounded-lg bg-high-soft px-3 py-2 text-ink">{s.knownFailure}</p>}
         <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-          <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Scenario</dt>
+          <dt className="text-[12px] font-medium text-ink-3">Scenario</dt>
           <dd className="text-ink-2">{s.scenario}</dd>
-          <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Expected</dt>
+          <dt className="text-[12px] font-medium text-ink-3">Expected</dt>
           <dd className="text-ink">{s.expected}</dd>
-          <dt className="text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Actual</dt>
+          <dt className="text-[12px] font-medium text-ink-3">Actual</dt>
           <dd className="text-ink">{s.actual || '—'}</dd>
         </dl>
         <div>
-          <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Evidence · checks</h3>
+          <h3 className="mb-1.5 text-[12px] font-medium text-ink-3">Evidence · checks</h3>
           <ul className="space-y-1">
             {s.checks.map((c) => (
               <li key={c.label} className="grid grid-cols-[18px_minmax(0,1fr)] gap-2 sm:grid-cols-[18px_220px_minmax(0,1fr)]">
@@ -202,7 +202,7 @@ function TraceOf({ inv, connections }: { inv: WatchInvestigation; connections: S
 
 function RelevantTrace({ s }: { s: LabScenario }) {
   const [repro, setRepro] = useState<{ investigation?: WatchInvestigation; connections: SourceConnection[] } | 'loading' | 'error' | null>(null);
-  const heading = <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Relevant trace</h3>;
+  const heading = <h3 className="mb-1.5 text-[12px] font-medium text-ink-3">Relevant trace</h3>;
   if (!s.reproducible) {
     return (
       <div>

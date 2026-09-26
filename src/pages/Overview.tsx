@@ -9,10 +9,20 @@ import { Badge, Card, ConfidenceMeter, cx, Eyebrow, SectionTitle, SeverityBadge,
 import { GATE_LABELS } from '@/agents/policy';
 import { useShellActions } from '@/components/shell';
 import { TryYourOwnData } from '@/components/onboarding';
+import { DemoInvestigations } from './Investigations';
 
 export function OverviewPage() {
   const { state } = useWorkspace();
-  return state.run ? <Brief run={state.run} approvals={state.approvals} /> : <BeforeTheNight />;
+  return state.run ? (
+    <>
+      <Brief run={state.run} approvals={state.approvals} />
+      <div className="mt-12">
+        <DemoInvestigations />
+      </div>
+    </>
+  ) : (
+    <BeforeTheNight />
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -27,9 +37,9 @@ function BeforeTheNight() {
     <div className="animate-fade-up">
       <div className="mb-8">
         <Eyebrow>Wed Sep 23 · 6:00 PM</Eyebrow>
-        <h1 className="mt-2 text-[30px] font-semibold tracking-[-0.025em] sm:text-[34px]">JAGR is ready for tonight.</h1>
-        <p className="mt-2 max-w-2xl text-[15px] text-ink-2">
-          When the team logs off, JAGR monitors product signals, investigates anything that moves, files the work, and has a brief waiting at {settings.schedule.briefAt}. Consequential actions wait for you.
+        <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] sm:text-[28px]">Jagr is ready for tonight.</h1>
+        <p className="mt-2 max-w-2xl text-[16px] text-ink-2">
+          When the team logs off, Jagr monitors product signals, investigates anything that moves, files the work, and has a brief waiting at {settings.schedule.briefAt}. Consequential actions wait for you.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <RunButtons />
@@ -39,7 +49,7 @@ function BeforeTheNight() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <Eyebrow>Watch window</Eyebrow>
-          <div className="tabular mt-2 text-[24px] font-semibold tracking-tight">
+          <div className="tabular mt-2 text-[28px] font-semibold tracking-tight">
             {settings.schedule.start} → {settings.schedule.end}
           </div>
           <p className="mt-1 text-[13px] text-ink-2">Sweeps every 30 minutes. Morning brief at {settings.schedule.briefAt}. Critical findings escalate {settings.criticalEscalation ? 'immediately' : 'in the brief'}.</p>
@@ -53,7 +63,7 @@ function BeforeTheNight() {
               </Badge>
             ))}
           </div>
-          <Link to="/settings" className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-medium text-ink-2 hover:text-ink">
+          <Link to="/demo/settings" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink-2 hover:text-ink">
             Configure <ArrowRight size={12} />
           </Link>
         </Card>
@@ -74,7 +84,7 @@ function BeforeTheNight() {
             <span key={i.kind} className="inline-flex items-center gap-1.5 text-[13px]">
               <span className={cx('size-1.5 rounded-full', settings.integrations[i.kind] === 'connected' ? 'bg-ok' : 'bg-crit')} />
               <SourceChip source={i.kind} className="text-ink-2" />
-              <span className="text-[11.5px] text-ink-3">{settings.integrations[i.kind] === 'connected' ? 'Simulation connected' : 'Unavailable'}</span>
+              <span className="text-[12px] text-ink-3">{settings.integrations[i.kind] === 'connected' ? 'Simulation connected' : 'Unavailable'}</span>
             </span>
           ))}
         </div>
@@ -92,13 +102,13 @@ export function RunButtons() {
       <button
         onClick={startRun}
         disabled={running}
-        className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink px-4 text-[13.5px] font-medium text-canvas shadow-card hover:opacity-90 disabled:opacity-60"
+        className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink px-4 text-[14px] font-medium text-canvas shadow-card hover:opacity-90 disabled:opacity-60"
       >
         <Play size={14} /> Run Overnight
       </button>
       <button
         onClick={requestDemo}
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-[13.5px] font-medium shadow-card hover:bg-subtle"
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-[14px] font-medium shadow-card hover:bg-subtle"
       >
         <Radar size={14} /> Reset &amp; replay Demo night
       </button>
@@ -126,15 +136,15 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
         <Eyebrow>
           {fmtDate(brief.generatedAt)} · Brief generated {fmtTime(brief.generatedAt)}
         </Eyebrow>
-        <h1 className="mt-2 text-[32px] font-semibold tracking-[-0.025em] sm:text-[38px]">Good morning.</h1>
-        <p className="mt-1 text-[15px] text-ink-2">JAGR monitored your product overnight.</p>
-        <p className="mt-1 text-[12.5px] text-ink-3">
+        <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] sm:text-[38px]">Good morning.</h1>
+        <p className="mt-1 text-[16px] text-ink-2">Jagr monitored your product overnight.</p>
+        <p className="mt-1 text-[13px] text-ink-3">
           {fmtTime(brief.window.start)} → {fmtTime(brief.window.end)} · {brief.counts.signals} signals · {run.events.filter((e) => e.stage === 'detect').length} sweeps · {run.investigations.length} investigations · {run.reasoningEngine}
         </p>
       </div>
 
       {/* Counts */}
-      <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-line bg-line shadow-card [&>*]:bg-surface" style={{ gap: 1 }}>
+      <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-line bg-line shadow-card [&>*]:bg-surface" style={{ gap: 1 }}>
         <CountCell label="Critical" value={brief.counts.critical} tone="crit" />
         <CountCell label="Needs attention" value={brief.counts.attention} tone="high" />
         <CountCell label="Normal" value={brief.counts.normal} tone="ok" hint={brief.counts.dismissed ? `${brief.counts.dismissed} transient dip dismissed` : undefined} />
@@ -145,15 +155,15 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
           <div className="flex items-start gap-3">
             <Moon size={18} className="mt-0.5 text-ok" />
             <div>
-              <div className="text-[15px] font-semibold">A quiet night.</div>
-              <p className="mt-1 text-[13.5px] text-ink-2">No signal crossed its threshold long enough to investigate. Nothing was filed and no one was paged.</p>
+              <div className="text-[16px] font-semibold">A quiet night.</div>
+              <p className="mt-1 text-[14px] text-ink-2">No signal crossed its threshold long enough to investigate. Nothing was filed and no one was paged.</p>
             </div>
           </div>
         </Card>
       )}
 
       {h && inv && (
-        <section className="mt-5 overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <section className="mt-5 overflow-hidden rounded-lg border border-line bg-surface shadow-card">
           <div className={cx('h-1', h.severity === 'critical' ? 'bg-crit' : h.severity === 'high' ? 'bg-high' : 'bg-med')} />
           <div className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
@@ -165,10 +175,10 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
                 <Badge key={e} tone="neutral">{e}</Badge>
               ))}
             </div>
-            <h2 className="mt-3 text-[24px] font-semibold tracking-[-0.02em] sm:text-[28px]">
+            <h2 className="mt-3 text-[28px] font-semibold tracking-[-0.02em] sm:text-[28px]">
               {h.metricName} {h.changePct < 0 ? 'dropped' : 'rose'} {fmtPct(Math.abs(h.changePct)).replace('+', '')}.
             </h2>
-            <p className="mt-2 max-w-3xl text-[15px] text-ink-2">“{h.statement}”</p>
+            <p className="mt-2 max-w-3xl text-[16px] text-ink-2">“{h.statement}”</p>
             <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
               <div className="flex items-center gap-2 text-[13px] text-ink-3">
                 Confidence <ConfidenceMeter value={h.confidence} band={inv.confidenceBand} />
@@ -180,12 +190,12 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
                 Open investigation <ArrowRight size={14} />
               </Link>
               {headTasks.map((t) => (
-                <Link key={t.id} to={`/tasks?open=${t.id}`} className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle">
+                <Link key={t.id} to={`/tasks?open=${t.id}&env=demo`} className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle">
                   {t.kind === 'incident' ? 'Incident draft' : 'Task'} <span className="font-mono text-[12px]">{t.id}</span>
                 </Link>
               ))}
               {pending.length > 0 && (
-                <Link to="/approvals" className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-high/30 bg-high-soft px-3 text-[13px] font-medium text-high hover:opacity-90">
+                <Link to="/approvals?env=demo" className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-high/30 bg-high-soft px-3 text-[13px] font-medium text-high hover:opacity-90">
                   <ShieldCheck size={14} /> {pending.length} awaiting your approval
                 </Link>
               )}
@@ -199,7 +209,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
                 {brief.evidence.map((e) => (
                   <div key={e.label} className="rounded-lg border border-line bg-canvas/60 p-3">
                     <div className="truncate text-[12px] text-ink-3">{e.label}</div>
-                    <div className={cx('tabular mt-1 text-[18px] font-semibold tracking-tight', e.tone === 'bad' ? 'text-crit' : 'text-ink')}>{e.value}</div>
+                    <div className={cx('tabular mt-1 text-[20px] font-semibold tracking-tight', e.tone === 'bad' ? 'text-crit' : 'text-ink')}>{e.value}</div>
                     <SourceChip source={e.source} className="mt-1.5" />
                   </div>
                 ))}
@@ -209,10 +219,10 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
 
           <div className="grid border-t border-line md:grid-cols-2">
             <div className="p-5 sm:p-6 md:border-r md:border-line">
-              <Eyebrow className="mb-3">What JAGR did</Eyebrow>
+              <Eyebrow className="mb-3">What Jagr did</Eyebrow>
               <ul className="space-y-2">
                 {brief.did.map((d) => (
-                  <li key={d} className="flex items-start gap-2.5 text-[13.5px]">
+                  <li key={d} className="flex items-start gap-2.5 text-[14px]">
                     <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-ok-soft text-ok">
                       <Check size={11} strokeWidth={3} />
                     </span>
@@ -222,7 +232,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
               </ul>
             </div>
             <div className="border-t border-line p-5 sm:p-6 md:border-t-0">
-              <Eyebrow className="mb-3">What JAGR did not do</Eyebrow>
+              <Eyebrow className="mb-3">What Jagr did not do</Eyebrow>
               {brief.didNot.length === 0 ? (
                 <p className="text-[13px] text-ink-3">No consequential actions were recommended.</p>
               ) : (
@@ -233,8 +243,8 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
                 </ul>
               )}
               {brief.didNot.length > 0 && (
-                <p className="mt-4 rounded-lg bg-subtle px-3 py-2 text-[12.5px] text-ink-2">
-                  <span className="font-medium text-ink">Reason:</span> these actions require human approval. JAGR never changes production, payments or customer communication on its own.
+                <p className="mt-4 rounded-lg bg-subtle px-3 py-2 text-[13px] text-ink-2">
+                  <span className="font-medium text-ink">Reason:</span> these actions require human approval. Jagr never changes production, payments or customer communication on its own.
                 </p>
               )}
             </div>
@@ -245,13 +255,13 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
       {others.length > 0 && (
         <section className="mt-6">
           <SectionTitle hint="Routed by your escalation policy.">Also needs attention</SectionTitle>
-          <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+          <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
             {others.map((f) => (
               <Link key={f.investigationId} to={`/investigations/${f.investigationId}`} className="flex flex-col gap-2 border-b border-line px-4 py-3.5 last:border-b-0 hover:bg-subtle sm:flex-row sm:items-center sm:gap-4 sm:px-5">
                 <span className="w-20 shrink-0"><SeverityBadge severity={f.severity} /></span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-medium">{f.title}</div>
-                  <div className="text-[12.5px] text-ink-2">{f.summary}</div>
+                  <div className="text-[14px] font-medium">{f.title}</div>
+                  <div className="text-[13px] text-ink-2">{f.summary}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-[12px] text-ink-3">
                   {f.confidence !== undefined && <span className="tabular">{fmtConfidence(f.confidence)} confidence</span>}
@@ -262,7 +272,7 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
             ))}
           </div>
           {dismissed.length > 0 && (
-            <p className="mt-2 text-[12.5px] text-ink-3">
+            <p className="mt-2 text-[13px] text-ink-3">
               Also looked at and dismissed: {dismissed.map((d) => d.title.toLowerCase()).join(', ')} — recovered on its own with nothing to corroborate it.
             </p>
           )}
@@ -277,12 +287,12 @@ function Brief({ run, approvals }: { run: OvernightRun; approvals: ApprovalReque
 function CountCell({ label, value, tone, hint }: { label: string; value: number; tone: 'crit' | 'high' | 'ok'; hint?: string }) {
   return (
     <div className="px-4 py-4 sm:px-5">
-      <div className="flex items-center gap-1.5 text-[12.5px] text-ink-3">
+      <div className="flex items-center gap-1.5 text-[13px] text-ink-3">
         <span className={cx('size-2 rounded-full', tone === 'crit' ? 'bg-crit' : tone === 'high' ? 'bg-high' : 'bg-ok')} />
         {label}
       </div>
-      <div className="tabular mt-1 text-[28px] font-semibold tracking-tight sm:text-[32px]">{value}</div>
-      {hint && <div className="hidden text-[11.5px] text-ink-3 sm:block">{hint}</div>}
+      <div className="tabular mt-1 text-[28px] font-semibold tracking-tight sm:text-[28px]">{value}</div>
+      {hint && <div className="hidden text-[12px] text-ink-3 sm:block">{hint}</div>}
     </div>
   );
 }
@@ -297,14 +307,14 @@ function NotDoneRow({ item, approval }: { item: BriefNotDone; approval?: Approva
         {status === 'approved' ? <Check size={11} strokeWidth={3} /> : <CircleSlash size={11} />}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] font-medium">{item.label}</div>
-        <div className="text-[12.5px] text-ink-3">
+        <div className="text-[14px] font-medium">{item.label}</div>
+        <div className="text-[13px] text-ink-3">
           {label}
           {approval && ` · ${GATE_LABELS[approval.gatedBy]}`}
         </div>
       </div>
       {approval && (status === 'pending' || status === 'more_evidence_requested') && (
-        <Link to={`/approvals#${approval.id}`} className="shrink-0 text-[12.5px] font-medium text-accent hover:underline">
+        <Link to={`/approvals?env=demo#${approval.id}`} className="shrink-0 text-[13px] font-medium text-accent hover:underline">
           Review
         </Link>
       )}
@@ -333,8 +343,8 @@ function ProductMetrics({ run }: { run?: OvernightRun }) {
   ];
   return (
     <section className="mt-10">
-      <SectionTitle hint={`Demo workspace history · last ${runs} nights${run ? ', including tonight' : ''}.`}>JAGR activity</SectionTitle>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line shadow-card sm:grid-cols-5">
+      <SectionTitle hint={`Demo workspace history · last ${runs} nights${run ? ', including tonight' : ''}.`}>Jagr activity</SectionTitle>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line shadow-card sm:grid-cols-5">
         {items.map((it) => (
           <div key={it.label} className="bg-surface px-4 py-3.5">
             <Stat label={it.label} value={it.value} hint={it.hint} />

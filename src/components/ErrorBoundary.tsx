@@ -16,11 +16,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey: st
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="mx-auto max-w-md rounded-xl border border-line bg-surface p-6 text-center shadow-card">
+      <div className="mx-auto max-w-md rounded-lg border border-line bg-surface p-6 text-center shadow-card">
         <TriangleAlert size={20} className="mx-auto text-high" />
-        <div className="mt-3 text-[15px] font-semibold">This screen couldn’t be displayed</div>
+        <div className="mt-3 text-[16px] font-semibold">This screen couldn’t be displayed</div>
         <p className="mt-1 text-[13px] text-ink-2">The saved demo workspace may be from an older version. Resetting restores the demo defaults in this browser only.</p>
-        <p className="mt-2 font-mono text-[11.5px] text-ink-3">{this.state.error.message}</p>
+        <p className="mt-2 font-mono text-[12px] text-ink-3">{this.state.error.message}</p>
         <div className="mt-4 flex justify-center gap-2">
           <a href="/" className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-[13px] font-medium hover:bg-subtle">
             Go to Overview

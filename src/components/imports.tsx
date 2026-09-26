@@ -48,16 +48,16 @@ export function ImportedSources() {
   return (
     <>
       <SourcesOverview views={views} />
-      <div className="mb-5 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px] text-ink-2">
+      <div className="mb-5 flex items-start gap-3 rounded-lg border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px] text-ink-2">
         <Lock size={15} className="mt-0.5 shrink-0" />
         <span>{PRIVACY_NOTICE}</span>
       </div>
-      {storageError && <div className="mb-4 rounded-xl border border-crit/40 bg-crit-soft/60 px-4 py-3 text-[13px] text-ink">{storageError}</div>}
+      {storageError && <div className="mb-4 rounded-lg border border-crit/40 bg-crit-soft/60 px-4 py-3 text-[13px] text-ink">{storageError}</div>}
 
       <Card className={cx('mb-6', open && 'ring-1 ring-accent/40')}>
         <div className="flex flex-wrap items-center gap-2">
           <FileUp size={16} className="text-accent" />
-          <span className="text-[15px] font-semibold">Add source · Upload data</span>
+          <span className="text-[16px] font-semibold">Add source · Upload data</span>
           <span className="text-[12px] text-ink-3">CSV or JSON · up to 5,000 rows per file</span>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-4" role="radiogroup" aria-label="What kind of data?">
@@ -74,7 +74,7 @@ export function ImportedSources() {
           ))}
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-          <div className="min-w-0 text-[12.5px] text-ink-2">
+          <div className="min-w-0 text-[13px] text-ink-2">
             <div className="break-words">
               Required columns: <Mono>{spec.required.join(', ')}</Mono>
               {spec.optional.length > 0 && (
@@ -85,7 +85,7 @@ export function ImportedSources() {
               )}
             </div>
             {kind === 'metrics' && <div className="mt-1 text-ink-3">Metrics Jagr can investigate in V1: {SUPPORTED_METRICS.join(', ')}. Timestamps in ISO 8601 (e.g. 2026-09-24T19:00:00Z).</div>}
-            <pre className="mt-2 overflow-x-auto rounded-md bg-subtle px-2.5 py-1.5 font-mono text-[11.5px] text-ink-2">{spec.example}</pre>
+            <pre className="mt-2 overflow-x-auto rounded bg-subtle px-2.5 py-1.5 font-mono text-[12px] text-ink-2">{spec.example}</pre>
           </div>
           <div className="flex flex-col gap-2">
             <input ref={input} type="file" accept=".csv,.json,text/csv,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} aria-label={`Upload ${spec.label} file`} />
@@ -103,7 +103,7 @@ export function ImportedSources() {
       {importedWorld && importedWorld.notes.length > 0 && (
         <div className="mb-6 space-y-1.5">
           {importedWorld.notes.map((n) => (
-            <div key={n} className="flex items-start gap-2 rounded-lg bg-high-soft/50 px-3 py-2 text-[12.5px] text-ink">
+            <div key={n} className="flex items-start gap-2 rounded-lg bg-high-soft/50 px-3 py-2 text-[13px] text-ink">
               <Info size={13} className="mt-0.5 shrink-0 text-high" />
               {n}
             </div>
@@ -113,7 +113,7 @@ export function ImportedSources() {
 
       <SectionTitle hint="Everything Jagr investigates in this workspace. Remove a file to take it out of the next run.">Imported files</SectionTitle>
       {imports.length === 0 ? (
-        <div className="mb-8 rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-ink-3">Jagr needs evidence to investigate. Upload a file above — or try the sample files.</div>
+        <div className="mb-8 rounded-lg border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-ink-3">Jagr needs evidence to investigate. Upload a file above — or try the sample files.</div>
       ) : (
         <Card padded={false} className="mb-8 overflow-hidden">
           {imports.map((d) => (
@@ -175,7 +175,7 @@ function RejectedRows({ d, initiallyOpen = false }: { d: ImportedDataset; initia
         {d.rejected.length} row{d.rejected.length === 1 ? '' : 's'} rejected — {[...reasons.entries()].map(([r, n]) => `${n} × ${r.replace(/\.$/, '')}`).join('; ').slice(0, 160)}
       </button>
       {open && (
-        <div className="mt-2 max-h-64 overflow-auto rounded-md border border-line bg-surface">
+        <div className="mt-2 max-h-64 overflow-auto rounded border border-line bg-surface">
           <table className="w-full text-left text-[12px]">
             <thead className="sticky top-0 bg-subtle text-ink-3">
               <tr>
@@ -189,7 +189,7 @@ function RejectedRows({ d, initiallyOpen = false }: { d: ImportedDataset; initia
                 <tr key={r.line} className="border-t border-line align-top">
                   <td className="px-2 py-1 font-mono text-ink-3">{r.line}</td>
                   <td className="px-2 py-1">{r.reason}</td>
-                  <td className="px-2 py-1 font-mono text-[11px] text-ink-2">{Object.entries(r.values).map(([k, v]) => `${k}=${v}`).join(' · ').slice(0, 200)}</td>
+                  <td className="px-2 py-1 font-mono text-[12px] text-ink-2">{Object.entries(r.values).map(([k, v]) => `${k}=${v}`).join(' · ').slice(0, 200)}</td>
                 </tr>
               ))}
             </tbody>

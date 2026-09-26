@@ -35,7 +35,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   context: 'Context',
 };
 
-export type SourceActionId = 'connect' | 'test' | 'reconnect' | 'disconnect';
+export type SourceActionId = 'connect' | 'test' | 'reconnect' | 'configure' | 'disconnect';
 
 export interface SourceAction {
   id: SourceActionId;
@@ -156,15 +156,17 @@ function actionsFor(group: SourceGroup, view: ConnectionView | undefined, canMan
     ? { id: 'test', label: 'Test', available: true, reason: 'Probes the stored credential now and records the outcome on the connection.' }
     : { id: 'test', label: 'Test', available: false, reason: BROWSER_LOCAL };
   const reconnect = change('reconnect', 'Reconnect', 'Replaces the stored credential and tests it immediately.');
+  // Server connections only: change the non-secret configuration (e.g. repositories, environments), keeping the stored credential.
+  const configure = view ? [change('configure', 'Edit configuration', 'Changes the non-secret configuration; the stored credential is kept. Tested immediately.')] : [];
   const disconnect = change('disconnect', 'Disconnect', 'Deletes the stored credential. Past investigations keep the source’s name; monitoring reports it as a gap.');
   switch (group) {
     case 'connected':
     case 'stale':
     case 'unavailable':
-      return [test, disconnect];
+      return [test, ...configure, disconnect];
     case 'error':
     case 'needs_reconnect':
-      return [reconnect, test, disconnect];
+      return [reconnect, ...configure, test, disconnect];
     case 'not_configured':
       return [change('connect', 'Connect', 'Connect with an API key; Jagr stores it encrypted and tests it at once.')];
     case 'imported':
@@ -203,7 +205,7 @@ export function sourceViews(connections: SourceConnection[], opts: SourceViewOpt
       group,
       state: conn.state,
       roles: BUILTIN_SOURCE_ROLES[id] ?? [],
-      detail: conn.detail,
+      detail: view?.checkDetail ?? conn.detail,
       health: health.health,
       healthDetail: health.detail,
       account: view?.account,

@@ -5,8 +5,10 @@ import { defaultWorld, t } from './integrations/world';
 import { ProviderUnavailableError } from './integrations/types';
 import { SourceRegistry } from './roles/registry';
 import type { ChangeRecord, RegisteredSource } from './roles/types';
-import type { MonitoringResult, SourceConnection, Watch, WatchInvestigation } from './types';
-import { runMonitoring } from './engine/monitor';
+import type { MonitoringResult, MorningBriefDoc, SourceConnection, Watch, WatchInvestigation } from './types';
+import { changeTarget, runMonitoring } from './engine/monitor';
+import { briefMessage } from './app/notifications';
+import { renderSlack } from './integrations/channels/slack';
 
 /**
  * GitHub change detection (connected change source): a failed deployment to a watched environment is a
@@ -46,6 +48,11 @@ function release(n: number, hhmm: string, tag: string): ChangeRecord {
     ref: { provider: 'github', kind: 'release', id },
     provenance: { source: 'github', provider: 'github', connectionId: 'conn-github', mode: 'connected', externalId: id, url: `https://github.com/acme/web/releases/tag/${tag}`, observedAt: at, fetchedAt: at },
   };
+}
+
+/** A deployment as the connector now reports it: a structured target, and the ref (branch or tag) as its version. */
+function refDeploy(n: number, hhmm: string, status: ChangeRecord['status'], sha: string, ref: string, env = 'Production'): ChangeRecord {
+  return { ...deploy(n, hhmm, status, sha, env), version: ref, target: `acme/web:${env.toLowerCase()}` };
 }
 
 const githubConnection: SourceConnection = { provider: 'github', state: 'connected', detail: 'GitHub · 1 repository · Production', updatedAt: world.start };
@@ -161,6 +168,28 @@ describe('GitHub change detection', () => {
     const runs = r.log.filter((l) => l.type === 'watch_run');
     expect(runs.length).toBeGreaterThan(0);
     expect(runs.every((l) => /GitHub unavailable/.test(l.outcome))).toBe(true);
+    // Nothing was read, so nothing is counted, and no signal check is claimed.
+    expect(runs.some((l) => /deployments?, \d+ releases?|within normal range/.test(l.outcome))).toBe(false);
+  });
+
+  it('a quiet changes-only run says what GitHub returned — never "All signals within normal range"', async () => {
+    const quiet = (await runGithub([])).log.filter((l) => l.type === 'watch_run');
+    expect(quiet.length).toBeGreaterThan(0);
+    expect(quiet.every((l) => l.outcome === 'GitHub: 0 deployments, 0 releases in the last 6h')).toBe(true);
+    const busy = (await runGithub([deploy(1, '20:00', 'success', 'abc1234'), release(7, '20:30', 'v2.4.0')])).log.filter((l) => l.type === 'watch_run' && l.scheduledAt >= t('21:00') && l.scheduledAt <= t('23:00'));
+    expect(busy.length).toBeGreaterThan(0);
+    expect(busy.every((l) => l.outcome === 'GitHub: 1 deployment, 1 release in the last 6h')).toBe(true);
+    const failed = (await runGithub([deploy(1, '20:00', 'failed', 'abc1234')])).log.find((l) => l.type === 'watch_run' && l.scheduledAt >= t('20:30'))!;
+    expect(failed.outcome).toBe('GitHub: 1 deployment, 0 releases in the last 6h · 1 failed deployment reported');
+  });
+
+  it('a watch with metric signals keeps its existing wording', async () => {
+    const sample = createRegistry(world, defaultConnections()).registry;
+    const checkout = watchFromTemplate('w-checkout', 'checkout_health', {}, world.start);
+    const r = await runMonitoring({ world, registry: sample, watches: [checkout], connections: defaultConnections(), brief: defaultBriefSchedule() });
+    const runs = r.log.filter((l) => l.type === 'watch_run');
+    expect(runs.some((l) => /^All signals within normal range/.test(l.outcome))).toBe(true);
+    expect(runs.some((l) => /in the last 6h/.test(l.outcome))).toBe(false);
   });
 
   it('existing correlation can raise attention: another watched source degrading soon after the failure → HIGH (timing, not cause)', async () => {
@@ -172,5 +201,73 @@ describe('GitHub change detection', () => {
     expect(inv.attention).toBe('HIGH');
     expect(inv.attentionReason).toMatch(/began \d+ min after this failed deployment — a timing correlation in another watched source, not a cause/);
     expect(inv.unknowns.some((u) => /timing alone does not establish it/.test(u))).toBe(true);
+  });
+});
+
+describe('deployment target (structured, not parsed from the title)', () => {
+  it('the target is the record’s own; records without one fall back to the title without the version', () => {
+    expect(changeTarget(refDeploy(1, '20:00', 'failed', 'abc1234', 'main'))).toBe('acme/web:production');
+    expect(changeTarget(deploy(1, '20:00', 'failed', 'abc1234'))).toBe('Deploy  to Production (acme/web)');
+  });
+
+  it('branch ref: a later successful deployment on the same repository and environment closes the failure', async () => {
+    const r = await runGithub([refDeploy(1, '20:00', 'failed', 'abc1234', 'main'), refDeploy(2, '22:00', 'success', 'def5678', 'main')]);
+    const [inv] = deploymentInvs(r);
+    expect(inv.deployment!.target).toBe('acme/web:production');
+    expect(inv.status).toBe('RESOLVED');
+    expect(inv.attention).toBe('MEDIUM');
+    expect(inv.trace.some((s) => s.title === 'Deployment failure resolved by a subsequent successful deployment' && /not evidence that product impact is resolved/.test(s.detail ?? ''))).toBe(true);
+  });
+
+  it('tag ref: same result; a success on another environment still does not close it', async () => {
+    const closed = await runGithub([refDeploy(1, '20:00', 'failed', 'abc1234', 'v2.4.0'), refDeploy(2, '22:00', 'success', 'def5678', 'v2.4.1')]);
+    expect(deploymentInvs(closed)[0].status).toBe('RESOLVED');
+    const open = await runGithub([refDeploy(1, '20:00', 'failed', 'abc1234', 'main'), refDeploy(2, '22:00', 'success', 'def5678', 'main', 'Preview')]);
+    expect(deploymentInvs(open)[0].status).toBe('CONFIRMED');
+  });
+
+  it('a failure recorded before targets existed still closes on a success that now carries one', async () => {
+    const r = await runGithub([deploy(1, '20:00', 'failed', 'abc1234'), { ...deploy(2, '22:00', 'success', 'def5678'), target: 'acme/web:production' }]);
+    expect(deploymentInvs(r)[0].status).toBe('RESOLVED');
+  });
+});
+
+describe('Slack brief: shipped changes as context', () => {
+  async function slackBrief(records: ChangeRecord[], over: Partial<MorningBriefDoc> = {}) {
+    const r = await runGithub(records);
+    const brief = { ...r.briefs.at(-1)!, ...over };
+    const message = briefMessage('ws-1', brief, { investigations: r.investigations, watches: [githubWatch()] });
+    const blocks = renderSlack(message).blocks;
+    const sectionText = blocks.filter((b) => b.type === 'section').map((b) => (b.text as { text: string }).text);
+    return { brief, message, sectionText, shippedSection: sectionText.find((t) => t.startsWith('*Shipped')) };
+  }
+
+  it('successful deployments and releases appear under "Shipped (context, not findings)" — with no cause claimed', async () => {
+    const { shippedSection, message } = await slackBrief([deploy(1, '20:00', 'success', 'abc1234'), release(7, '21:00', 'v2.4.0')]);
+    expect(shippedSection).toBe('*Shipped (context, not findings)*\n• 20:00 UTC · Deploy abc1234 to Production (acme/web) — deployment succeeded\n• 21:00 UTC · v2.4.0 (acme/web) — release published');
+    expect(shippedSection).not.toMatch(/caus|fix|recover|because/i);
+    // Context, not items: no finding is listed for them.
+    expect(message.observed).toEqual([]);
+  });
+
+  it('a change source that could not be read is named — never "nothing shipped"', async () => {
+    // As the server's brief job records it when GitHub cannot be read (server/githubChanges.test.ts).
+    const { shippedSection } = await slackBrief([], { shipped: undefined, shippedUnavailable: ['github'] });
+    expect(shippedSection).toBe('*Shipped (context, not findings)*\nCould not read changes from GitHub — this list may be incomplete.');
+  });
+
+  it('nothing shipped and nothing unreadable: no shipped section at all', async () => {
+    const { message, shippedSection } = await slackBrief([]);
+    expect(message.shipped).toBeUndefined();
+    expect(shippedSection).toBeUndefined();
+  });
+
+  it('a failed deployment stays a finding (Items), separate from the shipped context', async () => {
+    const { message, shippedSection, sectionText } = await slackBrief([deploy(1, '20:00', 'failed', 'abc1234'), deploy(2, '20:30', 'success', 'def5678', 'Preview')]);
+    const items = sectionText.find((t) => t.startsWith('*Items*'))!;
+    expect(items).toMatch(/MEDIUM · Deploy abc1234 to Production \(acme\/web\) failed\. .*The cause is not in the deployment record/);
+    expect(shippedSection).toBe('*Shipped (context, not findings)*\n• 20:30 UTC · Deploy def5678 to Preview (acme/web) — deployment succeeded');
+    expect(shippedSection).not.toMatch(/abc1234|failed/);
+    expect(message.unknown.some((u) => /Deploy abc1234/.test(u))).toBe(true);
   });
 });

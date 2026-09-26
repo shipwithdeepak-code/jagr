@@ -24,13 +24,13 @@ export function RunProgressPanel({ progress, planner }: { progress: RunProgress;
   const inv = progress.investigation;
   const activeLabel = STAGES.find((s) => s.id === progress.active)?.label;
   return (
-    <section aria-label="Monitoring run in progress" className="animate-reveal relative overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+    <section aria-label="Monitoring run in progress" className="animate-reveal relative overflow-hidden rounded-lg border border-line bg-surface shadow-card">
       <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden" aria-hidden>
         <div className="progress-sweep h-full w-2/5 bg-accent/70" />
       </div>
       <div className="px-4 pt-3.5 pb-3 sm:px-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <div role="status" aria-live="polite" className="min-w-0 flex-1 text-[13.5px] font-medium text-ink">
+          <div role="status" aria-live="polite" className="min-w-0 flex-1 text-[14px] font-medium text-ink">
             {inv ? (
               <>
                 {inv.firstPass ? 'Investigating' : 'Re-checking'} <span className="text-ink">{inv.title}</span>
@@ -79,7 +79,7 @@ export function RunProgressPanel({ progress, planner }: { progress: RunProgress;
             })}
           </ol>
         )}
-        {progress.latest && <div className="mt-2.5 truncate border-t border-line pt-2 font-mono text-[11.5px] text-ink-3">{progress.latest}</div>}
+        {progress.latest && <div className="mt-2.5 truncate border-t border-line pt-2 font-mono text-[12px] text-ink-3">{progress.latest}</div>}
       </div>
     </section>
   );

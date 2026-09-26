@@ -106,6 +106,11 @@ export interface ChangeRecord extends RoleRecord {
   rollout?: string;
   status?: 'success' | 'failed' | 'rolled_back' | 'in_progress';
   notes?: string;
+  /**
+   * The change stream this record belongs to, when the source knows it (e.g. a repository and
+   * environment): successive deployments of the same target share it, whatever their version.
+   */
+  target?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

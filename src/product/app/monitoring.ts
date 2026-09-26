@@ -19,6 +19,7 @@ import { composeBrief } from '../engine/brief.js';
 import type { InvestigationPlanner } from '../agent/planner.js';
 import { alertMessage, briefMessage, deliver, type ChannelFactory } from './notifications.js';
 import { uniqueId } from './ids.js';
+import { runAuditDetail, WATCH_RUN_ACTION } from './workspaceSnapshot.js';
 import { LeaseLost } from '../ports/jobs.js';
 
 /**
@@ -111,7 +112,7 @@ export interface RunSummary {
   notifications: number;
 }
 
-async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResult, kind: string, at: string): Promise<RunSummary> {
+async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResult, kind: string, at: string, watchId?: string): Promise<RunSummary> {
   return deps.tx.run(async (repos) => {
     for (const inv of r.investigations) await repos.investigations.save(ws.id, inv);
     let notifications = 0;
@@ -121,7 +122,9 @@ async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResu
       void _from;
       if (await repos.notifications.add(ws.id, { id: e.id, channel: 'in_app', dedupeKey: e.id, deliveredAt: e.sentAt, status: 'delivered', investigationId: e.investigationId, email })) notifications++;
     }
-    const audit: AuditEntry = { id: uniqueId(`audit-${kind}`, at), workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, detail: `${r.investigations.length} investigation(s), ${r.emails.length} notification(s) · ${r.log.map((l) => l.outcome).join(' | ').slice(0, 400)}` };
+    // A watch run is recorded against its watch (target) with that watch's own outcome: the run history servers show.
+    const outcome = (watchId ? r.log.filter((l) => l.type === 'watch_run' && l.watchId === watchId) : r.log).map((l) => l.outcome).join(' | ').slice(0, 400);
+    const audit: AuditEntry = { id: uniqueId(`audit-${kind}`, at), workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, ...(watchId ? { target: watchId } : {}), detail: runAuditDetail(r.investigations.length, r.emails.length, outcome) };
     await repos.audit.append(audit);
     return { workspaceId: ws.id, investigations: r.investigations.length, touched: [...new Set(r.log.flatMap((l) => l.investigationIds))], notifications };
   });
@@ -168,7 +171,7 @@ async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'wor
   const { registry, world, connections } = await sourcesForRun(deps, ws, at);
   const scheduled: ScheduledJob = { id: `run:${watchId}:${at}`, type: 'watch_run', at, watchId };
   const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
-  const summary = await persistRun(deps, ws, r, 'monitor.watch', at);
+  const summary = await persistRun(deps, ws, r, WATCH_RUN_ACTION, at, watchId);
   // Alerts the engine decided to send go to the workspace's outbound channels (after the run is saved).
   const alerts = r.emails.filter((e) => e.kind === 'alert').map((e) => alertMessage(ws.id, e, r.investigations.find((i) => i.id === e.investigationId), deps.appBaseUrl));
   if (ws.mode === 'connected') await deliver(deps, ws, alerts);

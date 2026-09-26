@@ -1,5 +1,6 @@
 import {
   Activity,
+  ArrowLeft,
   BookOpen,
   FlaskConical,
   Binoculars,
@@ -22,12 +23,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { OvernightRun } from '@/domain/types';
 import { useWorkspace } from '@/state/workspace';
 import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decisions';
 import { useProduct } from '@/state/productContext';
-import { ENVIRONMENT, EnvironmentContext, environmentForPath, taskEnvironment, initialEnvironment, readStoredEnvironment, storeEnvironment, type AppEnvironment } from '@/state/environment';
+import { EnvironmentContext, environmentForPath, inEnvironment, taskEnvironment, type AppEnvironment } from '@/state/environment';
 import { Logo, LogoMark } from './Logo';
 import { RunProgressPanel } from './runProgress';
 import { RunPlayer } from './RunPlayer';
@@ -63,52 +64,12 @@ function useTheme() {
   return { theme, toggle };
 }
 
-/**
- * Which planner investigates the simulated data. Small and unobtrusive: the simulation controls the
- * data, this controls the planner. Deterministic is the default; the LLM option names the real
- * provider/model from the server (never a key) or explains why it is unavailable.
- */
-/** WORKSPACE | DEMO NIGHT — the only environment choice in the app. */
-function EnvironmentSwitch({ value, onChange }: { value: AppEnvironment; onChange: (v: AppEnvironment) => void }) {
-  return (
-    <div role="radiogroup" aria-label="Environment" className="inline-flex rounded-lg border border-line bg-subtle p-0.5">
-      {(['workspace', 'demo'] as const).map((e) => (
-        <button
-          key={e}
-          role="radio"
-          aria-checked={value === e}
-          aria-label={ENVIRONMENT[e].label}
-          onClick={() => onChange(e)}
-          title={ENVIRONMENT[e].description}
-          className={cx('h-6 rounded-md px-2 text-[12px] font-medium whitespace-nowrap', value === e ? 'bg-surface text-ink shadow-card' : 'text-ink-3 hover:text-ink')}
-        >
-          {ENVIRONMENT[e].label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PlannerSwitch() {
-  const { plannerChoice, llmOption, setPlannerChoice, running } = useProduct();
-  const value = plannerChoice === 'llm' && llmOption.available ? 'llm' : 'deterministic';
-  return (
-    <label className="hidden items-center gap-1.5 text-[12px] text-ink-3 md:flex" title={llmOption.available ? 'Choose which planner investigates this workspace’s data. The policy validator, tools and approvals are the same either way.' : llmOption.reason}>
-      Planner
-      <select
-        aria-label="Planner"
-        value={value}
-        disabled={running}
-        onChange={(e) => setPlannerChoice(e.target.value as 'deterministic' | 'llm')}
-        className="h-7 max-w-[210px] rounded-md border border-line bg-surface px-1.5 text-[12px] text-ink outline-none focus:border-accent"
-      >
-        <option value="deterministic">Deterministic</option>
-        <option value="llm" disabled={!llmOption.available}>
-          {llmOption.available ? llmOption.label : `Configured LLM — ${llmOption.reason ?? 'No LLM provider configured.'}`}
-        </option>
-      </select>
-    </label>
-  );
+/** Where the open workspace lives and what data it reads — the answer to "what am I looking at?". */
+function workspaceIdentity(product: ReturnType<typeof useProduct>): { name: string; detail: string } {
+  if (product.location === 'server') {
+    return { name: product.server?.name ?? 'Server workspace', detail: product.mode === 'connected' ? 'Server · live sources' : product.mode === 'imported' ? 'Server · imported data' : 'Server workspace' };
+  }
+  return { name: 'Local workspace', detail: product.mode === 'imported' ? 'This browser · your imported data' : product.mode === 'sample' ? 'This browser · sample data' : 'This browser · not set up' };
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -140,44 +101,42 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(false);
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
-  // WORKSPACE vs DEMO NIGHT — derived from where the user is; shared pages keep the previous one.
-  const [env, setEnv] = useState<AppEnvironment>(() => initialEnvironment(location.pathname, readStoredEnvironment()));
-  useEffect(() => setEnv((prev) => environmentForPath(location.pathname, prev)), [location.pathname]);
-  useEffect(() => storeEnvironment(env), [env]);
+  // WORKSPACE vs DEMO NIGHT — derived from the URL alone (state/environment.ts). Nothing a page opened
+  // earlier can switch the product into Demo night.
+  const env: AppEnvironment = environmentForPath(location.pathname, location.search);
   // Badges count the current environment only — never a silent mix of Workspace and Demo night.
   const pendingApprovals =
     env === 'workspace'
       ? pendingAgentApprovals(product.state.result?.investigations ?? [], product.state.decisions).length
       : state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested').length;
   const openTasks = state.tasks.filter((t) => t.status !== 'done' && taskEnvironment(t) === env).length;
-  const switchEnv = (next: AppEnvironment) => {
-    setEnv(next);
-    navigate(ENVIRONMENT[next].home);
-  };
-
   const watchFindings = product.state.result?.investigations.filter((i) => i.status !== 'DISMISSED' && i.attention !== 'LOW').length ?? 0;
 
+  // OPERATE — the daily loop. REVIEW — what waits for a person. ADVANCED — inspect and evaluate.
   const primary: NavItem[] = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
+    { to: '/watches', label: 'Watches', icon: Binoculars },
     { to: '/investigations', label: 'Investigations', icon: Telescope, count: watchFindings || undefined, alert: watchFindings > 0 },
-    { to: '/watches', label: 'Watches', icon: Binoculars, count: product.state.watches.filter((w) => w.status === 'active').length || undefined },
-    { to: '/sources', label: 'Sources', icon: Plug },
-  ];
-  const workspaceNav: NavItem[] = [
     { to: '/briefs', label: 'Briefs', icon: Newspaper },
-    { to: '/tasks', label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
-    { to: '/approvals', label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
-  ];
-  const system: NavItem[] = [
-    { to: '/trace', label: 'Agent Trace', icon: ScrollText },
-    { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+    { to: '/sources', label: 'Sources', icon: Plug },
     { to: '/settings', label: 'Settings', icon: Settings },
-    { to: '/about', label: 'About this build', icon: BookOpen },
+  ];
+  const review: NavItem[] = [
+    { to: inEnvironment('/approvals', env), label: 'Approvals', icon: ShieldCheck, count: pendingApprovals || undefined, alert: pendingApprovals > 0 },
+    { to: inEnvironment('/tasks', env), label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
+  ];
+  const advanced: NavItem[] = [
+    { to: inEnvironment('/trace', env), label: 'Agent trace', icon: ScrollText },
+    { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+    { to: '/about', label: 'About Jagr', icon: BookOpen },
   ];
   const demo: NavItem[] = [
-    { to: '/demo', label: 'Demo night', icon: Moon },
+    { to: '/demo', label: 'Replay', icon: Radar },
     { to: '/signals', label: 'Signals', icon: Activity },
+    { to: '/integrations', label: 'Integrations', icon: Plug },
+    { to: '/demo/settings', label: 'Demo settings', icon: Settings },
   ];
+  const identity = workspaceIdentity(product);
 
   const startRun = useCallback(async () => {
     setRunning(true);
@@ -215,32 +174,37 @@ export function AppShell({ children }: { children: ReactNode }) {
     <nav className={cx('flex h-full flex-col gap-0.5 overflow-y-auto py-4', compact ? 'px-2' : 'px-3')} aria-label="Main">
       <div className={cx('mb-4 flex items-center', compact ? 'justify-center' : 'justify-between px-2')}>
         {compact ? <LogoMark /> : <Logo />}
-        <button className="interactive rounded-md p-1 text-ink-3 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+        <button className="interactive rounded p-1 text-ink-3 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
           <X size={16} />
         </button>
       </div>
       {!compact && (
-        <div className="mb-3 px-2.5 text-[11.5px] leading-snug text-ink-3">
-          <span className="font-medium text-ink-2">Tempo · Product</span>
-          <br />
-          {env === 'demo' ? 'Demo night · simulated replay' : product.location === 'server' ? `${product.server?.name ?? 'Server workspace'} · ${product.mode === 'connected' ? 'live sources' : product.mode === 'imported' ? 'imported data' : 'sample'}` : product.mode === 'imported' ? 'Your data · browser-local' : product.mode === 'sample' ? 'Sample data · simulated' : 'Not set up yet'}
-        </div>
+        <Link to="/settings#workspace" className="interactive mb-3 block rounded-lg border border-line px-2.5 py-2 hover:bg-subtle" title="Switch or manage workspaces">
+          <span className="block truncate text-[13px] font-medium text-ink">{identity.name}</span>
+          <span className="block truncate text-[12px] text-ink-3">{identity.detail}</span>
+        </Link>
       )}
       {primary.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} />
+        <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
-      <NavGroup label="Workspace" compact={compact} />
-      {workspaceNav.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} />
+      <NavGroup label="Review" compact={compact} />
+      {review.map((it) => (
+        <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
-      <NavGroup label="System" compact={compact} />
-      {system.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} />
+      <NavGroup label="Advanced" compact={compact} />
+      {advanced.map((it) => (
+        <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
-      <NavGroup label="Demo night" compact={compact} />
-      {demo.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} />
-      ))}
+      <div className={cx('mt-4 border-t border-line pt-3', compact && 'mx-1')}>
+        <NavRow item={{ to: '/demo', label: 'Demo night', icon: Moon }} compact={compact} env={env} demoEntry />
+        {env === 'demo' && !compact && (
+          <div className="mt-0.5 ml-3 border-l border-line pl-2">
+            {demo.map((it) => (
+              <NavRow key={it.to} item={it} compact={false} env={env} />
+            ))}
+          </div>
+        )}
+      </div>
       <div className="mt-auto flex flex-col gap-0.5 pt-4">
         <button onClick={toggle} title={compact ? (theme === 'dark' ? 'Light theme' : 'Dark theme') : undefined} className={cx('interactive flex h-8 items-center gap-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-subtle hover:text-ink', compact ? 'justify-center' : 'px-2.5')} aria-label="Toggle theme">
           {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
@@ -271,8 +235,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className={cx('transition-[padding] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'lg:pl-16' : 'lg:pl-60')}>
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur sm:px-6">
-          <button className="-ml-1 rounded-md p-1.5 text-ink-2 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-canvas px-4 sm:px-6">
+          <button className="-ml-1 rounded p-1.5 text-ink-2 hover:bg-subtle lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu size={18} />
           </button>
           <div className="lg:hidden">
@@ -283,36 +247,35 @@ export function AppShell({ children }: { children: ReactNode }) {
               <LogoMark />
             </span>
           </div>
-          <div className="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-3">
-            <EnvironmentSwitch value={env} onChange={switchEnv} />
-            <span
-              className={cx('hidden items-center gap-1.5 rounded-md border border-dashed px-2 py-0.5 sm:inline-flex', env === 'demo' ? 'border-high/50 text-high' : 'border-line-strong')}
-              title={ENVIRONMENT[env].description}
-            >
-              <span className={cx('size-1.5 rounded-full', env === 'demo' ? 'bg-high' : 'bg-info')} />
-              {env === 'workspace' && product.location === 'server' ? (product.mode === 'connected' ? 'Live sources · server' : 'Server workspace') : env === 'workspace' && !product.mode ? 'Not set up yet' : env === 'workspace' && product.mode === 'imported' ? 'Your data · browser-local' : ENVIRONMENT[env].badge}
-            </span>
-            {env === 'workspace' && product.mode && (
-              <span className="hidden truncate xl:inline">
-                {(() => {
-                  const n = product.state.watches.filter((w) => w.status === 'active').length;
-                  return `${n} ${n === 1 ? 'watch' : 'watches'}`;
-                })()}
+          {env === 'demo' ? (
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="inline-flex min-w-0 items-center gap-2 text-[13px] text-ink-2">
+                <Moon size={14} aria-hidden className="shrink-0 text-ink-3" />
+                <span className="truncate">
+                  <span className="font-medium text-ink">Demo night</span>
+                  <span className="max-md:hidden"> · a scripted replay, separate from your workspace</span>
+                </span>
               </span>
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {env === 'workspace' ? (
-              <>
-                <PlannerSwitch />
-                {/* Overview owns its own Run button; before a workspace exists there is nothing to run. */}
-                {location.pathname !== '/' && product.mode && (
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <Link to="/" className="interactive inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[13px] text-ink-2 hover:bg-subtle hover:text-ink">
+                  <ArrowLeft size={14} aria-hidden /> <span className="max-sm:sr-only">Back to workspace</span>
+                </Link>
+                <Button icon={Radar} onClick={requestDemo}>
+                  <span className="max-sm:sr-only">Reset &amp; replay</span>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="min-w-0 truncate text-[13px] text-ink-3 lg:hidden">{identity.name}</span>
+              {/* Overview owns its own Run button; before a workspace exists there is nothing to run. */}
+              {location.pathname !== '/' && product.mode && (
                 <Button
-                  variant="primary"
+                  className="ml-auto"
                   icon={RefreshCw}
-                  aria-label="Run monitoring"
+                  aria-label="Run monitoring now"
                   disabled={product.running || !product.mode || (product.mode === 'imported' && !product.state.watches.length)}
-                  title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : undefined}
+                  title={product.mode === 'imported' && !product.state.watches.length ? 'Create a watch first' : 'Check every active watch now'}
                   onClick={async () => {
                     let r;
                     try {
@@ -329,23 +292,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                         ? r
                           ? { tone: 'success', title: 'Monitoring complete', body: `Watches ran over your imported data (${r.investigations.length} investigation${r.investigations.length === 1 ? '' : 's'}).` }
                           : { tone: 'warning', title: 'Nothing to investigate yet', body: 'Import metrics, issues or feedback first.' }
-                        : { tone: 'success', title: 'Monitoring complete', body: 'Watches ran 18:00 → 08:00 on simulated sources. Brief generated at 08:00.' },
+                        : { tone: 'success', title: 'Monitoring complete', body: 'Watches ran 18:00 → 08:00 on the sample data. Brief composed at 08:00.' },
                     );
                   }}
                 >
-                  <span className="max-sm:sr-only">{product.running ? 'Running…' : 'Run monitoring'}</span>
+                  <span className="max-sm:sr-only">{product.running ? 'Running…' : 'Run now'}</span>
                 </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <span className="hidden text-[12px] text-ink-3 lg:inline">Scripted replay — the planner switch applies to the workspace</span>
-                <Button variant="primary" icon={Radar} onClick={requestDemo}>
-                  Reset &amp; replay
-                </Button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </header>
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
           {env === 'workspace' && product.server?.error && (
@@ -387,27 +342,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function NavRow({ item, compact = false }: { item: NavItem; compact?: boolean }) {
+function NavRow({ item, compact = false, env, demoEntry = false }: { item: NavItem; compact?: boolean; env: AppEnvironment; demoEntry?: boolean }) {
   const Icon = item.icon;
+  const location = useLocation();
+  const [path, query = ''] = item.to.split('?');
+  // Active = same page AND same environment: Approvals in the Workspace is not Approvals in Demo night.
+  const samePage = path === '/' ? location.pathname === '/' : location.pathname === path || location.pathname.startsWith(`${path}/`);
+  // The Demo night entry is marked active only when collapsed; expanded, its own sub-items are.
+  const active = demoEntry ? env === 'demo' && compact : samePage && environmentForPath(path, query) === env;
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
       title={compact ? item.label : undefined}
       aria-label={compact ? (item.count !== undefined ? `${item.label} (${item.count})` : item.label) : undefined}
-      className={({ isActive }) =>
-        cx(
-          'interactive relative flex h-8 items-center gap-2.5 rounded-lg text-[13px] transition-colors',
-          compact ? 'justify-center' : 'px-2.5',
-          isActive ? 'bg-surface font-medium text-ink shadow-card ring-1 ring-line' : 'text-ink-2 hover:bg-subtle hover:text-ink',
-        )
-      }
+      aria-current={active ? 'page' : undefined}
+      className={cx(
+        'interactive relative flex h-8 items-center gap-2.5 rounded-lg text-[13px] transition-colors',
+        compact ? 'justify-center' : 'px-2.5',
+        active ? 'bg-subtle font-medium text-ink' : 'text-ink-2 hover:bg-subtle hover:text-ink',
+      )}
     >
-      <Icon size={15} className="shrink-0" />
+      {active && !compact && <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-ink" />}
+      <Icon size={15} className="shrink-0" aria-hidden />
       {!compact && <span className="truncate">{item.label}</span>}
       {compact && item.count !== undefined && <span aria-hidden className={cx('absolute top-1 right-1.5 size-1.5 rounded-full', item.alert ? 'bg-high' : 'bg-ink-3')} />}
       {!compact && item.count !== undefined && (
-        <span className={cx('tabular ml-auto rounded-md px-1.5 text-[11px] font-medium', item.alert ? 'bg-high-soft text-high' : 'text-ink-3')}>{item.count}</span>
+        <span className={cx('tabular ml-auto rounded px-1.5 text-[12px] font-medium', item.alert ? 'bg-high-soft text-high' : 'text-ink-3')}>{item.count}</span>
       )}
     </NavLink>
   );
@@ -415,5 +376,5 @@ function NavRow({ item, compact = false }: { item: NavItem; compact?: boolean })
 
 function NavGroup({ label, compact = false }: { label: string; compact?: boolean }) {
   if (compact) return <div className="mx-2 mt-3 mb-2 border-t border-line" role="separator" aria-label={label} />;
-  return <div className="mt-4 mb-1 px-2.5 text-[10.5px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{label}</div>;
+  return <div className="mt-4 mb-1 px-2.5 text-[12px] font-medium text-ink-3">{label}</div>;
 }

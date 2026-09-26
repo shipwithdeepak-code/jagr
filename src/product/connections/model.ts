@@ -45,6 +45,8 @@ export interface ConnectionView {
   status: ConnectionState;
   health: ConnectionHealth;
   healthDetail: string;
+  /** What the last connection test reported (e.g. repositories read, deployments found per environment). Never a credential. */
+  checkDetail?: string;
   needsReconnect: boolean;
   freshAsOf?: ISO;
   capabilities: string[];
@@ -112,6 +114,7 @@ export function connectionView(raw: Connection, now: ISO): ConnectionView {
     status: c.state,
     health,
     healthDetail: detail,
+    checkDetail: c.state === 'connected' && c.detail && !findSensitive(c.detail).length ? c.detail : undefined,
     needsReconnect: c.state === 'needs_reconnect',
     freshAsOf: c.freshAsOf,
     capabilities: c.capabilities ?? c.roles,

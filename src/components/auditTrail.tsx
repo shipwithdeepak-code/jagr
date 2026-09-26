@@ -34,16 +34,16 @@ export function AuditTrail({ steps, stateOf }: { steps: TraceStep[]; stateOf: (p
         const isCall = e.stage === 'investigating' && e.sources.length > 0;
         return (
           <li key={e.id} className="grid grid-cols-[44px_minmax(0,1fr)] gap-x-3 px-4 py-2.5 sm:grid-cols-[44px_128px_minmax(0,1fr)] sm:px-5">
-            <span className={cx('num pt-px font-mono text-[11.5px] text-ink-3', !showTime && 'invisible')}>{time}</span>
-            <span className={cx('flex items-center gap-1.5 pt-px text-[10.5px] font-semibold tracking-[0.08em] uppercase max-sm:col-start-2', tone.label)}>
+            <span className={cx('num pt-px font-mono text-[12px] text-ink-3', !showTime && 'invisible')}>{time}</span>
+            <span className={cx('flex items-center gap-1.5 pt-px text-[12px] font-semibold tracking-[0.08em] uppercase max-sm:col-start-2', tone.label)}>
               <span aria-hidden className={cx('size-1.5 shrink-0 rounded-full', tone.dot)} />
               {AUDIT_STAGE_LABEL[e.stage]}
             </span>
             <div className="min-w-0 max-sm:col-start-2 max-sm:mt-0.5">
               <p className={cx('text-[13px] leading-snug break-words', tone.text)}>{e.action}</p>
-              {e.result && <p className="mt-0.5 text-[12.5px] leading-snug break-words text-ink-2">{e.result}</p>}
+              {e.result && <p className="mt-0.5 text-[13px] leading-snug break-words text-ink-2">{e.result}</p>}
               {e.sources.length > 0 && (
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3">
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-3">
                   {e.sources.map((s) => (
                     <ProviderName key={s} provider={s} short />
                   ))}
@@ -52,7 +52,7 @@ export function AuditTrail({ steps, stateOf }: { steps: TraceStep[]; stateOf: (p
               )}
               {e.detail.length > 0 && (
                 <details className="group mt-1">
-                  <summary className="interactive inline-flex cursor-pointer list-none items-center gap-1 rounded text-[11.5px] font-medium text-ink-3 hover:text-ink [&::-webkit-details-marker]:hidden">
+                  <summary className="interactive inline-flex cursor-pointer list-none items-center gap-1 rounded text-[12px] font-medium text-ink-3 hover:text-ink [&::-webkit-details-marker]:hidden">
                     <ChevronRight size={11} aria-hidden className="transition-transform group-open:rotate-90 motion-reduce:transition-none" />
                     Details
                   </summary>

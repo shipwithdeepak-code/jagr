@@ -49,6 +49,10 @@ export function renderSlack(m: NotificationMessage): { text: string; blocks: Blo
   if (m.observed.length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${m.kind === 'morning_brief' ? 'Items' : 'Observed'}*\n${bullets(m.observed)}`.slice(0, 2900) } });
   if (m.inferred.length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Inferred — not proven*\n${bullets(m.inferred)}`.slice(0, 2900) } });
   if (m.unknown.length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Unknown*\n${bullets(m.unknown)}`.slice(0, 2900) } });
+  if (m.shipped && (m.shipped.lines.length || m.shipped.unavailable.length)) {
+    const unavailable = m.shipped.unavailable.length ? `Could not read changes from ${m.shipped.unavailable.join(', ')} — this list may be incomplete.` : '';
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: [`*Shipped (context, not findings)*`, m.shipped.lines.length ? bullets(m.shipped.lines) : '', unavailable].filter(Boolean).join('\n').slice(0, 2900) } });
+  }
   if (m.approval)
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Approval needed (${m.approval.risk} risk):* ${text(m.approval.what, 500)}\nDecide in Jagr — nothing is approved from Slack.` } });
   const links = m.links.filter((l) => /^https:\/\//.test(l.href)).slice(0, 5);

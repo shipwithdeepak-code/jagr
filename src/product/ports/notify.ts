@@ -19,6 +19,8 @@ export interface NotificationMessage {
   unknown: string[];
   links: { label: string; href: string }[];
   approval?: { actionId: string; risk: ActionRisk; what: string };
+  /** Morning briefs: changes shipped in the window — context only, never findings. */
+  shipped?: { lines: string[]; unavailable: string[] };
 }
 
 export interface DeliveryTarget {

@@ -8,6 +8,9 @@ dist
 .env.*
 !.env.example
 
+# Local Vercel project link (vercel link / vercel deploy)
+.vercel
+
 # Local Claude / dev-server configuration
 .claude/
 .jagr/

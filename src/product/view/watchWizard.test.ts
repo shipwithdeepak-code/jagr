@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '../catalog';
 import { defaultConnections } from '../integrations/adapters';
 import type { ProviderId, SourceConnection } from '../types';
-import { canLeaveSourceStep, connectionsPending, initialWizardSources, wizardSourceRows } from './watchWizard';
+import { canLeaveSourceStep, connectionsPending, initialWizardSources, sourceStepBlocker, templateAvailability, wizardSourceRows } from './watchWizard';
 
 /**
  * Regression: production Create Watch crashed on "Where should I look?" with
@@ -103,5 +103,22 @@ describe('Create Watch — sources step', () => {
     const src = readFileSync('src/pages/Watches.tsx', 'utf8');
     expect(src).not.toMatch(/connections\.find\([^)]*\)!/);
     expect(src).toMatch(/wizardSourceRows\(/);
+  });
+});
+
+describe('Create Watch never dead-ends', () => {
+  const gh = WATCH_TEMPLATES.find((t) => t.id === 'github_changes')!.sources;
+
+  it('a template whose sources are all missing is reported on the first step, naming what it needs', () => {
+    expect(templateAvailability(gh, defaultConnections(), browser)).toEqual({ status: 'unavailable', missing: ['github'] });
+    expect(templateAvailability(gh, githubOnly, server)).toEqual({ status: 'ready' });
+    expect(templateAvailability(gh, [], server)).toEqual({ status: 'loading' });
+  });
+
+  it('the sources step always says why it cannot be left', () => {
+    expect(sourceStepBlocker(['github'], wizardSourceRows(gh, githubOnly, server))).toBeUndefined();
+    expect(sourceStepBlocker([], wizardSourceRows(gh, [], server))).toMatch(/loading|load/i);
+    expect(sourceStepBlocker([], wizardSourceRows(gh, defaultConnections(), browser))).toMatch(/None of this watch’s sources is connected/);
+    expect(sourceStepBlocker([], wizardSourceRows(checkout, defaultConnections(), browser))).toBe('Choose at least one source.');
   });
 });

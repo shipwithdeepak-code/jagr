@@ -11,8 +11,12 @@ import { createContext, useContext } from 'react';
  *               Klarna payment-provider regression), with its own reset & replay. Separate data,
  *               separate engine, no planner selection.
  *
- * The environment is derived from where the user is; pages shared by both (Tasks, Approvals,
- * Agent Trace, Evaluations, Settings, About) keep whichever environment the user came from.
+ * The environment is derived from the URL alone, never from what the user looked at before:
+ *   - Demo night routes (/demo, /demo/*, /signals, /integrations, legacy /investigations/:id) are Demo night.
+ *   - Pages shared by both (Tasks, Approvals, Agent Trace) are the Workspace unless the link says
+ *     otherwise with `?env=demo` — Demo night's own links carry it, so a reload keeps it.
+ *   - Everything else — Settings, About, Evaluations included — is the Workspace.
+ * Opening Settings can never switch the product into Demo night.
  */
 
 export type AppEnvironment = 'workspace' | 'demo';
@@ -24,22 +28,29 @@ function isDemoPath(path: string): boolean {
   return /^\/investigations\/(?!w\/)[^/]+/.test(path);
 }
 
-/** Routes that only exist for the workspace. */
-function isWorkspacePath(path: string): boolean {
-  return path === '/' || ['/investigations', '/watches', '/sources', '/briefs'].some((p) => path === p || path.startsWith(`${p}/`));
+/** Pages that list records from both environments, scoped to one of them. */
+export const SHARED_PATHS = ['/tasks', '/approvals', '/trace'] as const;
+const isSharedPath = (path: string) => SHARED_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+
+/** The environment a URL belongs to. `search` is the query string (with or without "?"). */
+export function environmentForPath(path: string, search = ''): AppEnvironment {
+  if (isDemoPath(path)) return 'demo';
+  if (isSharedPath(path) && new URLSearchParams(search).get('env') === 'demo') return 'demo';
+  return 'workspace';
 }
 
-export function environmentForPath(path: string, previous: AppEnvironment = 'workspace'): AppEnvironment {
-  if (isDemoPath(path)) return 'demo';
-  if (isWorkspacePath(path)) return 'workspace';
-  return previous;
+/** A link to a shared page that keeps Demo night's context (Workspace links need nothing). */
+export function inEnvironment(path: string, env: AppEnvironment): string {
+  if (env !== 'demo') return path;
+  const [base, hash] = path.split('#');
+  return `${base}${base.includes('?') ? '&' : '?'}env=demo${hash !== undefined ? `#${hash}` : ''}`;
 }
 
 export const ENVIRONMENT: Record<AppEnvironment, { label: string; badge: string; description: string; home: string }> = {
   workspace: {
     label: 'Workspace',
     badge: 'Simulated sources',
-    description: 'Your watches, monitoring runs and investigations. Sources are simulated in this build — clearly labelled, never presented as live.',
+    description: 'Your watches, sources, monitoring runs and investigations. Simulated or imported data is always labelled as such — never presented as live.',
     home: '/',
   },
   demo: {
@@ -49,40 +60,6 @@ export const ENVIRONMENT: Record<AppEnvironment, { label: string; badge: string;
     home: '/demo',
   },
 };
-
-// ─────────────────────────────────────────────────────────────
-// Persistence — same approach as the theme preference: one localStorage key, validated on read.
-// ─────────────────────────────────────────────────────────────
-
-export const ENVIRONMENT_STORAGE_KEY = 'jagr:environment';
-
-/** Anything other than a known environment (missing, corrupted, old) → Workspace. */
-export function parseStoredEnvironment(value: string | null | undefined): AppEnvironment {
-  return value === 'demo' || value === 'workspace' ? value : 'workspace';
-}
-
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
-
-export function readStoredEnvironment(storage: StorageLike | undefined = typeof localStorage === 'undefined' ? undefined : localStorage): AppEnvironment {
-  try {
-    return parseStoredEnvironment(storage?.getItem(ENVIRONMENT_STORAGE_KEY));
-  } catch {
-    return 'workspace';
-  }
-}
-
-export function storeEnvironment(env: AppEnvironment, storage: StorageLike | undefined = typeof localStorage === 'undefined' ? undefined : localStorage) {
-  try {
-    storage?.setItem(ENVIRONMENT_STORAGE_KEY, env);
-  } catch {
-    /* storage unavailable — the environment still works for this session */
-  }
-}
-
-/** On load: a route that belongs to one environment decides; shared routes restore the stored one. */
-export function initialEnvironment(path: string, stored: AppEnvironment): AppEnvironment {
-  return environmentForPath(path, stored);
-}
 
 // ─────────────────────────────────────────────────────────────
 // Record identity — every task / approval belongs to exactly one environment.

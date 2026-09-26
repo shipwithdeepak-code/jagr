@@ -51,7 +51,7 @@ export function EvaluationsPage() {
         Demo night scenarios
       </SectionTitle>
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line shadow-card sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line shadow-card sm:grid-cols-3 lg:grid-cols-6">
         {[
           { label: 'Scenarios', value: t?.scenarios ?? EVALUATION_SCENARIOS.length },
           { label: 'Passed', value: t?.passed ?? '—', tone: 'ok' as const },
@@ -80,7 +80,7 @@ export function EvaluationsPage() {
               <div className="flex flex-wrap items-start gap-3 px-4 py-4 sm:px-5">
                 <span className="tabular font-mono text-[12px] text-ink-3">Scenario {def.number}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold tracking-tight">{def.name}</div>
+                  <div className="text-[16px] font-semibold tracking-tight">{def.name}</div>
                   <div className="text-[13px] text-ink-2">{def.description}</div>
                 </div>
                 {running ? (
@@ -94,7 +94,7 @@ export function EvaluationsPage() {
                 )}
               </div>
               <div className="border-t border-line bg-canvas/50 px-4 py-3 sm:px-5">
-                <div className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Expected</div>
+                <div className="mb-2 text-[12px] font-medium text-ink-3">Expected</div>
                 <ul className="grid gap-1.5">
                   {(r?.checks ?? def.expected.map((label) => ({ label, passed: undefined as boolean | undefined, detail: '' }))).map((c) => (
                     <li key={c.label} className="grid grid-cols-[18px_minmax(160px,240px)_1fr] items-start gap-2 text-[13px] max-sm:grid-cols-[18px_1fr]">
@@ -105,7 +105,7 @@ export function EvaluationsPage() {
                   ))}
                 </ul>
                 {r && (r.falseAlerts > 0 || r.approvalViolations > 0) && (
-                  <div className="mt-2 text-[12.5px] text-crit">
+                  <div className="mt-2 text-[13px] text-crit">
                     {r.falseAlerts} false alerts · {r.approvalViolations} approval violations
                   </div>
                 )}

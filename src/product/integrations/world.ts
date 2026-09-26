@@ -174,7 +174,3 @@ export function defaultWorld(): World {
     reviews: CHECKOUT_REVIEWS,
   });
 }
-
-export function providerOfMetric(id: string): ProviderId {
-  return METRIC_DEFS.find((m) => m.id === id)?.provider ?? 'ga4';
-}

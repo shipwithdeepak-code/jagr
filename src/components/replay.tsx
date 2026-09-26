@@ -55,14 +55,14 @@ export function InvestigationReplay({ inv, decisions, onRunAgain, running }: { i
 
   const info = passes.find((p) => p.pass === pass);
   if (!total) {
-    return <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-ink-2">This investigation has no recorded steps to replay.</p>;
+    return <p className="rounded-lg border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-ink-2">This investigation has no recorded steps to replay.</p>;
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+    <div className="overflow-hidden rounded-lg border border-line bg-surface">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h3 className="text-[13.5px] font-semibold">Replay original investigation</h3>
+          <h3 className="text-[14px] font-semibold">Replay original investigation</h3>
           <p className="mt-0.5 text-[12px] text-ink-3">
             {pass === original ? 'The pass that reached this verdict' : `Pass ${pass}`} · {info && `${fmtTime(info.at)} UTC`} · from the stored trace — nothing is re-run.
           </p>
@@ -70,7 +70,7 @@ export function InvestigationReplay({ inv, decisions, onRunAgain, running }: { i
         {passes.length > 1 && (
           <label className="flex items-center gap-2 text-[12px] text-ink-3">
             Pass
-            <select value={pass} onChange={(e) => setPass(Number(e.target.value))} className="h-7 rounded-md border border-line bg-surface px-1.5 text-[12px] text-ink">
+            <select value={pass} onChange={(e) => setPass(Number(e.target.value))} className="h-7 rounded border border-line bg-surface px-1.5 text-[12px] text-ink">
               {passes.map((p) => (
                 <option key={p.pass} value={p.pass}>
                   {p.pass} · {fmtTime(p.at)}
@@ -114,13 +114,13 @@ export function InvestigationReplay({ inv, decisions, onRunAgain, running }: { i
           const latest = i === shown - 1;
           return (
             <li key={f.id} className={cx('animate-reveal grid grid-cols-[44px_minmax(0,1fr)] gap-x-3 rounded-lg px-2 py-2 sm:grid-cols-[44px_150px_minmax(0,1fr)]', latest && 'bg-subtle/70')}>
-              <span className="num pt-px font-mono text-[11.5px] text-ink-3">{fmtTime(f.at)}</span>
-              <span className={cx('pt-px text-[10.5px] font-semibold tracking-[0.08em] uppercase max-sm:col-start-2', f.warn ? 'text-high' : STAGE_TONE[f.stage] ?? 'text-ink-3')}>{REPLAY_STAGE_LABEL[f.stage]}</span>
+              <span className="num pt-px font-mono text-[12px] text-ink-3">{fmtTime(f.at)}</span>
+              <span className={cx('pt-px text-[12px] font-semibold tracking-[0.08em] uppercase max-sm:col-start-2', f.warn ? 'text-high' : STAGE_TONE[f.stage] ?? 'text-ink-3')}>{REPLAY_STAGE_LABEL[f.stage]}</span>
               <div className="min-w-0 max-sm:col-start-2">
                 <p className={cx('text-[13px] leading-snug break-words', f.warn ? 'text-high' : 'text-ink', (f.stage === 'attention' || f.stage === 'action') && 'font-medium')}>{f.title}</p>
                 {f.detail && <p className="mt-0.5 text-[12px] leading-snug break-words text-ink-2">{f.detail}</p>}
                 {f.sources.length > 0 && (
-                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11.5px] text-ink-3">
+                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-[12px] text-ink-3">
                     {f.sources.map((s) => (
                       <ProviderName key={s} provider={s} short />
                     ))}

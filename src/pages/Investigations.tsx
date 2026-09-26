@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, ChevronRight, CircleAlert, GitPullRequest, RefreshCw, Telescope } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { Action, Evidence, Investigation, OvernightRun, TimelineEntry } from '@/domain/types';
 import { SOURCE_LABELS } from '@/domain/defaults';
 import { ACTION_CATALOG, GATE_LABELS } from '@/agents/policy';
@@ -30,37 +30,34 @@ import {
   Tabs,
 } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
-import { RunButtons } from './Overview';
 import { useProduct } from '@/state/productContext';
-import { confidenceBand } from '@/product/engine/monitor';
-import { AttentionBadge, InvestigationStateBadge } from '@/components/product';
+import { AttentionBadge } from '@/components/product';
+import { findingState, investigationTitle, investigationWatches } from '@/product/view/investigation';
 import { AuditTable } from './Trace';
 import { EmptyPanel, LoadingState } from '@/components/primitives';
 
 export function InvestigationsPage() {
-  const { state } = useWorkspace();
   const product = useProduct();
-  const [tab, setTab] = useState<'open' | 'dismissed' | 'all'>('open');
-  const run = state.run;
-  const watchInvs = (product.state.result?.investigations ?? []).filter((i) => (tab === 'open' ? i.status !== 'DISMISSED' : tab === 'dismissed' ? i.status === 'DISMISSED' : true));
-  const list = run?.investigations.filter((i) => (tab === 'open' ? i.status !== 'dismissed' : tab === 'dismissed' ? i.status === 'dismissed' : true)) ?? [];
-  const watchName = (id: string) => product.state.watches.find((w) => w.id === id)?.name ?? id;
+  const [params, setParams] = useSearchParams();
+  const tab = (['open', 'closed', 'all'].includes(params.get('status') ?? '') ? params.get('status') : 'open') as 'open' | 'closed' | 'all';
+  const setTab = (v: 'open' | 'closed' | 'all') => setParams(v === 'open' ? {} : { status: v });
+  const isClosed = (i: { status: string }) => i.status === 'DISMISSED' || i.status === 'RESOLVED';
+  const watchInvs = (product.state.result?.investigations ?? []).filter((i) => (tab === 'open' ? !isClosed(i) : tab === 'closed' ? isClosed(i) : true));
+  const where = product.location === 'server' ? (product.mode === 'connected' ? 'on your connected sources' : 'on this workspace’s data') : product.mode === 'imported' ? 'on the data you imported into this browser' : 'on the sample data (simulated)';
   return (
     <>
       <PageHeader
         title="Investigations"
-        description="One investigation per real problem — signals from every source are correlated into it instead of arriving as separate alerts."
-        actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'dismissed', label: 'Dismissed' }, { value: 'all', label: 'All' }]} />}
+        description={`One investigation per real problem, from your watches ${where}. Signals from every source are correlated into it instead of arriving as separate alerts.`}
+        actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }, { value: 'all', label: 'All' }]} />}
       />
 
-      <SectionTitle hint={product.mode === 'imported' ? 'From the watches you configured, on the data you imported into this browser.' : 'From the watches you configured, on simulated Jira, GA4, App Store and Google Play data.'}>From your watches</SectionTitle>
-      <Card padded={false} className="mb-10 overflow-hidden">
-        <div className="hidden grid-cols-[96px_1fr_130px_150px_100px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
+      <Card padded={false} className="overflow-hidden">
+        <div className="hidden grid-cols-[96px_minmax(0,1fr)_200px_110px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[12px] font-medium text-ink-3 md:grid">
           <span>Attention</span>
           <span>Finding</span>
           <span>Status</span>
-          <span>Watch</span>
-          <span>Opened</span>
+          <span>Detected</span>
           <span />
         </div>
         {watchInvs.length === 0 && (
@@ -87,40 +84,51 @@ export function InvestigationsPage() {
             ) : (
               <EmptyPanel
                 icon={Telescope}
-                title={tab === 'dismissed' ? 'Nothing dismissed' : 'Nothing needs investigating'}
-                why={tab === 'dismissed' ? 'Changes that did not persist are dismissed automatically and listed here.' : 'Your watches ran and found no meaningful changes. Quiet watches are reported in the morning brief.'}
+                title={tab === 'closed' ? 'Nothing closed yet' : 'Nothing needs investigating'}
+                why={tab === 'closed' ? 'Investigations close when the signal returns to normal, or are dismissed when a change does not persist.' : 'Your watches ran and found no meaningful change. Quiet watches are reported in the morning brief.'}
               />
             )}
           </div>
         )}
-        {watchInvs.map((inv) => (
-          <Link key={inv.id} to={inv.jagrPath} className="grid grid-cols-1 gap-2 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-subtle md:grid-cols-[96px_1fr_130px_150px_100px_24px] md:items-center md:gap-4">
-            <span>
-              <AttentionBadge level={inv.attention} />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[13.5px] font-medium">{inv.title}</span>
-              <span className="block truncate text-[12.5px] text-ink-2">{inv.summary}</span>
-            </span>
-            <span className="flex items-center gap-2">
-              <InvestigationStateBadge state={inv.status} />
-              {inv.status !== 'DISMISSED' && <span className="text-[12px] text-ink-3" title="Investigation confidence that the problem is real — not that any explanation is the cause">{confidenceBand(inv.confidence)} confidence</span>}
-            </span>
-            <span className="truncate text-[12.5px] text-ink-2">{inv.watchIds.map(watchName).join(' + ')}</span>
-            <span className="tabular text-[12.5px] text-ink-3">{fmtTime(inv.startedAt)}</span>
-            <ChevronRight size={14} className="hidden text-ink-3 md:block" />
-          </Link>
-        ))}
+        {watchInvs.map((inv) => {
+          const status = findingState(inv);
+          return (
+            <Link key={inv.id} to={inv.jagrPath} className="grid grid-cols-1 gap-2 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-subtle md:grid-cols-[96px_minmax(0,1fr)_200px_110px_24px] md:items-center md:gap-4">
+              <span>
+                <AttentionBadge level={inv.attention} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[14px] font-medium">{investigationTitle(inv)}</span>
+                <span className="block text-[13px] text-ink-2">{investigationWatches(inv, product.state.watches)}</span>
+              </span>
+              <span className="text-[13px]">
+                <span className="block text-ink">{status.signal}</span>
+                {!status.closed && <span className="block text-ink-2" title="How sure Jagr is that the signal is real — not that any explanation is the cause">{status.cause} · confidence {status.confidence.toLowerCase()}</span>}
+              </span>
+              <span className="num text-[13px] text-ink-2">{fmtTime(inv.statusHistory.find((h) => h.state === 'DETECTED')?.at ?? inv.startedAt)} UTC</span>
+              <ChevronRight size={14} aria-hidden className="hidden text-ink-3 md:block" />
+            </Link>
+          );
+        })}
       </Card>
+    </>
+  );
+}
 
-      <SectionTitle hint="The scripted Klarna regression night from the original demo.">Demo night replay</SectionTitle>
-      {!run ? (
-        <EmptyState icon={Telescope} title="Demo night not run" action={<div className="flex gap-2"><RunButtons /></div>}>
-          Run the demo night to see its investigations, evidence graph and approvals.
-        </EmptyState>
-      ) : (
+/** Demo night's own investigations — shown on the Demo night page, never mixed into the workspace list. */
+export function DemoInvestigations() {
+  const { state } = useWorkspace();
+  const [tab, setTab] = useState<'open' | 'dismissed' | 'all'>('open');
+  const run = state.run;
+  const list = run?.investigations.filter((i) => (tab === 'open' ? i.status !== 'dismissed' : tab === 'dismissed' ? i.status === 'dismissed' : true)) ?? [];
+  if (!run) return null;
+  return (
+    <>
+      <SectionTitle hint="Every investigation from the scripted night." action={<Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open' }, { value: 'dismissed', label: 'Dismissed' }, { value: 'all', label: 'All' }]} />}>
+        Investigations
+      </SectionTitle>
       <Card padded={false} className="overflow-hidden">
-        <div className="hidden grid-cols-[110px_1fr_160px_150px_110px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[11.5px] font-medium text-ink-3 md:grid">
+        <div className="hidden grid-cols-[110px_1fr_160px_150px_110px_24px] gap-4 border-b border-line bg-subtle/60 px-5 py-2 text-[12px] font-medium text-ink-3 md:grid">
           <span>Severity</span>
           <span>Finding</span>
           <span>Confidence</span>
@@ -137,18 +145,17 @@ export function InvestigationsPage() {
                 <SeverityBadge severity={inv.severity} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium">{inv.title}</span>
-                <span className="block truncate text-[12.5px] text-ink-2">{leading ? leading.statement : inv.conclusion}</span>
+                <span className="block text-[14px] font-medium">{inv.title}</span>
+                <span className="block truncate text-[13px] text-ink-2">{leading ? leading.statement : inv.conclusion}</span>
               </span>
               <span>{inv.status === 'dismissed' ? <InvestigationStatusBadge status={inv.status} /> : <ConfidenceMeter value={inv.confidence} band={inv.confidenceBand} size="sm" />}</span>
-              <span className="text-[12.5px] text-ink-2">{leading ? teamName(ownerFor(leading.area, state.settings)) : '—'}</span>
-              <span className="tabular text-[12.5px] text-ink-3">{fmtTime(inv.startedAt)}</span>
+              <span className="text-[13px] text-ink-2">{leading ? teamName(ownerFor(leading.area, state.settings)) : '—'}</span>
+              <span className="tabular text-[13px] text-ink-3">{fmtTime(inv.startedAt)}</span>
               <ChevronRight size={14} className="hidden text-ink-3 md:block" />
             </Link>
           );
         })}
       </Card>
-      )}
     </>
   );
 }
@@ -183,7 +190,7 @@ export function InvestigationDetailPage() {
 
   if (!run || !inv) {
     return (
-      <EmptyState icon={CircleAlert} title="Investigation not found" action={<Link to="/investigations" className="text-[13px] font-medium text-accent">Back to investigations</Link>}>
+      <EmptyState icon={CircleAlert} title="Investigation not found" action={<Link to="/demo" className="text-[13px] font-medium text-accent">Back to Demo night</Link>}>
         It may belong to an earlier run. Investigations are replaced when a new overnight run completes.
       </EmptyState>
     );
@@ -204,8 +211,8 @@ export function InvestigationDetailPage() {
 
   return (
     <div className="animate-fade-up">
-      <Link to="/investigations" className="mb-4 inline-flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink">
-        <ArrowLeft size={13} /> Investigations
+      <Link to="/demo" className="mb-4 inline-flex items-center gap-1 text-[13px] text-ink-3 hover:text-ink">
+        <ArrowLeft size={13} /> Demo night
       </Link>
       <PageHeader
         eyebrow={
@@ -220,7 +227,7 @@ export function InvestigationDetailPage() {
         actions={
           inv.status !== 'dismissed' && (
             <div className="rounded-lg border border-line bg-surface px-3 py-2 shadow-card">
-              <div className="text-[11px] text-ink-3">Confidence</div>
+              <div className="text-[12px] text-ink-3">Confidence</div>
               <ConfidenceMeter value={inv.confidence} band={inv.confidenceBand} />
             </div>
           )
@@ -229,10 +236,10 @@ export function InvestigationDetailPage() {
 
       <div className="grid gap-8 xl:grid-cols-[172px_1fr]">
         <nav className="hidden xl:block" aria-label="Sections">
-          <ol className="sticky top-20 space-y-0.5 text-[12.5px]">
+          <ol className="sticky top-20 space-y-0.5 text-[13px]">
             {SECTIONS.map(([sid, label], i) => (
               <li key={sid}>
-                <a href={`#${sid}`} onClick={(e) => { e.preventDefault(); document.getElementById(sid)?.scrollIntoView({ behavior: 'smooth' }); }} className="flex gap-2 rounded-md px-2 py-1 text-ink-2 hover:bg-subtle hover:text-ink">
+                <a href={`#${sid}`} onClick={(e) => { e.preventDefault(); document.getElementById(sid)?.scrollIntoView({ behavior: 'smooth' }); }} className="flex gap-2 rounded px-2 py-1 text-ink-2 hover:bg-subtle hover:text-ink">
                   <span className="tabular w-4 text-ink-3">{i + 1}</span>
                   {label}
                 </a>
@@ -246,7 +253,7 @@ export function InvestigationDetailPage() {
           <section>
             <SectionTitle id="problem">1 · Problem</SectionTitle>
             <Card>
-              <p className="text-[14.5px] leading-relaxed">{inv.problem}</p>
+              <p className="text-[14px] leading-relaxed">{inv.problem}</p>
               <KeyValue
                 className="mt-4"
                 items={[
@@ -292,13 +299,13 @@ export function InvestigationDetailPage() {
             <Card>
               <EvidenceGraph inv={inv} onSelect={setSelected} selectedId={selected?.id} />
             </Card>
-            <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+            <div className="mt-3 overflow-hidden rounded-lg border border-line bg-surface shadow-card">
               {inv.evidence.map((e) => (
                 <button key={e.id} onClick={() => setSelected(e)} className="flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-subtle">
                   <StanceDot stance={e.stance} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium">{e.title}</span>
-                    <span className="block text-[12.5px] text-ink-2">{e.detail}</span>
+                    <span className="block text-[13px] text-ink-2">{e.detail}</span>
                   </span>
                   <SourceChip source={e.source} className="shrink-0" />
                 </button>
@@ -314,11 +321,11 @@ export function InvestigationDetailPage() {
             ) : (
               <div className="space-y-2">
                 {inv.hypotheses.map((h) => (
-                  <details key={h.id} className="group rounded-xl border border-line bg-surface shadow-card" open={h.id === inv.leadingHypothesisId}>
+                  <details key={h.id} className="group rounded-lg border border-line bg-surface shadow-card" open={h.id === inv.leadingHypothesisId}>
                     <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
                       <ChevronRight size={14} className="shrink-0 text-ink-3 transition-transform group-open:rotate-90" />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[13.5px] font-medium">{h.statement}</span>
+                        <span className="block text-[14px] font-medium">{h.statement}</span>
                         <span className="text-[12px] text-ink-3">
                           {h.id === inv.leadingHypothesisId ? 'Leading' : h.status === 'ruled_out' ? 'Ruled out' : 'Alternative'} · {h.weights.filter((w) => w.weight > 0).length} for, {h.weights.filter((w) => w.weight < 0).length} against · proposed by {h.proposedBy}
                         </span>
@@ -336,7 +343,7 @@ export function InvestigationDetailPage() {
                         {[...h.weights].sort((a, b) => b.weight - a.weight).map((w) => {
                           const e = inv.evidence.find((x) => x.id === w.evidenceId);
                           return (
-                            <li key={w.evidenceId} className="grid grid-cols-[52px_1fr] gap-3 text-[12.5px]">
+                            <li key={w.evidenceId} className="grid grid-cols-[52px_1fr] gap-3 text-[13px]">
                               <span className={cx('tabular font-mono font-medium', w.weight > 0 ? 'text-ok' : 'text-crit')}>{w.weight > 0 ? '+' : ''}{w.weight.toFixed(2)}</span>
                               <span>
                                 <button className="font-medium hover:underline" onClick={() => e && setSelected(e)}>{e?.title}</button>
@@ -370,7 +377,7 @@ export function InvestigationDetailPage() {
                   <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
                     <Badge tone="accent">{r.version}</Badge>
                     <span className="text-[13px]">Deployed {fmtTime(r.deployedAt)}</span>
-                    <span className="text-[12.5px] text-ink-3">{r.services.join(', ')}</span>
+                    <span className="text-[13px] text-ink-3">{r.services.join(', ')}</span>
                     <SourceChip source="github" className="ml-auto" />
                   </div>
                   <ul>
@@ -379,7 +386,7 @@ export function InvestigationDetailPage() {
                         <GitPullRequest size={14} className={cx('mt-0.5 shrink-0', p.relevant ? 'text-crit' : 'text-ink-3')} />
                         <span className="min-w-0 flex-1">
                           <span className="text-[13px] font-medium">#{p.number} {p.title}</span>
-                          <span className="block truncate font-mono text-[11.5px] text-ink-3">{p.files.join('  ')}</span>
+                          <span className="block truncate font-mono text-[12px] text-ink-3">{p.files.join('  ')}</span>
                         </span>
                         <span className="shrink-0 text-right text-[12px] text-ink-3">
                           merged {fmtTime(p.mergedAt)}
@@ -419,7 +426,7 @@ export function InvestigationDetailPage() {
             <Card>
               <ol className="space-y-2.5">
                 {inv.reasoning.map((r, i) => (
-                  <li key={i} className="grid grid-cols-[20px_1fr] gap-2 text-[13.5px] leading-relaxed">
+                  <li key={i} className="grid grid-cols-[20px_1fr] gap-2 text-[14px] leading-relaxed">
                     <span className="tabular text-ink-3">{i + 1}.</span>
                     <span className={r.startsWith('Against:') ? 'text-crit' : ''}>{r}</span>
                   </li>
@@ -445,9 +452,9 @@ export function InvestigationDetailPage() {
             <SectionTitle id="tasks">11 · Created tasks</SectionTitle>
             <div className="space-y-3">
               {tasks.map((t) => (
-                <button key={t.id} onClick={() => setOpenTask(t.id)} className="flex w-full flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left shadow-card hover:border-line-strong">
+                <button key={t.id} onClick={() => setOpenTask(t.id)} className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-left shadow-card hover:border-line-strong">
                   <Mono className="text-ink-3">{t.id}</Mono>
-                  <span className="min-w-0 flex-1 text-[13.5px] font-medium">{t.title}</span>
+                  <span className="min-w-0 flex-1 text-[14px] font-medium">{t.title}</span>
                   <PriorityBadge p={t.priority} />
                   <TaskStatusBadge status={t.status} />
                   <CreatedByBadge by={t.createdBy} />
@@ -470,8 +477,8 @@ export function InvestigationDetailPage() {
             ) : (
               <Card padded={false} className="overflow-hidden">
                 {approvals.map((a) => (
-                  <Link key={a.id} to={`/approvals#${a.id}`} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 hover:bg-subtle">
-                    <span className="min-w-0 flex-1 text-[13.5px] font-medium">{a.title}</span>
+                  <Link key={a.id} to={`/approvals?env=demo#${a.id}`} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 hover:bg-subtle">
+                    <span className="min-w-0 flex-1 text-[14px] font-medium">{a.title}</span>
                     <RiskBadge risk={a.risk} />
                     <Badge>{GATE_LABELS[a.gatedBy]}</Badge>
                     <Badge tone={a.status === 'approved' ? 'ok' : a.status === 'rejected' ? 'neutral' : 'high'}>
@@ -517,7 +524,7 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
           <span className={cx('absolute top-1.5 -left-[20.5px] size-2 rounded-full ring-2 ring-surface', t.kind === 'release' || t.kind === 'pr' ? 'bg-accent' : t.kind === 'agent' ? 'bg-ink' : t.kind === 'metric' ? 'bg-crit' : t.kind === 'experiment' ? 'bg-high' : 'bg-ink-3')} />
           <span className="tabular mr-2 font-mono text-[12px] text-ink-3">{fmtTime(t.at)}</span>
           <span className={t.kind === 'agent' ? 'text-ink-2' : ''}>{t.label}</span>
-          <span className="ml-2 text-[11.5px] text-ink-3">{t.source === 'nightwatch' ? 'JAGR' : SOURCE_LABELS[t.source]}</span>
+          <span className="ml-2 text-[12px] text-ink-3">{t.source === 'nightwatch' ? 'Jagr' : SOURCE_LABELS[t.source]}</span>
         </li>
       ))}
     </ol>
@@ -526,7 +533,7 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
 
 function ConfidenceCard({ inv }: { inv: Investigation }) {
   if (inv.status === 'dismissed') {
-    return <Card><p className="text-[13px] text-ink-2">Not scored. The metric recovered before the persistence rule was met, so JAGR recorded a re-check instead of a finding.</p></Card>;
+    return <Card><p className="text-[13px] text-ink-2">Not scored. The metric recovered before the persistence rule was met, so Jagr recorded a re-check instead of a finding.</p></Card>;
   }
   const leading = inv.hypotheses.find((h) => h.id === inv.leadingHypothesisId) ?? inv.hypotheses[0];
   const alt = inv.hypotheses.filter((h) => h !== leading).reduce((a, h) => a + h.confidence, 0);
@@ -536,7 +543,7 @@ function ConfidenceCard({ inv }: { inv: Investigation }) {
   return (
     <Card>
       <div className="flex flex-wrap items-baseline gap-3">
-        <span className="tabular text-[32px] font-semibold tracking-tight">{inv.confidenceBand === 'insufficient' ? '—' : fmtConfidence(inv.confidence)}</span>
+        <span className="tabular text-[28px] font-semibold tracking-tight">{inv.confidenceBand === 'insufficient' ? '—' : fmtConfidence(inv.confidence)}</span>
         <span className="text-[14px] capitalize text-ink-2">{inv.confidenceBand === 'insufficient' ? 'Insufficient evidence' : `${inv.confidenceBand} confidence`}</span>
       </div>
       <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted">
@@ -588,11 +595,11 @@ function ActionRow({ a }: { a: Action }) {
     <div className="grid gap-2 border-b border-line px-4 py-3 last:border-b-0 md:grid-cols-[1fr_auto] md:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13.5px] font-medium">{a.title}</span>
+          <span className="text-[14px] font-medium">{a.title}</span>
           <RiskBadge risk={a.risk} />
           <Badge>Level {spec.level}{spec.gatedBy ? ` · ${GATE_LABELS[spec.gatedBy]}` : ''}</Badge>
         </div>
-        <div className="mt-0.5 text-[12.5px] text-ink-2">{a.description}</div>
+        <div className="mt-0.5 text-[13px] text-ink-2">{a.description}</div>
         <div className="mt-0.5 text-[12px] text-ink-3">
           Decision: {decisionLabel(a.decision)} — {a.decisionReason}
           {a.result ? ` · ${a.result}` : ''}
@@ -624,7 +631,7 @@ function EvidenceDrawer({ evidence, inv, run, onClose }: { evidence: Evidence | 
       ) : (
         <ul className="space-y-2">
           {weights.map(({ h, w }) => (
-            <li key={h.id} className="rounded-lg border border-line p-2.5 text-[12.5px]">
+            <li key={h.id} className="rounded-lg border border-line p-2.5 text-[13px]">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{h.statement}</span>
                 <span className={cx('tabular font-mono font-semibold', w.weight > 0 ? 'text-ok' : 'text-crit')}>{w.weight > 0 ? '+' : ''}{w.weight.toFixed(2)}</span>
