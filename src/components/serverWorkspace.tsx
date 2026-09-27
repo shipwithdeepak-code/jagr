@@ -12,6 +12,7 @@ import { Badge, Button, Card, Modal, SectionTitle, Toggle, cx } from '@/componen
 import { useToast } from '@/components/toast';
 import { SourceGroups, SourcesOverview } from '@/components/sources';
 import { useSignOut } from '@/components/signOut';
+import { ProviderLogo } from '@/components/product';
 
 /**
  * Server workspaces in the browser: where the workspace lives, sign-in, and connecting live sources.
@@ -179,9 +180,17 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
           <div className="grid gap-3 md:grid-cols-2">
             {channels.map((c) => (
               <Card key={c.id}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">{c.displayName}</div>
-                  <Badge tone={c.health === 'healthy' ? 'ok' : c.health === 'unverified' ? 'neutral' : 'high'}>{c.health.replace('_', ' ')}</Badge>
+                <div className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
+                    <ProviderLogo provider={c.provider} size={22} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium">{c.displayName}</div>
+                      <Badge tone={c.health === 'healthy' ? 'ok' : c.health === 'unverified' ? 'neutral' : 'high'}>{c.health.replace('_', ' ')}</Badge>
+                    </div>
+                    <p className="mt-0.5 text-[12px] font-medium text-ink-2">Alerts · Morning briefs</p>
+                  </div>
                 </div>
                 <p className="mt-1 text-[13px] text-ink-3">{c.account ? `${c.account} · ` : ''}{c.healthDetail}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -201,8 +210,15 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
           <div className="grid gap-3 md:grid-cols-3">
             {addable.map((t) => (
               <Card key={t.provider}>
-                <div className="font-medium">{t.name}</div>
-                <p className="mt-1 text-[13px] text-ink-3">{t.kind === 'channel' ? 'Outbound alerts and briefs' : `Provides ${t.roles.join(', ').replace('_', ' ')}`}</p>
+                <div className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
+                    <ProviderLogo provider={t.provider} size={22} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium">{t.name}</div>
+                    <p className="mt-0.5 text-[12px] font-medium text-ink-2">{t.kind === 'channel' ? 'Alerts · Morning briefs' : t.roles.map((role) => role.replace('_', ' ')).join(' · ')}</p>
+                  </div>
+                </div>
                 <Button className="mt-3" size="sm" disabled={!manage} onClick={() => void act(undefined, 'connect', t)}>
                   Connect
                 </Button>

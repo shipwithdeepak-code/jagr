@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { fmtDate, fmtTime } from '@/lib/time';
 import { fmtBehind, groupSources, ROLE_LABEL, SOURCE_GROUP_LABEL, type SourceActionId, type SourceGroup, type SourceView } from '@/product/view/sources';
-import { PROVIDER_ICON } from './product';
+import { ProviderLogo } from './product';
 import { StatusBadge } from './primitives';
 import { Button, cx } from './ui';
 
@@ -102,7 +102,6 @@ export function SourceGroups({ views, extra, onAction }: { views: SourceView[]; 
 }
 
 export function SourceCard({ view: v, extra, onAction }: { view: SourceView; extra?: ReactNode; onAction?: (source: SourceView, action: SourceActionId) => void }) {
-  const Icon = PROVIDER_ICON[v.id];
   const health = healthText(v);
   const reasonsId = useId();
   const enabled = (a: SourceView['actions'][number]) => a.available && !!onAction;
@@ -113,10 +112,21 @@ export function SourceCard({ view: v, extra, onAction }: { view: SourceView; ext
   return (
     <li className="grid min-w-0 gap-x-6 gap-y-3 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]" aria-label={`${v.name} — ${SOURCE_GROUP_LABEL[v.group]}`}>
       <div className="flex min-w-0 items-start gap-3">
-        <Icon size={16} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
+          <ProviderLogo provider={v.id} size={22} />
+        </span>
         <div className="min-w-0">
           <h3 className="text-[14px] font-semibold tracking-tight">{v.name}</h3>
-          <p className="text-[13px] text-ink-2">{v.roles.length ? `Provides ${v.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}` : 'Provides no evidence roles'}</p>
+          {v.roles.length ? (
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] font-medium text-ink-2" aria-label={`Provides ${v.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}>
+              {v.roles.map((role, index) => (
+                <span key={role} className="inline-flex items-center gap-1.5">
+                  {index > 0 && <span aria-hidden className="text-ink-3">·</span>}
+                  {ROLE_LABEL[role]}
+                </span>
+              ))}
+            </p>
+          ) : <p className="text-[13px] text-ink-2">Provides no evidence roles</p>}
           {v.account && <p className="mt-0.5 text-[13px] break-words text-ink">{v.account}</p>}
         </div>
       </div>
@@ -124,7 +134,10 @@ export function SourceCard({ view: v, extra, onAction }: { view: SourceView; ext
         {live && (
           <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 text-[13px]">
             <dt className="text-ink-3">Health</dt>
-            <dd className={cx('font-medium', health.tone)}>{health.text}</dd>
+            <dd className={cx('flex min-w-0 items-baseline gap-1.5 font-medium', health.tone)}>
+              <span aria-hidden className="inline-block size-1.5 shrink-0 rounded-full bg-current" />
+              <span>{health.text}</span>
+            </dd>
             {v.group === 'stale' && v.freshAsOf && (
               <>
                 <dt className="text-ink-3">Data up to</dt>
