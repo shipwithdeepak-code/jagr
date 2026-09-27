@@ -27,7 +27,7 @@ export function SourcesPage() {
       <>
         <PageHeader
           title="Sources"
-          description={`Live sources for ${server?.name ?? 'this workspace'}. Credentials are stored encrypted on the Jagr server and never sent to this browser. Every source reports its real health; a source that cannot be read is a gap in investigations, never “nothing found”.`}
+          description={`Jagr investigates only what your connected sources can show in ${server?.name ?? 'this workspace'}.`}
           actions={<WorkspaceDataBadge />}
         />
         <ServerSources onConnectionSaved={(connection) => { if (shouldReturnToOverviewAfterConnection(route.search, connection.health)) navigate('/'); }} />
