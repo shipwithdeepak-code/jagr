@@ -78,13 +78,15 @@ test('server workspace in the browser', { timeout: 180_000 }, async () => {
 
     // 2. Connect Jira from the Sources page.
     await page.goto(`${base}/sources`);
-    await page.getByText('Connect a source').waitFor();
+    await page.getByText('Connect an evidence source').waitFor();
     const jiraCard = page.locator('div', { has: page.getByText('Jira', { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Connect' }) }).last();
     await jiraCard.getByRole('button', { name: 'Connect' }).click();
-    await page.getByLabel('Configuration (non-secret)').fill(JSON.stringify({ site: 'https://acme.atlassian.net', project: 'SHOP' }));
+    await page.getByLabel('Jira Cloud site').fill('https://acme.atlassian.net');
+    await page.getByLabel('Project key').fill('SHOP');
     await page.getByLabel('Atlassian account email').fill('svc@acme.test');
     await page.getByLabel('API token').fill('ATATT-ui-test-token');
     await page.getByRole('button', { name: 'Connect and test' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByText('Last successful check').first().waitFor();
     const sourcesText = await page.locator('main').innerText();
     expect(sourcesText).not.toContain('ATATT-ui-test-token');

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Monitor, Server } from 'lucide-react';
+import { CheckCircle2, LogOut, Mail, Monitor, Server } from 'lucide-react';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
 import type { ConnectionView } from '@/product/connections/model';
-import { connectRequest, githubConfigFromFields, githubFieldsFromConfig, type GitHubFields } from '@/product/view/connectionForm';
+import { connectRequest, connectionConfigFromFields, connectionFieldsFromConfig, type ConnectionFields } from '@/product/view/connectionForm';
 import { sourceViews, type SourceActionId, type SourceView } from '@/product/view/sources';
 import { isSourceId, type SourceId } from '@/product/roles/types';
 import { useProduct } from '@/state/productContext';
@@ -140,7 +140,8 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
   const views = sourceViews(product.state.connections, { asOf: new Date().toISOString(), server: byId, canManage: manage });
   const channels = srv.connections.filter((c) => c.kind === 'channel');
   const present = new Set(srv.connections.map((c) => c.provider));
-  const addable = types.filter((t) => !present.has(t.provider));
+  const addableSources = types.filter((t) => t.kind === 'source' && !present.has(t.provider));
+  const slackType = types.find((t) => t.provider === 'slack');
 
   const act = async (view: ConnectionView | undefined, action: SourceActionId, type?: ConnectionTypeInfo) => {
     const t = type ?? types.find((x) => x.provider === view?.provider);
@@ -166,6 +167,7 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
 
   return (
     <>
+      <SectionTitle hint="What Jagr investigates. Findings are limited to the evidence these connected sources can provide.">Evidence sources</SectionTitle>
       {views.length > 0 && (
         <div className="mb-8 space-y-6">
           <SourcesOverview views={views as SourceView[]} />
@@ -174,9 +176,31 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
       )}
       {views.length === 0 && <p className="mb-6 text-[14px] text-ink-2">No sources are connected to this workspace yet. Connect one below — Jagr investigates only what its sources can show.</p>}
 
-      {channels.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle hint="Outbound only: Jagr sends alerts and briefs there. Nothing is read from, or approved in, a channel.">Notification channels</SectionTitle>
+      {addableSources.length > 0 && (
+        <section className="mb-8" aria-labelledby="evidence-sources">
+          <SectionTitle id="evidence-sources" hint={manage ? 'Jagr investigates only what connected evidence sources can show. Credentials are stored encrypted and never shown again.' : 'Only workspace owners and admins can connect evidence sources.'}>Connect an evidence source</SectionTitle>
+          <div className="grid gap-3 md:grid-cols-3">
+            {addableSources.map((t) => (
+              <Card key={t.provider}>
+                <div className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
+                    <ProviderLogo provider={t.provider} size={22} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium">{t.name}</div>
+                    <p className="mt-0.5 text-[12px] font-medium text-ink-2">{t.roles.map((role) => role.replace('_', ' ')).join(' · ')}</p>
+                  </div>
+                </div>
+                <Button className="mt-3" size="sm" disabled={!manage} onClick={() => void act(undefined, 'connect', t)}>Connect</Button>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mb-8" aria-labelledby="delivery-channels">
+          <SectionTitle id="delivery-channels" hint="Choose where Jagr should send alerts and morning briefs. Delivery channels are independent from the evidence Jagr investigates.">Delivery channels</SectionTitle>
+          <p className="mb-3 text-[13px] text-ink-2">You can choose more than one when additional channels are available.</p>
           <div className="grid gap-3 md:grid-cols-2">
             {channels.map((c) => (
               <Card key={c.id}>
@@ -187,7 +211,7 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-medium">{c.displayName}</div>
-                      <Badge tone={c.health === 'healthy' ? 'ok' : c.health === 'unverified' ? 'neutral' : 'high'}>{c.health.replace('_', ' ')}</Badge>
+                      <Badge tone={c.health === 'healthy' ? 'ok' : c.health === 'unverified' ? 'neutral' : 'high'} dot>{c.health === 'healthy' ? 'Connected' : c.health.replace('_', ' ')}</Badge>
                     </div>
                     <p className="mt-0.5 text-[12px] font-medium text-ink-2">Alerts · Morning briefs</p>
                   </div>
@@ -200,37 +224,71 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
                 </div>
               </Card>
             ))}
+            {!present.has('slack') && slackType && (
+              <DeliveryOption provider="slack" name="Slack" description="Jagr uses Slack to deliver alerts and morning briefs." status="Available" disabled={!manage} onConnect={() => void act(undefined, 'connect', slackType)} />
+            )}
+            <DeliveryOption provider="email" name="Email" description="Email delivery is not implemented in this deployment. Alerts remain available inside Jagr." status="Not available" />
+            <DeliveryOption provider="teams" name="Microsoft Teams" description="Teams delivery is not implemented yet." status="Coming soon" />
           </div>
         </section>
-      )}
 
-      {addable.length > 0 && (
-        <section>
-          <SectionTitle hint={manage ? 'API keys and tokens are stored encrypted on the server and never shown again. Provider sign-in (OAuth) isn’t built.' : 'Only workspace owners and admins can connect sources.'}>Connect a source</SectionTitle>
-          <div className="grid gap-3 md:grid-cols-3">
-            {addable.map((t) => (
-              <Card key={t.provider}>
-                <div className="flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
-                    <ProviderLogo provider={t.provider} size={22} />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-medium">{t.name}</div>
-                    <p className="mt-0.5 text-[12px] font-medium text-ink-2">{t.kind === 'channel' ? 'Alerts · Morning briefs' : t.roles.map((role) => role.replace('_', ' ')).join(' · ')}</p>
-                  </div>
-                </div>
-                <Button className="mt-3" size="sm" disabled={!manage} onClick={() => void act(undefined, 'connect', t)}>
-                  Connect
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
-      {form && <ConnectForm workspaceId={srv.workspaceId} {...form} onCancel={() => setForm(undefined)} onSuccess={async (connection) => { await srv.refresh(); setForm(undefined); onConnectionSaved?.(connection); }} />}
+      {form && <ConnectForm workspaceId={srv.workspaceId} {...form} onCancel={() => setForm(undefined)} onSuccess={async (connection) => { await srv.refresh(); onConnectionSaved?.(connection); }} />}
     </>
   );
 }
+
+export function DeliveryOption({ provider, name, description, status, disabled, onConnect }: { provider: string; name: string; description: string; status: string; disabled?: boolean; onConnect?: () => void }) {
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white text-[#181717] shadow-sm">
+          {provider === 'email' ? <Mail size={20} aria-hidden /> : provider === 'teams' ? <span className="text-[13px] font-semibold text-[#6264A7]" aria-hidden>MT</span> : <ProviderLogo provider={provider} size={22} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-medium">{name}</div>
+            <Badge tone={status === 'Available' ? 'neutral' : 'neutral'}>{status}</Badge>
+          </div>
+          <p className="mt-1 text-[13px] text-ink-3">{description}</p>
+          {onConnect && <Button className="mt-3" size="sm" disabled={disabled} onClick={onConnect}>Connect</Button>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const SETUP: Record<string, { purpose: string; access: string; needs: string[]; guide: string[] }> = {
+  amplitude: { purpose: 'Investigate product metrics and Amplitude annotations alongside other evidence.', access: 'Jagr uses the read-only Dashboard REST API. It cannot change your Amplitude data.', needs: ['Amplitude data region', 'Project API key and secret key', 'The product signals Jagr should monitor'], guide: ['Open your Amplitude project settings.', 'Find the project API key and secret key.', 'Paste both values below.'] },
+  github: { purpose: 'Investigate deployments and published releases for the repositories you choose.', access: 'Jagr reads repository metadata, deployments, and releases. It does not write code or change deployments.', needs: ['Repositories in owner/repository form', 'Deployment environment names', 'A fine-grained read-only personal access token'], guide: ['Create a fine-grained personal access token in GitHub.', 'Limit repository access to the repositories below.', 'Grant read access to metadata, deployments, and contents, then paste the token.'] },
+  jira: { purpose: 'Investigate Jira issues and released-version context for one Jira Cloud project.', access: 'Jagr reads project issues and versions. It does not create or edit Jira work.', needs: ['Jira Cloud site URL', 'Project key', 'Atlassian account email and API token'], guide: ['Create an API token from your Atlassian account security settings.', 'Use the account email that owns the token.', 'Paste the email and token below.'] },
+  intercom: { purpose: 'Investigate customer-started support conversations as feedback evidence.', access: 'Jagr reads conversations from the selected Intercom workspace. It does not send or edit messages.', needs: ['Intercom data region', 'An Intercom access token', 'Workspace ID only if you want evidence deep links'], guide: ['Create or choose an Intercom app with conversation read access.', 'Copy its access token.', 'Paste the token below.'] },
+  sentry: { purpose: 'Investigate errors, crash-free health, releases, and issue evidence from Sentry.', access: 'Jagr needs read-only access to inspect telemetry. It does not need permission to change your Sentry data.', needs: ['Sentry organization slug', 'Numeric project IDs', 'Environment name', 'An auth token with org:read, project:read, and event:read'], guide: ['Open Sentry settings and create an authentication token.', 'Give it org:read, project:read, and event:read permissions.', 'Copy the token and paste it below.'] },
+  slack: { purpose: 'Deliver Jagr alerts and morning briefs to one Slack channel.', access: 'Jagr only posts messages. It never reads Slack, and decisions still happen inside Jagr.', needs: ['Slack channel ID', 'A bot token with chat:write', 'The bot added to the destination channel'], guide: ['Create or choose a Slack app with the chat:write scope.', 'Install it to your workspace and add the bot to the channel.', 'Copy the bot token and paste it below.'] },
+};
+
+const FIELD_HELP: Record<string, { label: string; help?: string; kind?: 'textarea' | 'select' | 'number' | 'checkbox'; options?: { value: string; label: string }[] }> = {
+  repos: { label: 'Repositories', help: 'One per line, as owner/repository.', kind: 'textarea' },
+  environments: { label: 'Deployment environments', help: 'Use the exact names from GitHub, such as Production or Preview.', kind: 'textarea' },
+  releases: { label: 'Include published releases as context', kind: 'checkbox' },
+  site: { label: 'Jira Cloud site', help: 'For example, https://your-site.atlassian.net.' },
+  project: { label: 'Project key', help: 'The short key shown in Jira issue IDs, such as SHOP.' },
+  region: { label: 'Data region', kind: 'select' },
+  appId: { label: 'Workspace ID (optional)', help: 'Used only to link evidence back to your Intercom inbox.' },
+  channel: { label: 'Slack channel ID', help: 'Open the channel details and copy its ID, for example C0123456789.' },
+  organization: { label: 'Organization', help: 'Your Sentry organization slug from the workspace URL.' },
+  projects: { label: 'Projects', help: 'Enter 1–10 numeric Sentry project IDs, separated by commas.' },
+  environment: { label: 'Environment (optional)', help: 'For example, production.' },
+  issues: { label: 'Include Sentry issues as work-item evidence', kind: 'checkbox' },
+  appUrl: { label: 'Amplitude workspace URL', help: 'The URL you use to open this Amplitude workspace.' },
+  utcOffsetMinutes: { label: 'Project timezone offset (minutes from UTC)', help: 'Used to align Amplitude’s hourly buckets. UTC is 0.', kind: 'number' },
+  annotations: { label: 'Include Amplitude annotations as change evidence', kind: 'checkbox' },
+};
+
+const REGION_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  amplitude: [{ value: 'us', label: 'United States' }, { value: 'eu', label: 'European Union' }],
+  intercom: [{ value: 'us', label: 'United States' }, { value: 'eu', label: 'European Union' }, { value: 'au', label: 'Australia' }],
+  sentry: [{ value: 'us', label: 'United States' }, { value: 'de', label: 'Germany' }],
+};
 
 /** connect: configuration and credential · reconnect: a new credential only · configure: configuration only (the stored credential is kept). */
 type FormMode = 'connect' | 'reconnect' | 'configure';
@@ -239,30 +297,37 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
   const reconnect = mode === 'reconnect';
   const configure = mode === 'configure' && !!view;
   const toast = useToast();
-  const [config, setConfig] = useState(() => JSON.stringify(view?.config && Object.keys(view.config).length ? view.config : type.configExample, null, 2));
-  // Known connectors get real fields; others keep the JSON configuration.
-  const structured = type.provider === 'github';
-  const [gh, setGh] = useState<GitHubFields>(() => githubFieldsFromConfig(view?.config && Object.keys(view.config).length ? view.config : undefined));
+  const initialConfig = view?.config && Object.keys(view.config).length ? view.config : type.configExample;
+  const [fields, setFields] = useState<ConnectionFields>(() => {
+    const next = connectionFieldsFromConfig(type.provider, initialConfig);
+    if (!view) {
+      if (type.provider === 'github') next.repos = '';
+      if (type.provider === 'jira') { next.site = ''; next.project = ''; }
+      if (type.provider === 'sentry') { next.organization = ''; next.projects = ''; }
+      if (type.provider === 'slack') next.channel = '';
+    }
+    return next;
+  });
+  const [advanced, setAdvanced] = useState(() => JSON.stringify(initialConfig, null, 2));
   const [cred, setCred] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<ConnectionView | undefined>();
+  const setup = SETUP[type.provider];
   const submit = async () => {
     setError(undefined);
     let parsed: Record<string, unknown> = {};
-    if (!reconnect && structured) {
-      const r = githubConfigFromFields(gh);
-      if ('error' in r) {
-        setError(r.error);
-        return;
-      }
-      parsed = r.config;
-    } else if (!reconnect) {
+    if (!reconnect) {
+      let base: Record<string, unknown>;
       try {
-        parsed = JSON.parse(config);
+        base = JSON.parse(advanced) as Record<string, unknown>;
       } catch {
-        setError('The configuration is not valid JSON.');
+        setError('The advanced configuration is not valid JSON.');
         return;
       }
+      const result = connectionConfigFromFields(type.provider, fields, base);
+      if ('error' in result) { setError(result.error); return; }
+      parsed = result.config;
     }
     setBusy(true);
     try {
@@ -270,12 +335,23 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
       toast({ tone: r.check.state === 'connected' && !r.check.warnings?.length ? 'success' : 'warning', title: `${type.name}: ${r.connection.health.replace('_', ' ')}`, body: r.check.detail });
       setCred({});
       await onSuccess(r.connection);
+      if (r.check.state === 'connected') setSaved(r.connection);
+      else setError(r.check.detail);
     } catch (e) {
       setError(why(e));
     } finally {
       setBusy(false);
     }
   };
+  if (saved)
+    return (
+      <Modal open title={`${type.name} connected`} onClose={onCancel} footer={<Button onClick={onCancel}>Done</Button>}>
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 text-ok" size={20} aria-hidden />
+          <div><p className="font-medium text-ink">{type.name} connected</p><p className="mt-1 text-[13px] text-ink-2">{type.kind === 'channel' ? 'Jagr can now deliver alerts and morning briefs to this channel.' : `Jagr can now investigate the ${type.name} signals available to this workspace.`}</p></div>
+        </div>
+      </Modal>
+    );
   return (
     <Modal
       open
@@ -291,42 +367,35 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
         </>
       }
     >
-      <p className="text-[13px] text-ink-3">
+      {setup && !reconnect && <div><p className="text-[14px] text-ink-2">{setup.purpose}</p>{type.roles.length > 0 && <p className="mt-2 text-[12px] font-medium text-ink-2">Capabilities: {type.roles.map((role) => role.replace('_', ' ')).join(' · ')}</p>}<p className="mt-3 text-[12px] font-semibold uppercase tracking-wide text-ink-3">What you’ll need</p><ul className="mt-1 space-y-1 text-[13px] text-ink-2">{setup.needs.map((item) => <li key={item}>• {item}</li>)}</ul></div>}
+      <p className="mt-3 text-[13px] text-ink-3">
         {configure
           ? 'Only the configuration changes: the stored credential is kept (it is never shown or sent to this browser). The connection is tested as soon as it is saved.'
-          : 'The credential is sent once to the Jagr server, stored encrypted, and tested at once. It is never shown again or sent to this browser.'}
+          : setup?.access ?? 'The connection is tested as soon as it is saved.'}
       </p>
-      {!reconnect && structured && (
-        <div className="mt-3 space-y-3">
-          <label className="block text-[13px] text-ink-2" htmlFor="gh-repos">
-            Repositories
-            <textarea id="gh-repos" aria-describedby="gh-repos-help" className={cx(inputCls, 'h-20 py-1.5 font-mono text-[13px]')} value={gh.repos} placeholder="owner/repo" onChange={(e) => setGh({ ...gh, repos: e.target.value })} spellCheck={false} />
-            <span id="gh-repos-help" className="mt-1 block text-[12px] text-ink-3">One per line, as owner/repo.</span>
-          </label>
-          <label className="block text-[13px] text-ink-2" htmlFor="gh-envs">
-            Deployment environments
-            <textarea id="gh-envs" aria-describedby="gh-envs-help" className={cx(inputCls, 'h-16 py-1.5 font-mono text-[13px]')} value={gh.environments} onChange={(e) => setGh({ ...gh, environments: e.target.value })} spellCheck={false} />
-            <span id="gh-envs-help" className="mt-1 block text-[12px] text-ink-3">Exactly as your deployer names them in GitHub (Vercel uses Production and Preview). The test reports how many deployments each one returns.</span>
-          </label>
-          <label className="flex items-center gap-2 text-[13px] text-ink-2">
-            <input type="checkbox" className="size-4 accent-[var(--ink)]" checked={gh.releases} onChange={(e) => setGh({ ...gh, releases: e.target.checked })} />
-            Include published releases as context
-          </label>
-        </div>
-      )}
-      {!reconnect && !structured && (
-        <label className="mt-3 block text-[13px] text-ink-2">
-          Configuration (JSON, non-secret)
-          <textarea className={cx(inputCls, 'h-36 py-1.5 font-mono text-[12px]')} value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} />
-        </label>
-      )}
+      {!reconnect && <div className="mt-4 space-y-3">{Object.keys(fields).map((key) => <ConnectionField key={key} provider={type.provider} name={key} value={fields[key]} onChange={(value) => setFields((current) => ({ ...current, [key]: value }))} />)}</div>}
+      {!reconnect && ['amplitude', 'sentry'].includes(type.provider) && <details className="mt-4 rounded-lg border border-line bg-subtle/40 p-3"><summary className="cursor-pointer text-[13px] font-medium text-ink-2">Advanced configuration</summary><p className="mt-2 text-[12px] text-ink-3">Signal mappings use the connector’s existing validated schema. Change them only if you already know the required event or telemetry definitions.</p><label className="mt-2 block text-[12px] text-ink-2">Validated connector configuration<textarea aria-label={`${type.name} advanced configuration`} className={cx(inputCls, 'h-36 py-1.5 font-mono text-[12px]')} value={advanced} onChange={(e) => setAdvanced(e.target.value)} spellCheck={false} /></label></details>}
+      {!configure && setup && <div className="mt-4 rounded-lg border border-line bg-subtle/40 p-3"><p className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">Give Jagr read access</p><ol className="mt-2 space-y-1 text-[13px] text-ink-2">{setup.guide.map((item, index) => <li key={item}>{index + 1}. {item}</li>)}</ol></div>}
       {!configure && type.credentialFields.map((f) => (
-        <label key={f.key} className="mt-3 block text-[13px] text-ink-2">
+        <label key={f.key} className="mt-3 block text-[13px] text-ink-2" htmlFor={`credential-${f.key}`}>
           {f.label}
-          <input className={inputCls} type="password" autoComplete="off" value={cred[f.key] ?? ''} onChange={(e) => setCred((c) => ({ ...c, [f.key]: e.target.value }))} />
+          <input id={`credential-${f.key}`} className={inputCls} type="password" autoComplete="off" value={cred[f.key] ?? ''} onChange={(e) => setCred((c) => ({ ...c, [f.key]: e.target.value }))} />
         </label>
       ))}
+      {!configure && <p className="mt-3 text-[12px] text-ink-3">Your credential is sent once to the Jagr server, stored encrypted, and never shown again.</p>}
       {error && <p role="alert" className="mt-3 text-[13px] text-crit">{error}</p>}
     </Modal>
+  );
+}
+
+function ConnectionField({ provider, name, value, onChange }: { provider: string; name: string; value: string | boolean; onChange: (value: string | boolean) => void }) {
+  const meta = FIELD_HELP[name] ?? { label: name };
+  const id = `connection-${provider}-${name}`;
+  if (meta.kind === 'checkbox') return <label className="flex items-center gap-2 text-[13px] text-ink-2" htmlFor={id}><input id={id} type="checkbox" className="size-4 accent-[var(--ink)]" checked={value === true} onChange={(e) => onChange(e.target.checked)} />{meta.label}</label>;
+  return (
+    <label className="block text-[13px] text-ink-2" htmlFor={id}>{meta.label}
+      {meta.kind === 'textarea' ? <textarea id={id} aria-describedby={meta.help ? `${id}-help` : undefined} className={cx(inputCls, 'h-20 py-1.5')} value={String(value)} onChange={(e) => onChange(e.target.value)} spellCheck={false} /> : meta.kind === 'select' ? <select id={id} className={inputCls} value={String(value)} onChange={(e) => onChange(e.target.value)}>{(REGION_OPTIONS[provider] ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input id={id} aria-describedby={meta.help ? `${id}-help` : undefined} className={inputCls} type={meta.kind === 'number' ? 'number' : 'text'} value={String(value)} onChange={(e) => onChange(e.target.value)} />}
+      {meta.help && <span id={`${id}-help`} className="mt-1 block text-[12px] text-ink-3">{meta.help}</span>}
+    </label>
   );
 }
