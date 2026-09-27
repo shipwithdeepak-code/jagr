@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { SourceView } from '@/product/view/sources';
 import { ProviderLogo } from './product';
 import { SourceCard } from './sources';
+import { DeliveryOption } from './serverWorkspace';
 
 const sentry: SourceView = {
   id: 'sentry',
@@ -56,5 +57,17 @@ describe('source identity', () => {
     expect(play).toContain('#00A173');
     expect(play).toContain('#00A6ED');
     expect(play).toContain('#F34A46');
+  });
+});
+
+describe('delivery channel presentation', () => {
+  it('keeps Slack delivery separate from evidence sources and represents unsupported channels honestly', () => {
+    const slack = renderToStaticMarkup(createElement(DeliveryOption, { provider: 'slack', name: 'Slack', description: 'Jagr uses Slack to deliver alerts and morning briefs.', status: 'Available', onConnect: () => undefined }));
+    expect(slack).toContain('alerts');
+    expect(slack).toContain('Connect');
+    expect(slack).not.toContain('evidence source');
+    const teams = renderToStaticMarkup(createElement(DeliveryOption, { provider: 'teams', name: 'Microsoft Teams', description: 'Teams delivery is not implemented yet.', status: 'Coming soon' }));
+    expect(teams).toContain('Coming soon');
+    expect(teams).not.toContain('<button');
   });
 });
