@@ -21,6 +21,13 @@ Code: `src/product/integrations/connectors/` (pure TypeScript; all I/O through t
 | `hosts(config)` | The only hosts it may call; the runtime refuses everything else, and plain http |
 | `build(ctx)` | Returns the role implementations — no network calls |
 | `check(ctx)` | One cheap authenticated call proving the credential works |
+| `sourceCheck(ctx, target, state)` | Optional bounded source observation; implemented for Sentry in Phase 2A |
+
+### Sentry source-aware checking
+
+A legacy aggregate SourceTarget represents the connection's configured Sentry organization, projects, environment, metrics, issues, and releases. A project-scoped target narrows the connection's configured project list through `SourceTarget.configuration.projects`; it cannot add a project outside the parent connection. Targets are checked every 15 minutes independently of watch cadence. A check reads bounded normalized metric points, issues, and release metadata through the existing connector; it never reads stack traces, event bodies, or user identities. New observations are deduplicated as tenant-scoped NormalizedEvents. Their first durable observation time maps them to a stable watch cadence slot, and all relevant events for the same watch/slot coalesce into one durable investigation job. Overlap reads cannot repeat that job while partial fan-out remains retryable. Provider errors, authentication failures, rate limits, and timeouts do not advance the checkpoint and never become “unchanged.” Other connectors remain on the legacy watch-run path in Phase 2A.
+
+When that coalesced watch job runs, Jagr resolves the associated normalized Sentry events from Postgres with an organization-and-workspace-scoped bounded query. Investigations keep durable event references, and evidence snapshots link to matching event ids; the canonical normalized payload is not copied into the job or investigation.
 
 Every connector must pass `testkit/connectorContract.ts` against recorded provider responses:
 

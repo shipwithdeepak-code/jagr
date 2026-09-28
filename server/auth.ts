@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { Clock } from '../src/product/ports/clock.js';
-import type { Membership, Repositories, Session, User } from '../src/product/ports/persistence.js';
+import type { Membership, OrganizationMembership, Repositories, Session, User } from '../src/product/ports/persistence.js';
 import type { ApiRequest } from './http/types.js';
 import { randomToken } from './identity/pkce.js';
 
@@ -68,6 +68,7 @@ export interface Principal {
   user: User;
   session: Session;
   memberships: Membership[];
+  organizationMemberships: OrganizationMembership[];
 }
 
 export async function authenticate(repos: Repositories, req: ApiRequest, clock: Clock): Promise<Principal | null> {
@@ -77,7 +78,7 @@ export async function authenticate(repos: Repositories, req: ApiRequest, clock: 
   if (!session || session.expiresAt <= clock.now()) return null;
   const user = await repos.users.get(session.userId);
   if (!user) return null;
-  return { user, session, memberships: await repos.members.forUser(user.id) };
+  return { user, session, memberships: await repos.members.forUser(user.id), organizationMemberships: await repos.organizationMembers.forUser(user.id) };
 }
 
 /** Double-submit CSRF check for state-changing requests. */

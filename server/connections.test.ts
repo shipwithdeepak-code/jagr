@@ -125,7 +125,7 @@ describe('connection lifecycle API', () => {
     const re = (await app(req('POST', `/api/workspaces/${ws}/connections/conn-jira/reconnect`, s, { credential: { email: 'svc@acme.test', apiToken: JIRA_TOKEN_2 } }))).body as ConnBody;
     expect(re.connection).toMatchObject({ health: 'healthy', needsReconnect: false });
     expect((await rt.repos.connections.get(ws, 'conn-jira'))!.secretRef).toBe(ref);
-    expect((await rt.secrets.get(ref)).version).toBe(2);
+    expect((await rt.secrets.get(ref, { workspaceId: ws, connectionId: 'conn-jira' })).version).toBe(2);
   });
 
   it('disconnect deletes the credential and turns the source into a named gap', async () => {
@@ -137,7 +137,7 @@ describe('connection lifecycle API', () => {
     const ref = (await rt.repos.connections.get(ws, 'conn-jira'))!.secretRef!;
     const d = await app(req('DELETE', `/api/workspaces/${ws}/connections/conn-jira`, s));
     expect((d.body as { connection: { health: string } }).connection.health).toBe('not_configured');
-    await expect(rt.secrets.get(ref)).rejects.toThrow();
+    await expect(rt.secrets.get(ref, { workspaceId: ws, connectionId: 'conn-jira' })).rejects.toThrow();
     const run = await sourcesForRun(rt, (await rt.repos.workspaces.get(ws))!, '2026-09-25T10:00:00.000Z');
     expect(run.registry.sources()).toHaveLength(0);
     expect(run.connections[0].state).toBe('not_configured');

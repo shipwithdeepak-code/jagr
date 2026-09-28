@@ -3,6 +3,8 @@ import type { ISO, SourceConnection } from '../../types.js';
 import type { Clock } from '../../ports/clock.js';
 import type { HttpClient } from '../../ports/http.js';
 import type { Connection } from '../../ports/persistence.js';
+import type { SourceState, SourceTarget } from '../../ports/persistence.js';
+import type { SourceCheckResult } from '../../ports/sourceCheck.js';
 import type { SecretPayload } from '../../ports/secrets.js';
 import type { RegisteredSource, Role, SourceId } from '../../roles/types.js';
 
@@ -61,6 +63,10 @@ export interface ConnectorDescriptor<C = unknown> {
   build(ctx: ConnectorContext<C>): Omit<RegisteredSource, 'id' | 'connection'> & { connection?: Partial<SourceConnection> };
   /** A cheap authenticated call that proves the credential works. */
   check(ctx: ConnectorContext<C>): Promise<ConnectorCheck>;
+  /** Optional source-aware observation boundary. Phase 2A implements this only for Sentry. */
+  sourceCheck?(ctx: ConnectorContext<C>, target: SourceTarget, state: SourceState | null): Promise<SourceCheckResult>;
+  /** Neutral cadence copied onto SourceTarget when sourceCheck is implemented. */
+  sourceCheckIntervalMinutes?: number;
 }
 
 /** Common connector bookkeeping, for building provenance. */

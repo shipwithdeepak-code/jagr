@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { Membership, Workspace } from '../src/product/ports/persistence.js';
+import type { Workspace } from '../src/product/ports/persistence.js';
 import type { ProviderId, WatchInvestigation } from '../src/product/types.js';
 import { isSourceId, type SourceId } from '../src/product/roles/types.js';
 import { decide } from '../src/product/agent/decisions.js';
 import { ApprovalRequiredError } from '../src/product/agent/actions.js';
 import { commitServerImport, exportServerWorkspace, planImport } from '../src/product/export/workspace.js';
 import { schedulerTick } from '../src/product/app/scheduler.js';
-import { checkConnection, drainJobs, runWatchJob, runWorkspaceNow, sourcesForRun, WorkspaceBusy } from '../src/product/app/monitoring.js';
+import { checkConnection, runOneJob, runWorkspaceNow, sourcesForRun, WorkspaceBusy } from '../src/product/app/monitoring.js';
 import { buildSnapshot } from '../src/product/app/workspaceSnapshot.js';
 import { replayInvestigation } from '../src/product/app/replay.js';
 import { briefView } from '../src/product/view/brief.js';
@@ -24,6 +24,7 @@ import { connectionView } from '../src/product/connections/model.js';
 import { ConnectionError, configureConnection, disconnectConnection, listConnections, reconnectConnection, typeInfo } from '../src/product/app/connections.js';
 import { watchFromTemplate, WATCH_TEMPLATES } from '../src/product/catalog.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { resolveWorkspaceContext } from './authorization.js';
 
 /** Constant-time comparison (hashing first makes the lengths equal). */
 const sameSecret = (a: string, b: string) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
@@ -81,7 +82,15 @@ export function createApp(rt: Runtime) {
   const secure = rt.config.secureCookies;
   let labReport: Promise<EvaluationLabReport> | undefined;
 
-  const memberOf = (p: Principal, workspaceId: string): Membership | undefined => p.memberships.find((m) => m.workspaceId === workspaceId);
+  async function organizationFor(p: Principal) {
+    const existing = p.organizationMemberships[0];
+    if (existing) return existing.organizationId;
+    const id = `org_${p.user.id}`;
+    if (!(await rt.repos.organizations.get(id))) await rt.repos.organizations.create({ id, name: `${p.user.displayName}'s organization`, createdAt: rt.clock.now() });
+    await rt.repos.organizationMembers.add({ organizationId: id, userId: p.user.id, role: 'owner' });
+    p.organizationMemberships.push({ organizationId: id, userId: p.user.id, role: 'owner' });
+    return id;
+  }
 
   async function audit(workspaceId: string, p: Principal, action: string, target?: string, detail?: string) {
     await rt.repos.audit.append({ id: newId('audit'), workspaceId, at: rt.clock.now(), actor: { ref: p.user.id, displayName: p.user.displayName }, action, target, detail });
@@ -122,10 +131,9 @@ export function createApp(rt: Runtime) {
 
   // ── Workspace-scoped routes ─────────────────────────────────
   async function workspaceRoute(p: Principal, req: ApiRequest, id: string, rest: string[]): Promise<ApiResponse> {
-    const m = memberOf(p, id);
-    if (!m) return json(404, { error: 'Workspace not found.' });
-    const ws = await rt.repos.workspaces.get(id);
-    if (!ws) return json(404, { error: 'Workspace not found.' });
+    const context = await resolveWorkspaceContext(rt.repos, p, id);
+    if (!context) return json(404, { error: 'Workspace not found.' });
+    const { workspace: ws, membership: m } = context;
     const [section, sub] = rest;
 
     if (!section && req.method === 'GET') {
@@ -134,6 +142,7 @@ export function createApp(rt: Runtime) {
     }
     // Watches are created from the catalog's templates; sources must be connections in this workspace.
     if (section === 'watches' && req.method === 'POST' && !sub) {
+      if (!(await rt.entitlements.canCreateWatch({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot create another watch.' });
       const body = WatchBody.safeParse(req.body);
       if (!body.success) return json(400, { error: 'Expected { templateId, sources? }.' });
       const tpl = WATCH_TEMPLATES.find((t) => t.id === body.data.templateId)!;
@@ -150,6 +159,10 @@ export function createApp(rt: Runtime) {
       void _t;
       void _s;
       const watch = watchFromTemplate(newId('watch'), tpl.id, { ...overrides, sources: sources as ProviderId[], metricKeys: served?.map((m) => m.def.key) }, rt.clock.now());
+      if (ws.mode === 'connected') {
+        const selected = new Set(sources);
+        watch.sourceTargetIds = (await rt.repos.sourceTargets.list(id)).filter((target) => selected.has(target.provider)).map((target) => target.id);
+      }
       for (const m of served ?? []) {
         const key = `metric:${m.def.key}` as const;
         if ((tpl.area === '*' || m.def.area === tpl.area || m.def.telemetry) && !watch.signals.some((x) => x.key === key)) watch.signals.unshift({ key });
@@ -182,6 +195,7 @@ export function createApp(rt: Runtime) {
         if (!sub && req.method === 'GET') return json(200, { connections: await listConnections(rt, id) });
         if (!sub && req.method === 'PUT') {
           if (!canManage) return json(403, { error: 'Only workspace owners and admins can change connections.' });
+          if (!(await rt.entitlements.canConnectSource({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot connect another source.' });
           const body = ConnectBody.safeParse(req.body);
           if (!body.success) return json(400, { error: 'Expected { provider, config, credential? }.' });
           return json(200, await configureConnection({ ...rt, types: rt.types }, ws, actor, body.data));
@@ -211,6 +225,31 @@ export function createApp(rt: Runtime) {
       }
       return json(404, { error: 'Not found.' });
     }
+    // Normalized source events are durable evidence records. Reads stay bounded and require the
+    // principal → organization → workspace context resolved at the start of this route.
+    if (section === 'events' && req.method === 'GET') {
+      const scope = { organizationId: context.organizationId, workspaceId: id };
+      if (sub) {
+        const event = await rt.repos.events.get(scope, sub);
+        return event ? json(200, { event }) : json(404, { error: 'Source event not found.' });
+      }
+      const requested = Number(req.query.limit ?? 100);
+      const limit = Number.isInteger(requested) && requested > 0 ? requested : 100;
+      return json(200, { events: await rt.repos.events.list(scope, {
+        sourceTargetId: req.query.sourceTargetId,
+        type: req.query.type,
+        from: req.query.from,
+        to: req.query.to,
+        limit,
+      }) });
+    }
+    if (section === 'investigations' && sub && rest[2] === 'events' && req.method === 'GET') {
+      const inv = await rt.repos.investigations.get(id, sub);
+      if (!inv) return json(404, { error: 'Investigation not found.' });
+      const scope = { organizationId: context.organizationId, workspaceId: id };
+      const events = await Promise.all((inv.sourceEvents ?? []).slice(0, 100).map((ref) => rt.repos.events.get(scope, ref.eventId)));
+      return json(200, { events: events.filter((event) => event !== null) });
+    }
     // Replay: the stored investigation only — no source is read, nothing re-runs.
     if (section === 'investigations' && sub && rest[2] === 'replay' && req.method === 'GET') {
       const inv = await rt.repos.investigations.get(id, sub);
@@ -226,11 +265,13 @@ export function createApp(rt: Runtime) {
       // Imported and sample data do not change, and re-running them replaces investigations: replay instead.
       if (ws.mode !== 'connected') return json(409, { error: 'This workspace’s data does not change, so running again would only repeat it. Use the replay of the original investigation.' });
       const at = rt.clock.now();
-      let investigations = 0;
-      // A new pass is appended to the investigation; the original passes stay as recorded.
-      for (const watchId of inv.watchIds) investigations += (await runWatchJob(rt, { workspaceId: id, payload: { watchId, dueAt: at } })).investigations;
+      const jobs = [];
+      for (const watchId of inv.watchIds) {
+        const idempotencyKey = `${id}:rerun:${inv.id}:${watchId}:${at}`;
+        jobs.push({ watchId, idempotencyKey, enqueued: await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId, dueAt: at }, runAt: at, idempotencyKey }) });
+      }
       await audit(id, p, 'investigation.rerun', inv.id);
-      return json(200, { kind: 'run_again', at, investigations, note: 'A new run over current data. Its results can differ from the original investigation, which is kept as recorded.' });
+      return json(202, { kind: 'run_again_queued', at, jobs, note: 'A new durable run was queued. Its results can differ from the original investigation, which is kept as recorded.' });
     }
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {
@@ -261,14 +302,18 @@ export function createApp(rt: Runtime) {
       }
     }
     if (section === 'runs' && req.method === 'POST') {
+      if (!(await rt.entitlements.canRunInvestigation({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot run an investigation.' });
       if (ws.mode === 'connected') {
         // "Run now" for live sources: the same scheduled-watch path, due now, for every active watch.
         const at = rt.clock.now();
         const active = (await rt.repos.watches.list(id)).filter((w) => w.status === 'active');
-        let investigations = 0;
-        for (const w of active) investigations += (await runWatchJob(rt, { workspaceId: id, payload: { watchId: w.id, dueAt: at } })).investigations;
+        const jobs = [];
+        for (const w of active) {
+          const idempotencyKey = `${id}:manual:${w.id}:${at}`;
+          jobs.push({ watchId: w.id, idempotencyKey, enqueued: await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId: w.id, dueAt: at }, runAt: at, idempotencyKey }) });
+        }
         await audit(id, p, 'monitor.requested', undefined, `${active.length} watch(es)`);
-        return json(200, { workspaceId: id, watches: active.length, investigations });
+        return json(202, { kind: 'run_queued', workspaceId: id, watches: active.length, jobs });
       }
       const summary = await runWorkspaceNow(rt, id);
       await audit(id, p, 'monitor.requested');
@@ -334,11 +379,11 @@ export function createApp(rt: Runtime) {
     if (head === 'auth' && a && b === 'start' && req.method === 'GET') return authStart(a, req);
     if (head === 'auth' && a && b === 'callback' && req.method === 'GET') return authCallback(a, req);
 
-    if (head === 'cron' && a === 'tick') {
+    if (head === 'cron' && (a === 'tick' || a === 'worker')) {
       if (!rt.config.cronSecret || !sameSecret(req.headers.authorization ?? '', `Bearer ${rt.config.cronSecret}`)) return json(401, { error: 'Unauthorized.' });
-      const tick = await schedulerTick(rt);
-      const run = await drainJobs(rt, { workerId: 'cron', limit: 10, leaseMs: 5 * 60_000 });
-      return json(200, { tick, run });
+      if (req.method !== 'POST' && req.method !== 'GET') return json(405, { error: 'Method not allowed.' });
+      if (a === 'tick') return json(200, { tick: await schedulerTick(rt) });
+      return json(200, { worker: await runOneJob(rt, { workerId: `http-${randomToken(8)}`, leaseMs: 60_000 }) });
     }
 
     const p = await authenticate(rt.repos, req, rt.clock);
@@ -349,7 +394,7 @@ export function createApp(rt: Runtime) {
       await rt.repos.sessions.revoke(p.session.id);
       return json(200, { ok: true }, { cookies: [clearCookie(SESSION_COOKIE, secure), clearCookie(CSRF_COOKIE, secure)] });
     }
-    if (head === 'me' && req.method === 'GET') return json(200, { user: p.user, memberships: p.memberships });
+    if (head === 'me' && req.method === 'GET') return json(200, { user: p.user, memberships: p.memberships, organizationMemberships: p.organizationMemberships });
     // The Evaluation Lab as structured results (deterministic suites on fixtures; computed once per server instance).
     if (head === 'evaluations' && !a && req.method === 'GET') {
       labReport ??= evaluationLab(rt.clock.now()).catch((e) => {
@@ -371,7 +416,9 @@ export function createApp(rt: Runtime) {
     if (head === 'workspaces' && !a && req.method === 'POST') {
       const body = WorkspaceBody.safeParse(req.body ?? {});
       if (!body.success) return json(400, { error: 'Invalid workspace.' });
-      const ws: Workspace = { id: newId('ws'), name: body.data.name, mode: body.data.mode, createdAt: rt.clock.now(), settings: { planner: 'deterministic', aiEgressAllowed: true, timezone: 'UTC' }, brief: { enabled: true, time: '08:00', timezone: 'UTC' }, importedExportIds: [], version: 1 };
+      const organizationId = await organizationFor(p);
+      if (!(await rt.entitlements.canCreateWorkspace({ userId: p.user.id, organizationId }))) return json(403, { error: 'Your organization cannot create another workspace.' });
+      const ws: Workspace = { id: newId('ws'), organizationId, name: body.data.name, mode: body.data.mode, createdAt: rt.clock.now(), settings: { planner: 'deterministic', aiEgressAllowed: true, timezone: 'UTC' }, brief: { enabled: true, time: '08:00', timezone: 'UTC' }, importedExportIds: [], version: 1 };
       await rt.tx.run(async (repos) => {
         await repos.workspaces.create(ws);
         await repos.members.add({ workspaceId: ws.id, userId: p.user.id, role: 'owner', canApprove: true });
@@ -390,7 +437,9 @@ export function createApp(rt: Runtime) {
       if (a === 'plan' || !plan.report.ok) return json(plan.report.ok ? 200 : 422, { report: plan.report });
       if (!body.data.confirm) return json(400, { error: 'Confirm the dry-run report (confirm: true) to import.', report: plan.report });
       const workspaceId = newId('ws');
-      const ws = await commitServerImport(rt.tx, plan, { workspaceId, actor: { ref: p.user.id, displayName: p.user.displayName }, clock: rt.clock });
+      const organizationId = await organizationFor(p);
+      if (!(await rt.entitlements.canCreateWorkspace({ userId: p.user.id, organizationId }))) return json(403, { error: 'Your organization cannot create another workspace.' });
+      const ws = await commitServerImport(rt.tx, plan, { workspaceId, organizationId, actor: { ref: p.user.id, displayName: p.user.displayName }, clock: rt.clock });
       await rt.repos.members.add({ workspaceId, userId: p.user.id, role: 'owner', canApprove: true });
       return json(201, { workspace: publicWorkspace(ws), report: plan.report });
     }

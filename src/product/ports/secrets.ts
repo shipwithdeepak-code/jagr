@@ -14,12 +14,17 @@ export type SecretPayload =
 /** Opaque handle. Safe to store and log; useless without the store. */
 export type SecretRef = string & { readonly __secretRef: unique symbol };
 
+export interface SecretOwner {
+  workspaceId: string;
+  connectionId: string;
+}
+
 export interface SecretStore {
-  put(owner: { workspaceId: string; connectionId: string }, secret: SecretPayload): Promise<SecretRef>;
-  get(ref: SecretRef): Promise<{ secret: SecretPayload; version: number }>;
+  put(owner: SecretOwner, secret: SecretPayload): Promise<SecretRef>;
+  get(ref: SecretRef, owner: SecretOwner): Promise<{ secret: SecretPayload; version: number }>;
   /** Compare-and-swap: fails with SecretVersionConflict if another writer got there first (rotating refresh tokens). */
-  replace(ref: SecretRef, expectedVersion: number, secret: SecretPayload): Promise<void>;
-  delete(ref: SecretRef): Promise<void>;
+  replace(ref: SecretRef, owner: SecretOwner, expectedVersion: number, secret: SecretPayload): Promise<void>;
+  delete(ref: SecretRef, owner: SecretOwner): Promise<void>;
 }
 
 export class SecretNotFound extends Error {

@@ -41,14 +41,18 @@ describe('Postgres specifics', () => {
       await c.exec(MIGRATIONS[0].sql);
       await c.query('insert into jagr_migrations (id) values ($1)', [MIGRATIONS[0].id]);
     });
+    await sql.query("insert into workspaces (id, doc, version) values ('w', $1::jsonb, 1)", [JSON.stringify({ id: 'w', name: 'Legacy', mode: 'connected', createdAt: '2026-01-01T00:00:00.000Z' })]);
     await sql.query("insert into workspace_docs (workspace_id, collection, id, doc) values ('w', 'connections', 'old', $1::jsonb), ('w', 'connections', 'new', $2::jsonb), ('w', 'watches', 'x', $3::jsonb)", [
       JSON.stringify({ id: 'old', updatedAt: '2026-01-01T00:00:00.000Z' }),
       JSON.stringify({ id: 'new', updatedAt: '2026-02-01T00:00:00.000Z', createdAt: '2025-12-01T00:00:00.000Z' }),
       JSON.stringify({ id: 'x', updatedAt: '2026-01-01T00:00:00.000Z' }),
     ]);
     expect(await migrate(sql)).toEqual(MIGRATIONS.slice(1).map((m) => m.id));
-    const rows = (await sql.query<{ id: string; doc: { createdAt?: string } }>('select id, doc from workspace_docs order by id')).rows;
-    expect(Object.fromEntries(rows.map((r) => [r.id, r.doc.createdAt]))).toEqual({ new: '2025-12-01T00:00:00.000Z', old: '2026-01-01T00:00:00.000Z', x: undefined });
+    const rows = (await sql.query<{ id: string; doc: { createdAt?: string } }>("select id, doc from workspace_docs where collection = 'connections' order by id")).rows;
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.doc.createdAt]))).toEqual({ new: '2025-12-01T00:00:00.000Z', old: '2026-01-01T00:00:00.000Z' });
+    const workspace = (await sql.query<{ doc: { organizationId: string } }>('select doc from workspaces where id = $1', ['w'])).rows[0].doc;
+    expect(workspace.organizationId).toBe('org_w');
+    expect((await sql.query<{ id: string }>("select id from workspace_docs where collection = 'source_targets' order by id")).rows.map((r) => r.id)).toEqual(['target-new', 'target-old']);
   });
 
   it('secrets are encrypted at rest: no plaintext secret or data key in the table', async () => {
@@ -67,7 +71,7 @@ describe('Postgres specifics', () => {
     const flipped = Buffer.from(ciphertext, 'base64');
     flipped[0] ^= 0xff;
     await sql.query('update secrets set ciphertext = $2 where ref = $1', [ref, flipped.toString('base64')]);
-    await expect(store.get(ref)).rejects.toThrow();
+    await expect(store.get(ref, { workspaceId: 'ws', connectionId: 'c' })).rejects.toThrow();
   });
 
   it('master-key rotation: old secrets still decrypt, new writes use the newest key', async () => {
@@ -77,10 +81,11 @@ describe('Postgres specifics', () => {
     const before = postgresSecretStore(sql, envKeyProvider({ JAGR_SECRET_KEYS: `1:${k1}` }));
     const ref = await before.put({ workspaceId: 'ws', connectionId: 'c' }, { kind: 'oauth', accessToken: 'a', refreshToken: 'r', scopes: [] });
     const after = postgresSecretStore(sql, envKeyProvider({ JAGR_SECRET_KEYS: `1:${k1},2:${k2}` }));
-    expect((await after.get(ref)).secret).toMatchObject({ refreshToken: 'r' });
-    await after.replace(ref, 1, { kind: 'oauth', accessToken: 'a2', refreshToken: 'r2', scopes: [] });
+    const owner = { workspaceId: 'ws', connectionId: 'c' };
+    expect((await after.get(ref, owner)).secret).toMatchObject({ refreshToken: 'r' });
+    await after.replace(ref, owner, 1, { kind: 'oauth', accessToken: 'a2', refreshToken: 'r2', scopes: [] });
     expect((await sql.query<{ key_version: number }>('select key_version from secrets where ref = $1', [ref])).rows[0].key_version).toBe(2);
-    await expect(postgresSecretStore(sql, envKeyProvider({ JAGR_SECRET_KEYS: `1:${k1}` })).get(ref)).rejects.toThrow(/version 2 is not configured/);
+    await expect(postgresSecretStore(sql, envKeyProvider({ JAGR_SECRET_KEYS: `1:${k1}` })).get(ref, owner)).rejects.toThrow(/version 2 is not configured/);
   });
 
   it('refuses to start without an encryption key', () => {

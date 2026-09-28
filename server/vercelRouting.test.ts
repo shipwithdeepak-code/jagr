@@ -73,6 +73,7 @@ const JAGR_PATHS = [
   '/api/auth/github/start',
   '/api/auth/logout',
   '/api/cron/tick',
+  '/api/cron/worker',
   '/api/workspaces/ws1',
   '/api/workspaces/ws1/snapshot',
   '/api/workspaces/ws1/connections',

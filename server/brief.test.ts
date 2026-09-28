@@ -37,7 +37,7 @@ async function setup(briefMin: 'MEDIUM' | 'HIGH') {
   posts.length = 0;
   const idp: IdentityProvider = { id: 'fake', authorizationUrl: ({ state }) => `https://idp.example/a?state=${state}`, exchange: async () => ({ provider: 'fake', subject: 'ana-1', emailVerified: true, displayName: 'Ana' }) };
   const clock = manualClock(NOW);
-  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
+  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test', CRON_SECRET: 'cron-secret' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
   const app = createApp(rt);
   const req = (method: string, path: string, s?: { cookie: string; csrf: string }, body?: unknown, extra: Record<string, string> = {}): ApiRequest => {
     const [p, q] = path.split('?');
@@ -54,6 +54,7 @@ async function setup(briefMin: 'MEDIUM' | 'HIGH') {
   await app(req('PUT', `/api/workspaces/${ws}/connections`, s, { provider: 'slack', config: { channel: 'C0123456789' }, credential: { botToken: 'xoxb-brief-test' } }));
   await app(req('POST', `/api/workspaces/${ws}/watches`, s, { templateId: 'customer_issues', sources: ['jira'], notificationPolicy: { interruptAt: 'HIGH', briefMin, morningBrief: true } }));
   await app(req('POST', `/api/workspaces/${ws}/runs`, s));
+  await app(req('POST', '/api/cron/worker', undefined, undefined, { authorization: 'Bearer cron-secret' }));
   clock.set('2026-09-25T10:05:00.000Z');
   await composeBriefJob(rt, { workspaceId: ws, payload: { dueAt: '2026-09-25T10:05:00.000Z' } });
   return { app, req, s, ws };

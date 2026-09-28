@@ -169,7 +169,7 @@ describe('connected workspaces: isolation and health', () => {
   it('a missing stored secret means reconnect, not "no data"', async () => {
     const w = await workspace([connection], { 'conn-deploylog': 'dl_token_AAAAAAAAAAAA' });
     const c = (await w.repos.connections.get('ws-1', connection.id))!;
-    await w.secrets.delete(c.secretRef!);
+    await w.secrets.delete(c.secretRef!, { workspaceId: 'ws-1', connectionId: c.id });
     const deps = { ...w, http: scriptedHttp(route).http, connectors: connectorsFrom([reference as ConnectorDescriptor<unknown>]) };
     const run = await sourcesForRun(deps, (await w.repos.workspaces.get('ws-1'))!, w.clock.now());
     expect(run.registry.sources()).toHaveLength(0);

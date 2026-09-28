@@ -38,6 +38,80 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
       where collection = 'connections' and doc ? 'updatedAt' and not doc ? 'createdAt';
     `,
   },
+  {
+    id: '003_organization_and_source_targets',
+    sql: `
+      create table if not exists organizations (id text primary key, doc jsonb not null, created_at timestamptz not null default now());
+      create table if not exists organization_memberships (
+        organization_id text not null references organizations(id) on delete cascade,
+        user_id text not null references users(id) on delete cascade,
+        doc jsonb not null,
+        primary key (organization_id, user_id)
+      );
+
+      insert into organizations (id, doc)
+      select 'org_' || id, jsonb_build_object('id', 'org_' || id, 'name', coalesce(doc->>'name', 'Organization'), 'createdAt', coalesce(doc->>'createdAt', updated_at::text))
+      from workspaces on conflict (id) do nothing;
+
+      update workspaces set doc = jsonb_set(doc, '{organizationId}', to_jsonb('org_' || id))
+      where not doc ? 'organizationId';
+
+      insert into organization_memberships (organization_id, user_id, doc)
+      select w.doc->>'organizationId', m.user_id,
+        jsonb_build_object('organizationId', w.doc->>'organizationId', 'userId', m.user_id,
+          'role', case when m.doc->>'role' in ('owner', 'admin') then m.doc->>'role' else 'member' end)
+      from memberships m join workspaces w on w.id = m.workspace_id
+      on conflict (organization_id, user_id) do nothing;
+
+      insert into workspace_docs (workspace_id, collection, id, doc)
+      select workspace_id, 'source_targets', 'target-' || id,
+        jsonb_build_object(
+          'id', 'target-' || id,
+          'workspaceId', workspace_id,
+          'connectionId', id,
+          'provider', coalesce(doc->>'provider', doc->>'source'),
+          'externalId', 'legacy:' || id,
+          'displayName', coalesce(doc#>>'{label,name}', doc->>'provider', doc->>'source'),
+          'configuration', coalesce(doc->'config', '{}'::jsonb),
+          'status', case when doc->>'state' in ('not_configured', 'needs_reconnect') then 'disconnected' else 'active' end,
+          'createdAt', coalesce(doc->>'createdAt', doc->>'updatedAt'),
+          'updatedAt', doc->>'updatedAt')
+      from workspace_docs where collection = 'connections'
+      on conflict (workspace_id, collection, id) do nothing;
+    `,
+  },
+  {
+    id: '004_job_lifecycle_timestamps',
+    sql: `
+      alter table jobs add column if not exists first_attempted_at timestamptz;
+      alter table jobs add column if not exists last_attempted_at timestamptz;
+      alter table jobs add column if not exists completed_at timestamptz;
+      alter table jobs add column if not exists last_failed_at timestamptz;
+      alter table jobs add column if not exists updated_at timestamptz not null default now();
+    `,
+  },
+  {
+    id: '005_source_target_tenant_scope',
+    sql: `
+      update workspace_docs targets
+      set doc = jsonb_set(targets.doc, '{organizationId}', workspaces.doc->'organizationId'), updated_at = now()
+      from workspaces
+      where targets.workspace_id = workspaces.id
+        and targets.collection = 'source_targets'
+        and not targets.doc ? 'organizationId';
+      update workspace_docs
+      set doc = jsonb_set(doc, '{checkIntervalMinutes}', '15'::jsonb), updated_at = now()
+      where collection = 'source_targets' and doc->>'provider' = 'sentry' and not doc ? 'checkIntervalMinutes';
+    `,
+  },
+  {
+    id: '006_normalized_event_reads',
+    sql: `
+      create index if not exists workspace_normalized_events_time
+      on workspace_docs (workspace_id, (doc->>'occurredAt'), id)
+      where collection = 'normalized_events';
+    `,
+  },
 ];
 
 export async function migrate(sql: SqlClient): Promise<string[]> {

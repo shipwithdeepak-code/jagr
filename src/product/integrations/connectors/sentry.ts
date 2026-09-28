@@ -7,6 +7,9 @@ import { provenance } from './runtime.js';
 import { redactPersonalData } from './redact.js';
 import { seasonalBaseline } from './amplitude.js';
 import { ProviderUnavailableError } from '../types.js';
+import { ConnectorConfigError } from './errors.js';
+import type { SourceState, SourceTarget } from '../../ports/persistence.js';
+import type { SourceCheckResult, SourceEventDraft } from '../../ports/sourceCheck.js';
 
 /**
  * Sentry — error and crash telemetry as a MetricSource, ChangeSource (releases) and WorkItemSource
@@ -87,6 +90,14 @@ export type SentryConfig = z.infer<typeof SentryConfig>;
 const HOST = { us: 'sentry.io', de: 'de.sentry.io' } as const;
 const HOUR = 3_600_000;
 const BASELINE_DAYS = 7;
+const INITIAL_CHECK_LOOKBACK_MS = 24 * HOUR;
+const CHECK_OVERLAP_MS = HOUR;
+
+const fingerprint = (parts: string[]) => {
+  let hash = 2_166_136_261;
+  for (const ch of parts.sort().join('\n')) hash = Math.imul(hash ^ ch.charCodeAt(0), 16_777_619);
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
 
 // ─────────────────────────────────────────────────────────────
 // Normalization — pure, one function per API response. Exported for tests.
@@ -287,6 +298,25 @@ class SentryReader {
         provenance: provenance(stamp, i.shortId, i.firstSeen, i.url ?? this.web(`/issues/${i.id}/`)),
       }));
   }
+
+  async observe(_target: SourceTarget, state: SourceState | null): Promise<SourceCheckResult> {
+    const checkedAt = this.ctx.clock.now();
+    const start = state?.checkpoint ? new Date(Date.parse(state.checkpoint) - CHECK_OVERLAP_MS).toISOString() : new Date(Date.parse(checkedAt) - INITIAL_CHECK_LOOKBACK_MS).toISOString();
+    const window = { start, end: checkedAt };
+    const [releases, issues, metricPoints] = await Promise.all([
+      this.ctx.config.releases ? this.releases(window) : Promise.resolve([]),
+      this.ctx.config.issues ? this.issues(window) : Promise.resolve([]),
+      Promise.all(this.ctx.config.metrics.map(async (binding) => ({ binding, points: await this.points(binding, window) }))),
+    ]);
+    const events: SourceEventDraft[] = [];
+    for (const release of releases) events.push({ type: 'sentry.release', occurredAt: release.at, dedupeKey: `release:${release.ref.id}:${release.at}`, provenance: { externalId: release.provenance.externalId, url: release.provenance.url }, payload: { version: release.version, timing: release.timing, title: release.title } });
+    for (const issue of issues) events.push({ type: 'sentry.issue', occurredAt: issue.createdAt, dedupeKey: `issue:${issue.ref.id}:${issue.createdAt}`, provenance: { externalId: issue.provenance.externalId, url: issue.provenance.url }, payload: { id: issue.id, title: issue.title, priority: issue.priority, status: issue.status, area: issue.area } });
+    for (const { binding, points } of metricPoints) {
+      for (const point of points.filter((p) => p.t > start)) events.push({ type: 'sentry.metric', occurredAt: point.t, dedupeKey: `metric:${binding.key}:${point.t}:${point.value}`, provenance: { externalId: binding.key }, payload: { metric: binding.key, value: point.value, kind: binding.kind } });
+    }
+    const version = fingerprint(events.map((event) => event.dedupeKey));
+    return events.length ? { outcome: 'changed', checkedAt, checkpoint: checkedAt, version, events } : { outcome: 'unchanged', checkedAt, checkpoint: checkedAt, version };
+  }
 }
 
 function definition(b: SentryBinding): MetricDefinition {
@@ -304,6 +334,7 @@ export const sentryConnector: ConnectorDescriptor<SentryConfig> = {
   secretKinds: ['api_key'],
   credentialFields: [{ key: 'authToken', label: 'Auth token (org:read, project:read, event:read)' }],
   hosts: (cfg) => [HOST[cfg.region]],
+  sourceCheckIntervalMinutes: 15,
   build(ctx) {
     const r = new SentryReader(ctx);
     const find = (key: string) => ctx.config.metrics.find((m) => m.key === key);
@@ -335,5 +366,15 @@ export const sentryConnector: ConnectorDescriptor<SentryConfig> = {
       account: ctx.config.organization,
       ...(missing.length ? { warnings: [`Project(s) ${missing.join(', ')} are not visible to this token.`] } : {}),
     };
+  },
+  sourceCheck(ctx, target, state) {
+    // Legacy targets carry the connection's aggregate configuration. A project-scoped target may
+    // narrow `projects`, but can never expand beyond projects authorized by its parent connection.
+    const requested = (target.configuration as { projects?: unknown }).projects;
+    const projects = requested === undefined ? ctx.config.projects : requested;
+    if (!Array.isArray(projects) || !projects.length || projects.some((project) => !Number.isInteger(project) || !ctx.config.projects.includes(project as number))) {
+      throw new ConnectorConfigError('Sentry SourceTarget projects must be a non-empty subset of its connection projects.');
+    }
+    return new SentryReader({ ...ctx, config: { ...ctx.config, projects: projects as number[] } }).observe(target, state);
   },
 };

@@ -3,7 +3,7 @@ import type { Connection } from '../../ports/persistence';
 import type { SecretPayload } from '../../ports/secrets';
 import { manualClock } from '../../ports/clock';
 import { connectorContract, scriptedHttp } from '../../testkit/connectorContract';
-import { checkConnector, connectorFactory } from './runtime';
+import { checkConnector, connectorFactory, sourceChecker } from './runtime';
 import { normalizeEventsStats, normalizeIssues, normalizeReleases, normalizeSessions, sentryConnector } from './sentry';
 import { ProviderUnavailableError } from '../types';
 import { HOURS, sentryRoute } from './__fixtures__/sentry';
@@ -85,6 +85,39 @@ describe('Sentry normalization', () => {
 });
 
 describe('Sentry mapping', () => {
+  it('source check emits bounded normalized drafts once, then reports unchanged after its checkpoint', async () => {
+    const checker = sourceChecker(sentryConnector, connection, { secret, http: scriptedHttp(sentryRoute).http, clock: manualClock(NOW) })!;
+    const target = { id: 'target-sentry', organizationId: 'org-1', workspaceId: 'ws-1', connectionId: connection.id, provider: 'sentry', externalId: 'acme:42', displayName: 'Acme / 42', configuration: CONFIG, status: 'active' as const, createdAt: NOW, updatedAt: NOW };
+    const first = await checker.check(target, null);
+    expect(first.outcome).toBe('changed');
+    if (first.outcome === 'changed') {
+      expect(first.events.length).toBeGreaterThan(0);
+      expect(first.events.every((event) => event.type.startsWith('sentry.') && JSON.stringify(event).length < 16_384)).toBe(true);
+    }
+    await expect(checker.check(target, { organizationId: 'org-1', workspaceId: 'ws-1', sourceTargetId: target.id, provider: 'sentry', status: 'changed', version: 1, checkpoint: NOW, updatedAt: NOW })).resolves.toMatchObject({ outcome: 'unchanged', checkpoint: NOW });
+  });
+
+  it('scopes project targets on one connection while preserving legacy aggregate targets', async () => {
+    const scopedConnection = { ...connection, config: { ...CONFIG, projects: [42, 43], issues: false } };
+    const route = (u: URL) => {
+      if (u.pathname.endsWith('/releases/')) {
+        const projects = u.searchParams.getAll('project');
+        return { body: projects.map((project) => ({ version: `release-${project}`, dateReleased: '2026-09-25T05:00:00Z' })) };
+      }
+      if (u.pathname.endsWith('/events-stats/')) return { body: { data: [] } };
+      if (u.pathname.endsWith('/sessions/')) return { body: { intervals: [], groups: [{ series: { 'crash_free_rate(session)': [] } }] } };
+      return undefined;
+    };
+    const checker = sourceChecker(sentryConnector, scopedConnection, { secret, http: scriptedHttp(route).http, clock: manualClock(NOW) })!;
+    const base = { organizationId: 'org-1', workspaceId: 'ws-1', connectionId: connection.id, provider: 'sentry', displayName: 'Sentry', status: 'active' as const, createdAt: NOW, updatedAt: NOW };
+    const a = await checker.check({ ...base, id: 'target-42', externalId: 'acme:42', configuration: { projects: [42] } }, null);
+    const b = await checker.check({ ...base, id: 'target-43', externalId: 'acme:43', configuration: { projects: [43] } }, null);
+    const legacy = await checker.check({ ...base, id: 'target-legacy', externalId: 'legacy:conn-sentry', configuration: {} }, null);
+    expect(a.outcome === 'changed' && a.events.filter((event) => event.type === 'sentry.release').map((event) => event.payload)).toEqual([{ version: 'release-42', timing: 'reported', title: 'Release release-42' }]);
+    expect(b.outcome === 'changed' && b.events.filter((event) => event.type === 'sentry.release').map((event) => event.payload)).toEqual([{ version: 'release-43', timing: 'reported', title: 'Release release-43' }]);
+    expect(legacy.outcome === 'changed' && legacy.events.filter((event) => event.type === 'sentry.release')).toHaveLength(2);
+  });
+
   it('error series: a telemetry count, bad when it rises, with a seasonal baseline', async () => {
     const s = (await build().metrics!.getSeries({ metric: 'checkout_errors', window }))!;
     expect(s).toMatchObject({ source: 'sentry', unit: 'count', badDirection: 'up', mode: 'relative', telemetry: 'errors', area: 'checkout' });

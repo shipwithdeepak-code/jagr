@@ -324,7 +324,7 @@ export function planImport(input: string | unknown, target: { alreadyImported: r
  * workspace id and remembers where it came from; record ids inside it are preserved so traces,
  * evidence and approvals stay linked. Connected sources arrive as `needs_reconnect`.
  */
-export async function commitServerImport(tx: Transactor, plan: ImportPlan, opts: { workspaceId: string; actor: Actor; clock: Clock }): Promise<Workspace> {
+export async function commitServerImport(tx: Transactor, plan: ImportPlan, opts: { workspaceId: string; organizationId?: string; actor: Actor; clock: Clock }): Promise<Workspace> {
   if (!plan.report.ok || !plan.doc) throw new Error('Cannot import: the dry run reported problems.');
   const doc = plan.doc;
   return tx.run(async (repos) => {
@@ -335,6 +335,7 @@ export async function commitServerImport(tx: Transactor, plan: ImportPlan, opts:
     const now = opts.clock.now();
     const ws: Workspace = {
       id: opts.workspaceId,
+      organizationId: opts.organizationId,
       name: doc.workspace.name,
       mode: doc.workspace.mode,
       createdAt: doc.workspace.createdAt,

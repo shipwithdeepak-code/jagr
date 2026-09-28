@@ -2,6 +2,7 @@ import type { Clock } from '../ports/clock.js';
 import type { JobQueue } from '../ports/jobs.js';
 import type { Repositories } from '../ports/persistence.js';
 import { dailyOccurrences, nextRunAt } from '../scheduler.js';
+import { sourceTargetIdsForWatch } from '../sourceIdentity.js';
 
 /**
  * Scheduler tick — the inbound scheduling port.
@@ -36,13 +37,24 @@ export async function schedulerTick(deps: { repos: Repositories; queue: JobQueue
     report.workspaces++;
     const last = (await deps.repos.cursors.get(ws.id, CURSOR)) ?? new Date(Date.parse(now) - FIRST_LOOKBACK_MS).toISOString();
     if (last >= now) continue;
-    const enqueue = async (kind: 'monitor.watch' | 'brief.compose', key: string, at: string, payload: Record<string, unknown>) => {
+    const enqueue = async (kind: 'source.check' | 'monitor.watch' | 'brief.compose', key: string, at: string, payload: Record<string, unknown>) => {
       const added = await deps.queue.enqueue({ kind, workspaceId: ws.id, payload, runAt: at, idempotencyKey: `${ws.id}:${key}` });
       if (added) report.enqueued++;
       else report.duplicates++;
     };
+    const targets = await deps.repos.sourceTargets.list(ws.id);
+    for (const target of targets.filter((item) => item.status === 'active' && item.checkIntervalMinutes && item.organizationId === ws.organizationId)) {
+      const state = await deps.repos.sourceStates.get(ws.id, target.id);
+      if (state?.nextCheckAt && state.nextCheckAt > now) continue;
+      const intervalMs = target.checkIntervalMinutes! * 60_000;
+      const slot = new Date(Math.floor(Date.parse(now) / intervalMs) * intervalMs).toISOString();
+      await enqueue('source.check', `source-check:${target.id}:${slot}`, now, { organizationId: ws.organizationId, sourceTargetId: target.id });
+    }
     for (const w of await deps.repos.watches.list(ws.id)) {
       if (w.status !== 'active') continue;
+      const watchTargets = targets.filter((target) => sourceTargetIdsForWatch(w, targets).includes(target.id));
+      // Sentry-only target-backed watches are triggered by shared source observations, not one provider read per watch.
+      if (watchTargets.length && watchTargets.every((target) => target.checkIntervalMinutes)) continue;
       const due: string[] = [];
       for (let t = nextRunAt(w, last, w.createdAt); t && t <= now; t = nextRunAt(w, t, w.createdAt)) {
         due.push(t);

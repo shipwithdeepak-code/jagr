@@ -49,6 +49,59 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       await expect(repos.connections.save('ws-b', connection('ws-a'))).rejects.toBeInstanceOf(WriteConflict);
     });
 
+    it('source targets, source state and normalized events enforce tenant scope and event dedupe', async () => {
+      const { repos } = await make();
+      const at = '2026-09-24T08:00:00.000Z';
+      await repos.organizations.create({ id: 'org-a', name: 'A', createdAt: at });
+      await repos.organizations.create({ id: 'org-b', name: 'B', createdAt: at });
+      await repos.workspaces.create(workspaceFixture('ws-a', { organizationId: 'org-a' }));
+      await repos.workspaces.create(workspaceFixture('ws-b', { organizationId: 'org-b' }));
+      await repos.connections.save('ws-a', connection('ws-a'));
+      const target = { id: 'target-a', organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-1', provider: 'github', externalId: 'acme/repo', displayName: 'acme/repo', configuration: {}, status: 'active' as const, createdAt: at, updatedAt: at };
+      await repos.sourceTargets.save('ws-a', target);
+      await repos.connections.save('ws-b', connection('ws-b'));
+      const otherTarget = { ...target, id: 'target-b', organizationId: 'org-b', workspaceId: 'ws-b', connectionId: 'conn-1', externalId: 'other/repo' };
+      await repos.sourceTargets.save('ws-b', otherTarget);
+      expect(await repos.sourceTargets.get('ws-b', target.id)).toBeNull();
+      await repos.sourceStates.save('ws-a', { organizationId: 'org-a', workspaceId: 'ws-a', sourceTargetId: target.id, provider: 'github', status: 'unchanged', version: 1, updatedAt: at });
+      await expect(repos.sourceStates.save('ws-b', { organizationId: 'org-b', workspaceId: 'ws-b', sourceTargetId: target.id, provider: 'github', status: 'unchanged', version: 1, updatedAt: at })).rejects.toThrow('Source target');
+      const event = { eventId: 'evt-1', schemaVersion: 1 as const, organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-1', sourceTargetId: target.id, provider: 'github', type: 'release', occurredAt: at, observedAt: at, dedupeKey: 'release:1', provenance: { externalId: '1' } };
+      expect(await repos.events.add('ws-a', event)).toBe(true);
+      expect(await repos.events.add('ws-a', event)).toBe(false);
+      const scope = { organizationId: 'org-a', workspaceId: 'ws-a' };
+      expect(await repos.events.get(scope, event.eventId)).toEqual(event);
+      expect(await repos.events.get({ organizationId: 'org-b', workspaceId: 'ws-b' }, event.eventId)).toBeNull();
+      expect(await repos.events.get({ organizationId: 'org-b', workspaceId: 'ws-a' }, event.eventId)).toBeNull();
+      await expect(repos.events.add('ws-b', { ...event, workspaceId: 'ws-b', organizationId: 'org-b' })).rejects.toThrow('Source target');
+      expect(await repos.events.list(scope, { sourceTargetId: target.id })).toEqual([event]);
+      expect(await repos.events.list({ organizationId: 'org-b', workspaceId: 'ws-b' })).toEqual([]);
+      const localWatch = { ...watchFromTemplate('local', 'github_changes'), sourceTargetIds: [target.id] };
+      await expect(repos.watches.save('ws-a', localWatch)).resolves.toBeUndefined();
+      await expect(repos.watches.save('ws-a', { ...localWatch, id: 'foreign', sourceTargetIds: [otherTarget.id] })).rejects.toThrow('Source target');
+    });
+
+    it('normalized event reads are bounded, ordered, filterable, and tied to a watch cadence slot', async () => {
+      const { repos } = await make();
+      const at = '2026-09-24T08:00:00.000Z';
+      await repos.organizations.create({ id: 'org-a', name: 'A', createdAt: at });
+      await repos.workspaces.create(workspaceFixture('ws-a', { organizationId: 'org-a' }));
+      await repos.connections.save('ws-a', connection('ws-a'));
+      const target = { id: 'target-a', organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-1', provider: 'github', externalId: 'acme/repo', displayName: 'acme/repo', configuration: {}, status: 'active' as const, createdAt: at, updatedAt: at };
+      await repos.sourceTargets.save('ws-a', target);
+      const scope = { organizationId: 'org-a', workspaceId: 'ws-a' };
+      const slot = '2026-09-24T09:00:00.000Z';
+      for (let i = 104; i >= 0; i--) {
+        const occurredAt = new Date(Date.parse(at) + i * 1000).toISOString();
+        const event = { eventId: `evt-${String(i).padStart(3, '0')}`, schemaVersion: 1 as const, organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-1', sourceTargetId: target.id, provider: 'github', type: i % 2 ? 'release' : 'issue', occurredAt, observedAt: at, dedupeKey: `event:${i}`, provenance: { externalId: String(i) } };
+        await repos.events.add('ws-a', event);
+        await repos.cursors.set('ws-a', `source-event:${event.eventId}:watch:w1`, slot);
+      }
+      expect((await repos.events.list(scope)).map((event) => event.eventId)).toHaveLength(100);
+      expect((await repos.events.list(scope, { type: 'release', limit: 2 })).map((event) => event.eventId)).toEqual(['evt-001', 'evt-003']);
+      expect((await repos.events.forWatchSlot(scope, 'w1', slot, 2)).map((event) => event.eventId)).toEqual(['evt-000', 'evt-001']);
+      expect(await repos.events.forWatchSlot({ organizationId: 'org-other', workspaceId: 'ws-a' }, 'w1', slot)).toEqual([]);
+    });
+
     it('returns copies: mutating a result never changes stored state', async () => {
       const { repos } = await make();
       await repos.workspaces.create(workspaceFixture('ws-a'));
@@ -100,11 +153,14 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       expect(await repos.locks.acquire('ws-a', 'run', 'A', until, t0)).toBe(true);
       expect(await repos.locks.acquire('ws-a', 'run', 'B', until, t0)).toBe(false);
       expect(await repos.locks.acquire('ws-b', 'run', 'B', until, t0)).toBe(true);
+      expect(await repos.locks.renew('ws-a', 'run', 'B', '2026-09-25T10:30:00.000Z', t0)).toBe(false);
+      expect(await repos.locks.renew('ws-a', 'run', 'A', '2026-09-25T10:30:00.000Z', t0)).toBe(true);
       expect(await repos.locks.acquire('ws-a', 'run', 'A', until, t0)).toBe(true);
       await repos.locks.release('ws-a', 'run', 'B');
       expect(await repos.locks.acquire('ws-a', 'run', 'B', until, t0)).toBe(false);
       // Expired: anyone may take it.
       expect(await repos.locks.acquire('ws-a', 'run', 'B', '2026-09-25T10:30:00.000Z', '2026-09-25T10:16:00.000Z')).toBe(true);
+      expect(await repos.locks.renew('ws-a', 'run', 'A', '2026-09-25T10:45:00.000Z', '2026-09-25T10:16:00.000Z')).toBe(false);
       await repos.locks.release('ws-a', 'run', 'B');
       expect(await repos.locks.acquire('ws-a', 'run', 'C', until, t0)).toBe(true);
     });
@@ -154,6 +210,7 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       const q = await make(clock);
       expect(await q.enqueue(spec('k1'))).toBe(true);
       expect(await q.enqueue(spec('k1'))).toBe(false);
+      expect(await q.inspect('k1')).toMatchObject({ state: 'queued', attempts: 0, createdAt: '2026-09-24T08:00:00.000Z' });
       expect(await q.claim({ workerId: 'w', limit: 10, leaseMs: 60_000 })).toHaveLength(1);
     });
 
@@ -173,13 +230,14 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       const q = await make(clock);
       await q.enqueue(spec('k'));
       const [first] = await q.claim({ workerId: 'w1', limit: 1, leaseMs: 60_000 });
+      expect(await q.inspect('k')).toMatchObject({ firstAttemptedAt: '2026-09-24T08:00:00.000Z', lastAttemptedAt: '2026-09-24T08:00:00.000Z' });
       clock.advance(61_000);
       const [second] = await q.claim({ workerId: 'w2', limit: 1, leaseMs: 60_000 });
       expect(second.id).toBe(first.id);
       expect(second.attempts).toBe(2);
       await expect(q.complete(first.id, first.leaseToken)).rejects.toBeInstanceOf(LeaseLost);
       await q.complete(second.id, second.leaseToken);
-      expect((await q.inspect('k'))?.state).toBe('done');
+      expect(await q.inspect('k')).toMatchObject({ state: 'done', completedAt: '2026-09-24T08:01:01.000Z' });
     });
 
     it('failures retry until attempts run out, then dead-letter with the error', async () => {
@@ -188,6 +246,7 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       await q.enqueue({ ...spec('k'), maxAttempts: 2 });
       const [a] = await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 });
       await q.fail(a.id, a.leaseToken, 'timeout', '2026-09-24T08:05:00.000Z');
+      expect(await q.inspect('k')).toMatchObject({ state: 'queued', runAt: '2026-09-24T08:05:00.000Z', lastFailedAt: '2026-09-24T08:00:00.000Z' });
       expect(await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 })).toEqual([]);
       clock.set('2026-09-24T08:05:00.000Z');
       const [b] = await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 });
@@ -222,26 +281,30 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
 
 export function secretStoreContract(name: string, make: () => Promise<SecretStore> | SecretStore) {
   describe(`SecretStore contract: ${name}`, () => {
+    const owner = { workspaceId: 'ws-a', connectionId: 'c1' };
     it('stores and returns a secret behind an opaque ref that does not contain it', async () => {
       const s = await make();
-      const ref = await s.put({ workspaceId: 'ws-a', connectionId: 'c1' }, { kind: 'api_key', fields: { apiKey: 'AK-123', secretKey: 'SK-456' } });
+      const ref = await s.put(owner, { kind: 'api_key', fields: { apiKey: 'AK-123', secretKey: 'SK-456' } });
       expect(String(ref)).not.toMatch(/AK-123|SK-456/);
-      expect(await s.get(ref)).toEqual({ secret: { kind: 'api_key', fields: { apiKey: 'AK-123', secretKey: 'SK-456' } }, version: 1 });
+      expect(await s.get(ref, owner)).toEqual({ secret: { kind: 'api_key', fields: { apiKey: 'AK-123', secretKey: 'SK-456' } }, version: 1 });
+      await expect(s.get(ref, { workspaceId: 'ws-b', connectionId: 'c1' })).rejects.toThrow('Secret not found');
+      await expect(s.get(ref, { workspaceId: 'ws-a', connectionId: 'c2' })).rejects.toThrow('Secret not found');
     });
 
     it('replace is compare-and-swap: two refreshes racing cannot both win', async () => {
       const s = await make();
-      const ref = await s.put({ workspaceId: 'ws-a', connectionId: 'c1' }, { kind: 'oauth', accessToken: 'a1', refreshToken: 'r1', scopes: [] });
-      await s.replace(ref, 1, { kind: 'oauth', accessToken: 'a2', refreshToken: 'r2', scopes: [] });
-      await expect(s.replace(ref, 1, { kind: 'oauth', accessToken: 'a3', refreshToken: 'r3', scopes: [] })).rejects.toBeInstanceOf(SecretVersionConflict);
-      expect((await s.get(ref)).secret).toMatchObject({ refreshToken: 'r2' });
+      const ref = await s.put(owner, { kind: 'oauth', accessToken: 'a1', refreshToken: 'r1', scopes: [] });
+      await s.replace(ref, owner, 1, { kind: 'oauth', accessToken: 'a2', refreshToken: 'r2', scopes: [] });
+      await expect(s.replace(ref, owner, 1, { kind: 'oauth', accessToken: 'a3', refreshToken: 'r3', scopes: [] })).rejects.toBeInstanceOf(SecretVersionConflict);
+      expect((await s.get(ref, owner)).secret).toMatchObject({ refreshToken: 'r2' });
     });
 
     it('delete removes it', async () => {
       const s = await make();
-      const ref = await s.put({ workspaceId: 'ws-a', connectionId: 'c1' }, { kind: 'app_installation', installationId: '42' });
-      await s.delete(ref);
-      await expect(s.get(ref)).rejects.toThrow();
+      const ref = await s.put(owner, { kind: 'app_installation', installationId: '42' });
+      await expect(s.delete(ref, { workspaceId: 'ws-b', connectionId: 'c1' })).rejects.toThrow('Secret not found');
+      await s.delete(ref, owner);
+      await expect(s.get(ref, owner)).rejects.toThrow();
     });
   });
 }

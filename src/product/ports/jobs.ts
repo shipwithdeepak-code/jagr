@@ -7,7 +7,7 @@
  * FOR UPDATE SKIP LOCKED (server/).
  */
 
-export type JobKind = 'monitor.watch' | 'sync.connection' | 'notify.deliver' | 'brief.compose';
+export type JobKind = 'source.check' | 'monitor.watch' | 'sync.connection' | 'notify.deliver' | 'brief.compose';
 
 export interface JobSpec {
   kind: JobKind;
@@ -30,6 +30,19 @@ export interface LeasedJob extends Required<Omit<JobSpec, 'maxAttempts' | 'runAt
 
 export type JobState = 'queued' | 'leased' | 'done' | 'dead';
 
+export interface JobStatus {
+  state: JobState;
+  attempts: number;
+  runAt: string;
+  createdAt: string;
+  firstAttemptedAt?: string;
+  lastAttemptedAt?: string;
+  completedAt?: string;
+  lastFailedAt?: string;
+  leaseUntil?: string;
+  lastError?: string;
+}
+
 export interface JobQueue {
   /** Returns false when a job with the same idempotency key already exists (in any state). */
   enqueue(job: JobSpec): Promise<boolean>;
@@ -40,7 +53,7 @@ export interface JobQueue {
   fail(jobId: string, leaseToken: string, error: string, retryAt?: string): Promise<void>;
   extend(jobId: string, leaseToken: string, leaseMs: number): Promise<void>;
   /** For operations and tests. */
-  inspect(idempotencyKey: string): Promise<{ state: JobState; attempts: number; lastError?: string } | null>;
+  inspect(idempotencyKey: string): Promise<JobStatus | null>;
 }
 
 export class LeaseLost extends Error {

@@ -21,6 +21,9 @@ import { alertMessage, briefMessage, deliver, type ChannelFactory } from './noti
 import { uniqueId } from './ids.js';
 import { runAuditDetail, WATCH_RUN_ACTION } from './workspaceSnapshot.js';
 import { LeaseLost } from '../ports/jobs.js';
+import type { EntitlementPolicy } from '../ports/entitlements.js';
+import type { SourceChecker } from '../ports/sourceCheck.js';
+import { runSourceCheckJob } from './sourceChecking.js';
 
 /**
  * Server-side monitoring — the same engine the browser runs, driven by the job queue and persisted
@@ -35,6 +38,7 @@ export type ConnectorFactory = (conn: Connection, ctx: { secret?: SecretPayload;
 export interface Connector {
   build: ConnectorFactory;
   check(conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }): Promise<ConnectorCheck>;
+  sourceChecker?(conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }): SourceChecker;
 }
 
 export interface MonitoringDeps {
@@ -48,6 +52,7 @@ export interface MonitoringDeps {
   appBaseUrl?: string;
   /** Outbound notification channels, per provider (e.g. a chat tool). Connected workspaces only. */
   channels?: Record<string, ChannelFactory>;
+  entitlements?: EntitlementPolicy;
 }
 
 const toSourceConnection = (c: Connection): SourceConnection => ({ provider: c.source, state: c.state, detail: c.detail, updatedAt: c.updatedAt, label: c.label, freshAsOf: c.freshAsOf });
@@ -88,7 +93,7 @@ export async function sourcesForRun(deps: MonitoringDeps, ws: Workspace, at: str
     // A connection that cannot be set up (missing credential, invalid config) is a gap for this run —
     // one broken connection never stops the others.
     try {
-      const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
+      const secret = c.secretRef ? (await deps.secrets.get(c.secretRef, { workspaceId: ws.id, connectionId: c.id })).secret : undefined;
       const src = connector.build(c, { secret, http: deps.http, clock: deps.clock });
       sources.push(src);
       connections.push(src.connection);
@@ -103,7 +108,8 @@ export async function sourcesForRun(deps: MonitoringDeps, ws: Workspace, at: str
 }
 
 /** The AI planner, only for workspaces that allow evidence to be sent to an AI provider. */
-const plannerFor = (deps: MonitoringDeps, ws: Workspace) => (ws.settings.aiEgressAllowed ? deps.planner : undefined);
+const plannerFor = async (deps: MonitoringDeps, ws: Workspace) =>
+  ws.settings.aiEgressAllowed && deps.planner && (!deps.entitlements || (await deps.entitlements.canUsePlanner({ organizationId: ws.organizationId, workspaceId: ws.id }))) ? deps.planner : undefined;
 
 export interface RunSummary {
   workspaceId: string;
@@ -141,6 +147,32 @@ export class WorkspaceBusy extends Error {
 /** A run lock outlives any single run; a crashed run's lock expires on its own. */
 export const RUN_LOCK_MS = 15 * 60_000;
 
+/** Runs one non-overlapping heartbeat at a time and waits for an in-flight beat when stopped. */
+function heartbeat(everyMs: number, beat: () => Promise<void>) {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let current: Promise<void> | undefined;
+  let error: unknown;
+  const schedule = () => {
+    timer = setTimeout(() => {
+      if (stopped) return;
+      current = beat().catch((e) => {
+        error = e;
+      }).finally(() => {
+        current = undefined;
+        if (!stopped) schedule();
+      });
+    }, everyMs);
+  };
+  schedule();
+  return async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await current;
+    if (error) throw error;
+  };
+}
+
 /**
  * One monitoring run per workspace at a time. Runs read the stored investigations and write them back
  * whole, so two concurrent runs (a scheduled job and a "run now", or two workers) would lose a pass.
@@ -149,11 +181,27 @@ async function withRunLock<T>(deps: MonitoringDeps, workspaceId: string, fn: () 
   const now = deps.clock.now();
   const owner = uniqueId('run', now);
   if (!(await deps.repos.locks.acquire(workspaceId, 'run', owner, new Date(Date.parse(now) + RUN_LOCK_MS).toISOString(), now))) throw new WorkspaceBusy();
+  let renewalError: Error | undefined;
+  const stopRenewing = heartbeat(Math.floor(RUN_LOCK_MS / 3), async () => {
+    const at = deps.clock.now();
+    try {
+      if (!(await deps.repos.locks.renew(workspaceId, 'run', owner, new Date(Date.parse(at) + RUN_LOCK_MS).toISOString(), at))) renewalError = new Error('The workspace run lock was lost.');
+    } catch (e) {
+      renewalError = e as Error;
+    }
+  });
+  let result: T;
   try {
-    return await fn();
+    result = await fn();
   } finally {
-    await deps.repos.locks.release(workspaceId, 'run', owner);
+    try {
+      await stopRenewing();
+    } finally {
+      await deps.repos.locks.release(workspaceId, 'run', owner);
+    }
   }
+  if (renewalError) throw renewalError;
+  return result;
 }
 
 /** A scheduled watch run (job kind 'monitor.watch'): continue the workspace's investigations at the job's due time. */
@@ -168,9 +216,12 @@ async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'wor
   const at = String(job.payload.dueAt);
   const watches = await deps.repos.watches.list(ws.id);
   if (!watches.some((w) => w.id === watchId && w.status === 'active')) return { workspaceId: ws.id, investigations: 0, touched: [], notifications: 0 };
+  const normalizedEvents = ws.organizationId
+    ? await deps.repos.events.forWatchSlot({ organizationId: ws.organizationId, workspaceId: ws.id }, watchId, at)
+    : [];
   const { registry, world, connections } = await sourcesForRun(deps, ws, at);
   const scheduled: ScheduledJob = { id: `run:${watchId}:${at}`, type: 'watch_run', at, watchId };
-  const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
+  const r = await runMonitoring({ world, registry, watches, connections, brief: ws.brief, window: { start: at, end: at }, jobs: [scheduled], investigations: await deps.repos.investigations.list(ws.id), normalizedEvents, planner: await plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
   const summary = await persistRun(deps, ws, r, WATCH_RUN_ACTION, at, watchId);
   // Alerts the engine decided to send go to the workspace's outbound channels (after the run is saved).
   const alerts = r.emails.filter((e) => e.kind === 'alert').map((e) => alertMessage(ws.id, e, r.investigations.find((i) => i.id === e.investigationId), deps.appBaseUrl));
@@ -194,7 +245,7 @@ async function runWorkspaceNowLocked(deps: MonitoringDeps, workspaceId: string):
   const stored = await deps.repos.watches.list(ws.id);
   const watches = ws.mode === 'imported' ? watchesForImportedData(stored, connections) : stored;
   const brief = ws.mode === 'imported' ? { ...ws.brief, time: world.end.slice(11, 16), timezone: 'UTC' } : ws.brief;
-  const r = await runMonitoring({ world, registry, watches, connections, brief, planner: plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
+  const r = await runMonitoring({ world, registry, watches, connections, brief, planner: await plannerFor(deps, ws), appBaseUrl: deps.appBaseUrl });
   return persistRun(deps, ws, r, 'monitor.run_now', at);
 }
 
@@ -238,6 +289,50 @@ export async function composeBriefJob(deps: MonitoringDeps, job: Pick<LeasedJob,
   // Sample and imported data are never sent to outbound channels.
   const decided = Object.fromEntries(decisions.map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
   if (ws.mode === 'connected') await deliver(deps, ws, [briefMessage(ws.id, brief, { investigations, watches, decisions: decided, appBaseUrl: deps.appBaseUrl })]);
+}
+
+export type WorkerResult =
+  | { state: 'idle' }
+  | { state: 'completed' | 'retrying' | 'dead' | 'lease_lost'; jobId: string; idempotencyKey: string; kind: LeasedJob['kind']; attempts: number };
+
+/** Claims and executes exactly one durable unit of work, renewing its lease until execution returns. */
+export async function runOneJob(deps: MonitoringDeps & { queue: JobQueue }, opts: { workerId: string; leaseMs: number }): Promise<WorkerResult> {
+  const [job] = await deps.queue.claim({ workerId: opts.workerId, limit: 1, leaseMs: opts.leaseMs });
+  if (!job) return { state: 'idle' };
+  let leaseLost = false;
+  const stopRenewing = heartbeat(Math.max(1, Math.floor(opts.leaseMs / 3)), async () => {
+    try {
+      await deps.queue.extend(job.id, job.leaseToken, opts.leaseMs);
+    } catch (e) {
+      if (e instanceof LeaseLost) leaseLost = true;
+      else throw e;
+    }
+  });
+  let error: Error | undefined;
+  try {
+    if (job.kind === 'source.check') await runSourceCheckJob(deps, job);
+    else if (job.kind === 'monitor.watch') await runWatchJob(deps, job);
+    else if (job.kind === 'brief.compose') await composeBriefJob(deps, job);
+    else throw new Error(`No handler for job kind ${job.kind}.`);
+  } catch (e) {
+    error = e as Error;
+  } finally {
+    await stopRenewing();
+  }
+  if (leaseLost) return { state: 'lease_lost', jobId: job.id, idempotencyKey: job.idempotencyKey, kind: job.kind, attempts: job.attempts };
+  try {
+    if (!error) {
+      await deps.queue.complete(job.id, job.leaseToken);
+      return { state: 'completed', jobId: job.id, idempotencyKey: job.idempotencyKey, kind: job.kind, attempts: job.attempts };
+    }
+    const backoff = error instanceof WorkspaceBusy ? 60_000 : Math.min(60, 2 ** job.attempts) * 60_000;
+    await deps.queue.fail(job.id, job.leaseToken, error.message.slice(0, 500), new Date(Date.parse(deps.clock.now()) + backoff).toISOString());
+    const status = await deps.queue.inspect(job.idempotencyKey);
+    return { state: status?.state === 'dead' ? 'dead' : 'retrying', jobId: job.id, idempotencyKey: job.idempotencyKey, kind: job.kind, attempts: job.attempts };
+  } catch (e) {
+    if (e instanceof LeaseLost) return { state: 'lease_lost', jobId: job.id, idempotencyKey: job.idempotencyKey, kind: job.kind, attempts: job.attempts };
+    throw e;
+  }
 }
 
 /** Work through due jobs until the budget runs out. Failures retry with backoff, then dead-letter. */
@@ -294,7 +389,7 @@ export async function checkConnection(deps: MonitoringDeps, workspaceId: string,
   if (!connector && !channel) return { state: 'error', detail: `No connector for “${c.provider}” in this deployment.` };
   let result: ConnectorCheck;
   try {
-    const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
+    const secret = c.secretRef ? (await deps.secrets.get(c.secretRef, { workspaceId, connectionId: c.id })).secret : undefined;
     if (connector) result = await connector.check(c, { secret, http: deps.http, clock: deps.clock });
     else {
       // An outbound channel: verify its credential without sending anything (delivery outcomes are in the delivery log).

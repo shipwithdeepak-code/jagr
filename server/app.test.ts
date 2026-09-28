@@ -12,6 +12,7 @@ import { createRuntime, type Runtime } from './runtime';
 import { createApp } from './app';
 import type { ApiRequest, ApiResponse } from './http/types';
 import { hashToken } from './auth';
+import { permissiveEntitlements, type EntitlementPolicy } from '../src/product/ports/entitlements';
 
 /**
  * The API end to end, on real Postgres (PGlite) with a fake identity provider standing in for
@@ -39,11 +40,11 @@ const PEOPLE: Record<string, VerifiedIdentity> = {
   'code-imposter': { provider: 'fake', subject: 'other-3', email: 'ana@example.com', emailVerified: false, displayName: 'Imposter' },
 };
 
-async function setup(extraEnv: Record<string, string> = {}) {
+async function setup(extraEnv: Record<string, string> = {}, entitlements?: EntitlementPolicy) {
   const clock = manualClock('2026-09-25T10:00:00.000Z');
   const rt = await createRuntime(
     { JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), CRON_SECRET: 'cron-secret', JAGR_APP_URL: 'https://jagr.test', ...extraEnv },
-    { sql: await freshPglite(), clock, identity: { fake: fakeIdp(PEOPLE) } },
+    { sql: await freshPglite(), clock, identity: { fake: fakeIdp(PEOPLE) }, entitlements },
   );
   const app = createApp(rt);
   return { rt, app, clock };
@@ -124,6 +125,16 @@ describe('auth', () => {
   });
 });
 
+describe('central entitlement policy', () => {
+  it('is invoked at the server boundary while the default validation policy stays permissive', async () => {
+    const canCreateWorkspace = vi.fn(async () => false);
+    const { app } = await setup({}, { ...permissiveEntitlements, canCreateWorkspace });
+    const session = await signIn(app, 'code-ana');
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'Blocked' }))).status).toBe(403);
+    expect(canCreateWorkspace).toHaveBeenCalledWith(expect.objectContaining({ userId: expect.any(String), organizationId: expect.any(String) }));
+  });
+});
+
 describe('local → server workspace migration', () => {
   it('dry run → report; commit needs confirmation; a second import is refused', async () => {
     const { app, rt } = await setup();
@@ -163,6 +174,22 @@ describe('workspace isolation and approvals', () => {
     expect((await app(req('POST', `/api/workspaces/${id}/decisions`, ben, { actionId: 'x', status: 'approved' }))).status).toBe(404);
   });
 
+  it('normalized event reads require principal, organization, and workspace authorization', async () => {
+    const { app, rt } = await setup();
+    const ana = await signIn(app, 'code-ana');
+    const ben = await signIn(app, 'code-ben');
+    const created = (await app(req('POST', '/api/workspaces', ana, { name: 'Acme', mode: 'connected' }))).body as { workspace: { id: string; organizationId: string } };
+    const { id, organizationId } = created.workspace;
+    await rt.repos.connections.save(id, { id: 'conn', workspaceId: id, source: 'github', provider: 'github', roles: ['changes'], authKind: 'app_install', state: 'connected', detail: 'Acme', config: {}, updatedAt: rt.clock.now() });
+    await rt.repos.sourceTargets.save(id, { id: 'target', organizationId, workspaceId: id, connectionId: 'conn', provider: 'github', externalId: 'acme/repo', displayName: 'Acme', configuration: {}, status: 'active', createdAt: rt.clock.now(), updatedAt: rt.clock.now() });
+    await rt.repos.events.add(id, { eventId: 'evt-safe', schemaVersion: 1, organizationId, workspaceId: id, connectionId: 'conn', sourceTargetId: 'target', provider: 'github', type: 'release', occurredAt: rt.clock.now(), observedAt: rt.clock.now(), dedupeKey: 'release:1', provenance: { externalId: '1' } });
+
+    expect((await app(req('GET', `/api/workspaces/${id}/events/evt-safe`, ana))).body).toMatchObject({ event: { eventId: 'evt-safe' } });
+    expect((await app(req('GET', `/api/workspaces/${id}/events/missing`, ana))).status).toBe(404);
+    expect((await app(req('GET', `/api/workspaces/${id}/events/evt-safe`, ben))).status).toBe(404);
+    expect((await app(req('GET', `/api/workspaces/${id}/events/evt-safe`))).status).toBe(401);
+  });
+
   it('HIGH-risk approvals are enforced on the server — and recorded with who decided', async () => {
     const { app, rt } = await setup();
     const ana = await signIn(app, 'code-ana');
@@ -199,7 +226,7 @@ describe('server-side monitoring', () => {
     expect((await rt.repos.audit.list(id)).some((e) => e.action === 'monitor.run_now')).toBe(true);
   });
 
-  it('cron: refuses without the secret; ticks the scheduler and drains the queue for connected workspaces', async () => {
+  it('cron: tick only schedules; worker executes exactly one authenticated job', async () => {
     const { app, rt, clock } = await setup();
     expect((await app(req('GET', '/api/cron/tick'))).status).toBe(401);
     const s = await signIn(app, 'code-ana');
@@ -211,10 +238,30 @@ describe('server-side monitoring', () => {
     clock.set('2026-09-25T10:15:00.000Z');
     const r = await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ tick: { enqueued: 1 }, run: { done: 1, failed: 0 } });
+    expect(r.body).toEqual({ tick: expect.objectContaining({ enqueued: 1 }) });
+    expect(await rt.queue.inspect(`${id}:run:w-checkout:2026-09-25T10:15:00.000Z`)).toMatchObject({ state: 'queued', attempts: 0 });
+    expect((await app(req('POST', '/api/cron/worker'))).status).toBe(401);
+    const worked = await app(req('POST', '/api/cron/worker', undefined, undefined, cron));
+    expect(worked.body).toMatchObject({ worker: { state: 'completed', attempts: 1 } });
+    await app(req('POST', '/api/cron/worker', undefined, undefined, cron));
     expect(await rt.queue.inspect(`${id}:run:w-checkout:2026-09-25T10:15:00.000Z`)).toMatchObject({ state: 'done' });
     // No connectors registered → no sources → nothing investigated, and nothing fabricated.
     expect(await rt.repos.investigations.list(id)).toEqual([]);
+  });
+
+  it('one worker request executes exactly one of two queued jobs', async () => {
+    const { app, rt } = await setup();
+    const s = await signIn(app, 'code-ana');
+    const created = (await app(req('POST', '/api/workspaces', s, { name: 'Acme', mode: 'connected' }))).body as { workspace: { id: string } };
+    const id = created.workspace.id;
+    await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId: 'missing-a', dueAt: '2026-09-25T09:58:00.000Z' }, runAt: '2026-09-25T09:58:00.000Z', idempotencyKey: 'job-a' });
+    await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId: 'missing-b', dueAt: '2026-09-25T09:59:00.000Z' }, runAt: '2026-09-25T09:59:00.000Z', idempotencyKey: 'job-b' });
+
+    const worked = await app(req('POST', '/api/cron/worker', undefined, undefined, { authorization: 'Bearer cron-secret' }));
+
+    expect(worked.body).toMatchObject({ worker: { state: 'completed', idempotencyKey: 'job-a' } });
+    expect(await rt.queue.inspect('job-a')).toMatchObject({ state: 'done', attempts: 1 });
+    expect(await rt.queue.inspect('job-b')).toMatchObject({ state: 'queued', attempts: 0 });
   });
 });
 

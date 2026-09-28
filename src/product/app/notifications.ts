@@ -116,7 +116,7 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
     let built: ReturnType<ChannelFactory> | undefined;
     let setupError: string | undefined;
     try {
-      const secret = c.secretRef ? (await deps.secrets.get(c.secretRef)).secret : undefined;
+      const secret = c.secretRef ? (await deps.secrets.get(c.secretRef, { workspaceId: ws.id, connectionId: c.id })).secret : undefined;
       built = deps.channels[c.provider](c, { secret, http: deps.http, clock: deps.clock });
     } catch (e) {
       setupError = (e as Error).message.slice(0, 200);

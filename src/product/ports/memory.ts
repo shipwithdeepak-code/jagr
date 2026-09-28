@@ -1,12 +1,13 @@
 import type { Clock } from './clock';
 import type { JobQueue, JobSpec, JobState, LeasedJob } from './jobs';
 import { LeaseLost } from './jobs';
-import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Repositories, Session, Transactor, User, Workspace } from './persistence';
-import { WriteConflict } from './persistence';
+import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Organization, OrganizationMembership, Repositories, Session, SourceState, SourceTarget, Transactor, User, Workspace } from './persistence';
+import { NORMALIZED_EVENT_READ_LIMIT, NotFound, WriteConflict } from './persistence';
 import type { SecretPayload, SecretRef, SecretStore } from './secrets';
 import { SecretNotFound, SecretVersionConflict } from './secrets';
 import type { MorningBriefDoc, Watch, WatchInvestigation } from '../types';
 import type { ImportedDataset } from '../imports/schemas';
+import type { NormalizedEvent } from '../events';
 
 /**
  * In-memory implementations of the ports. Pure TypeScript, no I/O: used by tests, by the contract
@@ -18,6 +19,9 @@ const clone = <T>(x: T): T => (x === undefined ? x : (JSON.parse(JSON.stringify(
 
 interface WsData {
   connections: Map<string, Connection>;
+  sourceTargets: Map<string, SourceTarget>;
+  sourceStates: Map<string, SourceState>;
+  events: Map<string, NormalizedEvent>;
   metricDefs: Map<string, MetricDefinitionRecord>;
   watches: Map<string, Watch>;
   imports: Map<string, ImportedDataset>;
@@ -31,6 +35,8 @@ interface WsData {
 }
 
 interface State {
+  organizations: Map<string, Organization>;
+  organizationMembers: OrganizationMembership[];
   workspaces: Map<string, Workspace>;
   users: Map<string, User>;
   identities: Map<string, string>;
@@ -39,14 +45,17 @@ interface State {
   data: Map<string, WsData>;
 }
 
-const emptyWs = (): WsData => ({ connections: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), locks: new Map(), cursors: new Map(), audit: [] });
-const emptyState = (): State => ({ workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), data: new Map() });
+const emptyWs = (): WsData => ({ connections: new Map(), sourceTargets: new Map(), sourceStates: new Map(), events: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), locks: new Map(), cursors: new Map(), audit: [] });
+const emptyState = (): State => ({ organizations: new Map(), organizationMembers: [], workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), data: new Map() });
 
 function copyState(s: State): State {
   const ws = new Map<string, WsData>();
   for (const [k, d] of s.data) {
     ws.set(k, {
       connections: new Map(clone([...d.connections])),
+      sourceTargets: new Map(clone([...d.sourceTargets])),
+      sourceStates: new Map(clone([...d.sourceStates])),
+      events: new Map(clone([...d.events])),
       metricDefs: new Map(clone([...d.metricDefs])),
       watches: new Map(clone([...d.watches])),
       imports: new Map(clone([...d.imports])),
@@ -59,7 +68,7 @@ function copyState(s: State): State {
       audit: clone(d.audit),
     });
   }
-  return { workspaces: new Map(clone([...s.workspaces])), users: new Map(clone([...s.users])), identities: new Map(s.identities), members: clone(s.members), sessions: new Map(clone([...s.sessions])), data: ws };
+  return { organizations: new Map(clone([...s.organizations])), organizationMembers: clone(s.organizationMembers), workspaces: new Map(clone([...s.workspaces])), users: new Map(clone([...s.users])), identities: new Map(s.identities), members: clone(s.members), sessions: new Map(clone([...s.sessions])), data: ws };
 }
 
 export function createMemoryPersistence(): { repos: Repositories; tx: Transactor } {
@@ -72,6 +81,20 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
   const values = <T>(m: Map<string, T>) => clone([...m.values()]);
 
   const repos: Repositories = {
+    organizations: {
+      get: async (id) => clone(state.organizations.get(id) ?? null),
+      create: async (o) => {
+        if (state.organizations.has(o.id)) throw new WriteConflict(`Organization ${o.id}`);
+        state.organizations.set(o.id, clone(o));
+      },
+    },
+    organizationMembers: {
+      forUser: async (userId) => clone(state.organizationMembers.filter((m) => m.userId === userId)),
+      get: async (organizationId, userId) => clone(state.organizationMembers.find((m) => m.organizationId === organizationId && m.userId === userId) ?? null),
+      add: async (m) => {
+        state.organizationMembers = [...state.organizationMembers.filter((x) => !(x.organizationId === m.organizationId && x.userId === m.userId)), clone(m)];
+      },
+    },
     workspaces: {
       get: async (id) => clone(state.workspaces.get(id) ?? null),
       list: async () => values(state.workspaces),
@@ -103,6 +126,12 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
       forWorkspace: async (workspaceId) => clone(state.members.filter((m) => m.workspaceId === workspaceId)),
       add: async (m) => {
         state.members = [...state.members.filter((x) => !(x.userId === m.userId && x.workspaceId === m.workspaceId)), clone(m)];
+        const organizationId = state.workspaces.get(m.workspaceId)?.organizationId;
+        if (organizationId) {
+          const role = m.role === 'owner' || m.role === 'admin' ? m.role : 'member';
+          const orgMember = { organizationId, userId: m.userId, role } as OrganizationMembership;
+          state.organizationMembers = [...state.organizationMembers.filter((x) => !(x.organizationId === organizationId && x.userId === m.userId)), orgMember];
+        }
       },
     },
     sessions: {
@@ -119,6 +148,58 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
       },
       remove: async (w, id) => void ws(w).connections.delete(id),
     },
+    sourceTargets: {
+      list: async (w) => values(ws(w).sourceTargets),
+      get: async (w, id) => clone(ws(w).sourceTargets.get(id) ?? null),
+      save: async (w, target) => {
+        const workspace = state.workspaces.get(w);
+        const connection = ws(w).connections.get(target.connectionId);
+        if (target.workspaceId !== w || !workspace?.organizationId || target.organizationId !== workspace.organizationId || connection?.workspaceId !== w) throw new WriteConflict('Source target scope');
+        ws(w).sourceTargets.set(target.id, clone(target));
+      },
+    },
+    sourceStates: {
+      get: async (w, id) => clone(ws(w).sourceStates.get(id) ?? null),
+      save: async (w, sourceState) => {
+        const target = ws(w).sourceTargets.get(sourceState.sourceTargetId);
+        if (!target || sourceState.workspaceId !== w || sourceState.organizationId !== target.organizationId || sourceState.provider !== target.provider) throw new NotFound('Source target');
+        ws(w).sourceStates.set(sourceState.sourceTargetId, clone(sourceState));
+      },
+    },
+    events: {
+      list: async (scope, query = {}) => {
+        const workspace = state.workspaces.get(scope.workspaceId);
+        if (!workspace || workspace.organizationId !== scope.organizationId) return [];
+        const limit = Math.max(1, Math.min(query.limit ?? NORMALIZED_EVENT_READ_LIMIT, NORMALIZED_EVENT_READ_LIMIT));
+        return values(new Map([...ws(scope.workspaceId).events].filter(([, event]) =>
+          event.organizationId === scope.organizationId &&
+          (!query.sourceTargetId || event.sourceTargetId === query.sourceTargetId) &&
+          (!query.type || event.type === query.type) &&
+          (!query.from || event.occurredAt >= query.from) &&
+          (!query.to || event.occurredAt <= query.to),
+        ))).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId)).slice(0, limit);
+      },
+      get: async (scope, id) => {
+        const workspace = state.workspaces.get(scope.workspaceId);
+        const event = workspace?.organizationId === scope.organizationId ? ws(scope.workspaceId).events.get(id) : undefined;
+        return event?.organizationId === scope.organizationId ? clone(event) : null;
+      },
+      forWatchSlot: async (scope, watchId, runAt, requestedLimit) => {
+        const workspace = state.workspaces.get(scope.workspaceId);
+        if (!workspace || workspace.organizationId !== scope.organizationId) return [];
+        const limit = Math.max(1, Math.min(requestedLimit ?? NORMALIZED_EVENT_READ_LIMIT, NORMALIZED_EVENT_READ_LIMIT));
+        return values(new Map([...ws(scope.workspaceId).events].filter(([, event]) =>
+          event.organizationId === scope.organizationId && ws(scope.workspaceId).cursors.get(`source-event:${event.eventId}:watch:${watchId}`) === runAt,
+        ))).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId)).slice(0, limit);
+      },
+      add: async (w, event) => {
+        const target = ws(w).sourceTargets.get(event.sourceTargetId);
+        if (!target || event.workspaceId !== w || event.organizationId !== target.organizationId || event.connectionId !== target.connectionId || event.provider !== target.provider) throw new NotFound('Source target');
+        if (ws(w).events.has(event.eventId)) return false;
+        ws(w).events.set(event.eventId, clone(event));
+        return true;
+      },
+    },
     metricDefs: {
       list: async (w) => values(ws(w).metricDefs),
       save: async (w, d) => void ws(w).metricDefs.set(d.key, clone(d)),
@@ -126,7 +207,14 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
     watches: {
       list: async (w) => values(ws(w).watches),
       get: async (w, id) => clone(ws(w).watches.get(id) ?? null),
-      save: async (w, x) => void ws(w).watches.set(x.id, clone(x)),
+      save: async (w, x) => {
+        const workspace = state.workspaces.get(w);
+        for (const id of x.sourceTargetIds ?? []) {
+          const target = ws(w).sourceTargets.get(id);
+          if (!target || target.workspaceId !== w || !workspace?.organizationId || target.organizationId !== workspace.organizationId) throw new NotFound('Source target');
+        }
+        ws(w).watches.set(x.id, clone(x));
+      },
       remove: async (w, id) => void ws(w).watches.delete(id),
     },
     imports: {
@@ -161,6 +249,12 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
       acquire: async (w, key, owner, until, now) => {
         const cur = ws(w).locks.get(key);
         if (cur && cur.until > now && cur.owner !== owner) return false;
+        ws(w).locks.set(key, { owner, until });
+        return true;
+      },
+      renew: async (w, key, owner, until, now) => {
+        const cur = ws(w).locks.get(key);
+        if (!cur || cur.owner !== owner || cur.until <= now) return false;
         ws(w).locks.set(key, { owner, until });
         return true;
       },
@@ -208,6 +302,11 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
 
 interface StoredJob extends LeasedJob {
   state: JobState;
+  createdAt: string;
+  firstAttemptedAt?: string;
+  lastAttemptedAt?: string;
+  completedAt?: string;
+  lastFailedAt?: string;
   lastError?: string;
 }
 
@@ -224,7 +323,7 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
   return {
     async enqueue(spec: JobSpec) {
       if (jobs.some((j) => j.idempotencyKey === spec.idempotencyKey)) return false;
-      jobs.push({ id: `job_${++seq}`, kind: spec.kind, workspaceId: spec.workspaceId, payload: clone(spec.payload), idempotencyKey: spec.idempotencyKey, runAt: spec.runAt ?? clock.now(), attempts: 0, maxAttempts: spec.maxAttempts ?? 5, leaseToken: '', leaseUntil: '', state: 'queued' });
+      jobs.push({ id: `job_${++seq}`, kind: spec.kind, workspaceId: spec.workspaceId, payload: clone(spec.payload), idempotencyKey: spec.idempotencyKey, runAt: spec.runAt ?? clock.now(), attempts: 0, maxAttempts: spec.maxAttempts ?? 5, leaseToken: '', leaseUntil: '', state: 'queued', createdAt: clock.now() });
       return true;
     },
     async claim({ workerId, kinds, limit, leaseMs }) {
@@ -236,20 +335,25 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
       return due.map((j) => {
         j.state = 'leased';
         j.attempts += 1;
+        j.firstAttemptedAt ??= now;
+        j.lastAttemptedAt = now;
         j.leaseToken = `${workerId}:${++seq}`;
         j.leaseUntil = plus(leaseMs);
-        const { state: _s, lastError: _e, ...out } = j;
+        const { state: _s, lastError: _e, createdAt: _c, firstAttemptedAt: _f, lastAttemptedAt: _a, completedAt: _d, lastFailedAt: _l, ...out } = j;
         void _s;
         void _e;
         return clone(out);
       });
     },
     async complete(id, token) {
-      leased(id, token).state = 'done';
+      const j = leased(id, token);
+      j.state = 'done';
+      j.completedAt = clock.now();
     },
     async fail(id, token, error, retryAt) {
       const j = leased(id, token);
       j.lastError = error;
+      j.lastFailedAt = clock.now();
       if (retryAt && j.attempts < j.maxAttempts) {
         j.state = 'queued';
         j.runAt = retryAt;
@@ -260,7 +364,7 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
     },
     async inspect(key) {
       const j = jobs.find((x) => x.idempotencyKey === key);
-      return j ? { state: j.state, attempts: j.attempts, lastError: j.lastError } : null;
+      return j ? { state: j.state, attempts: j.attempts, runAt: j.runAt, createdAt: j.createdAt, firstAttemptedAt: j.firstAttemptedAt, lastAttemptedAt: j.lastAttemptedAt, completedAt: j.completedAt, lastFailedAt: j.lastFailedAt, leaseUntil: j.leaseUntil || undefined, lastError: j.lastError } : null;
     },
   };
 }
@@ -278,18 +382,20 @@ export function createMemorySecretStore(): SecretStore {
       m.set(ref, { secret: clone(secret), version: 1, owner: `${owner.workspaceId}/${owner.connectionId}` });
       return ref;
     },
-    async get(ref) {
+    async get(ref, owner) {
       const e = m.get(ref);
-      if (!e) throw new SecretNotFound();
+      if (!e || e.owner !== `${owner.workspaceId}/${owner.connectionId}`) throw new SecretNotFound();
       return { secret: clone(e.secret), version: e.version };
     },
-    async replace(ref, expectedVersion, secret) {
+    async replace(ref, owner, expectedVersion, secret) {
       const e = m.get(ref);
-      if (!e) throw new SecretNotFound();
+      if (!e || e.owner !== `${owner.workspaceId}/${owner.connectionId}`) throw new SecretNotFound();
       if (e.version !== expectedVersion) throw new SecretVersionConflict();
       m.set(ref, { ...e, secret: clone(secret), version: e.version + 1 });
     },
-    async delete(ref) {
+    async delete(ref, owner) {
+      const e = m.get(ref);
+      if (!e || e.owner !== `${owner.workspaceId}/${owner.connectionId}`) throw new SecretNotFound();
       m.delete(ref);
     },
   };

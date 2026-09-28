@@ -91,7 +91,7 @@ export const serverApi = {
   createWorkspace: (name: string, mode: 'connected' | 'imported') => call<{ workspace: { id: string } }>('POST', '/api/workspaces', { name, mode }).then((r) => r.workspace.id),
   snapshot: (ws: string) => call<WorkspaceSnapshot>('GET', `/api/workspaces/${encodeURIComponent(ws)}/snapshot`),
   updateWorkspace: (ws: string, patch: { name?: string; brief?: BriefSchedule; planner?: 'deterministic' | 'llm'; aiEgressAllowed?: boolean }) => call('PATCH', `/api/workspaces/${encodeURIComponent(ws)}`, patch),
-  runNow: (ws: string) => call<{ investigations: number }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/runs`),
+  runNow: (ws: string) => call<{ investigations?: number; kind?: 'run_queued'; jobs?: { watchId: string; idempotencyKey: string; enqueued: boolean }[] }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/runs`),
   createWatch: (ws: string, input: WatchInput) => call<{ watch: Watch }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/watches`, input),
   setWatchStatus: (ws: string, id: string, status: 'active' | 'paused') => call('PATCH', `/api/workspaces/${encodeURIComponent(ws)}/watches/${encodeURIComponent(id)}`, { status }),
   decide: (ws: string, input: { actionId: string; status: ActionDecision['status']; optionId?: string; note?: string }) => call<{ decision: ActionDecision }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/decisions`, input),
@@ -101,7 +101,7 @@ export const serverApi = {
   /** The original investigation from storage (no provider is read). */
   replay: (ws: string, inv: string, pass?: number) => call<InvestigationReplay>('GET', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/replay${pass !== undefined ? `?pass=${pass}` : ''}`),
   /** A new run over current data (connected workspaces); the original investigation is kept as recorded. */
-  runAgain: (ws: string, inv: string) => call<{ kind: 'run_again'; investigations: number; note: string }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/rerun`),
+  runAgain: (ws: string, inv: string) => call<{ kind: 'run_again_queued'; jobs: { watchId: string; idempotencyKey: string; enqueued: boolean }[]; note: string }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/rerun`),
   connectionTypes: () => call<{ types: ConnectionTypeInfo[] }>('GET', '/api/connection-types').then((r) => r.types),
   connect: (ws: string, input: { provider: string; config: Record<string, unknown>; credential?: Record<string, string> }) => call<{ connection: ConnectionView; check: ConnectorCheck }>('PUT', `/api/workspaces/${encodeURIComponent(ws)}/connections`, input),
   testConnection: (ws: string, id: string) => call<{ connection: ConnectionView; check: ConnectorCheck }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/connections/${encodeURIComponent(id)}/check`),

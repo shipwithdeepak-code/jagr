@@ -1,6 +1,7 @@
 # Drives Jagr's scheduler from outside Vercel (Vercel Hobby allows a Cron Job at most once a day).
-# Every 15 minutes it only calls the existing endpoint: /api/cron/tick enqueues the watch runs and briefs that
-# fell due since the previous tick and drains the job queue. Missed watch slots are not replayed one by one:
+# Every 15 minutes it calls /api/cron/tick to enqueue due work, then makes at most 10 calls to
+# /api/cron/worker. Each worker request claims exactly one job. This is a bounded transitional runner,
+# not a precise scheduler: GitHub Actions schedules can start late or be skipped. Missed watch slots are not replayed one by one:
 # after a late or skipped trigger, only each watch's latest due slot is scheduled. GitHub change monitoring
 # reads the last 6 hours on every run, so changes made during a gap are still seen.
 #
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 15
     steps:
       - name: Call /api/cron/tick
         env:
@@ -35,7 +36,7 @@ jobs:
             echo "::notice::JAGR_APP_URL (variable) or CRON_SECRET (secret) is not set; skipping."
             exit 0
           fi
-          status=$(curl -sS -o body.json -w '%{http_code}' --max-time 90 \
+          status=$(curl -sS -o body.json -w '%{http_code}' --max-time 90 --request POST \
             -H "Authorization: Bearer $CRON_SECRET" "${JAGR_APP_URL%/}/api/cron/tick")
           # The response holds counts only (no workspace data, no secrets).
           cat body.json; echo
@@ -43,3 +44,23 @@ jobs:
             echo "::error::/api/cron/tick answered $status"
             exit 1
           fi
+      - name: Run up to 10 queued jobs
+        env:
+          JAGR_APP_URL: ${{ vars.JAGR_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$JAGR_APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            exit 0
+          fi
+          for attempt in $(seq 1 10); do
+            status=$(curl -sS -o worker.json -w '%{http_code}' --max-time 90 --request POST \
+              -H "Authorization: Bearer $CRON_SECRET" "${JAGR_APP_URL%/}/api/cron/worker")
+            cat worker.json; echo
+            if [ "$status" != "200" ]; then
+              echo "::error::/api/cron/worker answered $status"
+              exit 1
+            fi
+            if grep -q '"state":"idle"' worker.json; then
+              break
+            fi
+          done

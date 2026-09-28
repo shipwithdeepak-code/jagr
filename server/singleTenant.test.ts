@@ -107,7 +107,7 @@ describe('single-tenant bootstrap', () => {
     expect(leaks(await dumpAll(sql))).toEqual([]);
     // …but the store can decrypt them for a connector.
     const gh = conns.find((c) => c.source === 'github')!;
-    expect((await rt.secrets.get(gh.secretRef!)).secret).toEqual({ kind: 'api_key', fields: { token: SECRETS.JAGR_GITHUB_TOKEN } });
+    expect((await rt.secrets.get(gh.secretRef!, { workspaceId: OWNER_WORKSPACE_ID, connectionId: gh.id })).secret).toEqual({ kind: 'api_key', fields: { token: SECRETS.JAGR_GITHUB_TOKEN } });
     const audit = await rt.repos.audit.list(OWNER_WORKSPACE_ID);
     expect(audit.filter((a) => a.action === 'connection.owner_env.configured')).toHaveLength(5);
   });
@@ -128,7 +128,7 @@ describe('single-tenant bootstrap', () => {
     expect(second.rt.bootstrap).toMatchObject({ configured: [], rotated: ['intercom'], removed: ['slack'] });
     const ic = (await second.rt.repos.connections.get(OWNER_WORKSPACE_ID, 'owner-intercom'))!;
     expect(ic.secretRef).toBe(ref);
-    expect((await second.rt.secrets.get(ref)).secret).toEqual({ kind: 'api_key', fields: { token: 'intercom-token-rotated' } });
+    expect((await second.rt.secrets.get(ref, { workspaceId: OWNER_WORKSPACE_ID, connectionId: 'owner-intercom' })).secret).toEqual({ kind: 'api_key', fields: { token: 'intercom-token-rotated' } });
     const slack = (await second.rt.repos.connections.get(OWNER_WORKSPACE_ID, 'owner-slack'))!;
     expect(slack.state).toBe('not_configured');
     expect(slack.secretRef).toBeUndefined();

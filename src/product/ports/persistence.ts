@@ -2,6 +2,7 @@ import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification,
 import type { ImportedDataset } from '../imports/schemas.js';
 import type { Role } from '../roles/types.js';
 import type { SecretRef } from './secrets.js';
+import type { NormalizedEvent } from '../events.js';
 
 /**
  * Persistence port — the workspace's durable state, as domain records.
@@ -19,6 +20,8 @@ export interface Actor {
 
 export interface Workspace {
   id: string;
+  /** Commercial/security owner. Optional only while reading pre-Phase-0A documents. */
+  organizationId?: string;
   name: string;
   mode: 'imported' | 'sample' | 'connected';
   createdAt: ISO;
@@ -30,6 +33,18 @@ export interface Workspace {
   importedExportIds: string[];
   /** Optimistic concurrency. */
   version: number;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  createdAt: ISO;
+}
+
+export interface OrganizationMembership {
+  organizationId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member';
 }
 
 export interface User {
@@ -84,6 +99,43 @@ export interface Connection {
   updatedAt: ISO;
 }
 
+/** A stable monitored resource below a credential-bearing connection. */
+export interface SourceTarget {
+  id: string;
+  organizationId: string;
+  workspaceId: string;
+  connectionId: string;
+  provider: string;
+  externalId: string;
+  displayName: string;
+  configuration: Record<string, unknown>;
+  /** Neutral polling cadence; absent means this target is not source-check scheduled yet. */
+  checkIntervalMinutes?: number;
+  status: 'active' | 'paused' | 'disconnected';
+  createdAt: ISO;
+  updatedAt: ISO;
+}
+
+/** Durable observation progress belongs to a source target, never to a watch. */
+export interface SourceState {
+  organizationId: string;
+  workspaceId: string;
+  sourceTargetId: string;
+  provider: string;
+  status: 'scheduled' | 'unchanged' | 'changed' | 'provider_error' | 'auth_error' | 'rate_limited' | 'timeout' | 'invalid_target' | 'internal_error';
+  version: number;
+  lastCheckedAt?: ISO;
+  lastObservedAt?: ISO;
+  lastSuccessfulCheckAt?: ISO;
+  nextCheckAt?: ISO;
+  checkpoint?: string;
+  lastObservedVersion?: string;
+  lastObservedHash?: string;
+  lastChangeAt?: ISO;
+  lastError?: string;
+  updatedAt: ISO;
+}
+
 export interface MetricDefinitionRecord {
   key: string;
   name: string;
@@ -127,6 +179,15 @@ export interface AuditEntry {
 }
 
 export interface Repositories {
+  organizations: {
+    get(id: string): Promise<Organization | null>;
+    create(o: Organization): Promise<void>;
+  };
+  organizationMembers: {
+    forUser(userId: string): Promise<OrganizationMembership[]>;
+    get(organizationId: string, userId: string): Promise<OrganizationMembership | null>;
+    add(m: OrganizationMembership): Promise<void>;
+  };
   workspaces: {
     get(id: string): Promise<Workspace | null>;
     create(w: Workspace): Promise<void>;
@@ -153,6 +214,23 @@ export interface Repositories {
     get(workspaceId: string, id: string): Promise<Connection | null>;
     save(workspaceId: string, c: Connection): Promise<void>;
     remove(workspaceId: string, id: string): Promise<void>;
+  };
+  sourceTargets: {
+    list(workspaceId: string): Promise<SourceTarget[]>;
+    get(workspaceId: string, id: string): Promise<SourceTarget | null>;
+    save(workspaceId: string, target: SourceTarget): Promise<void>;
+  };
+  sourceStates: {
+    get(workspaceId: string, sourceTargetId: string): Promise<SourceState | null>;
+    save(workspaceId: string, state: SourceState): Promise<void>;
+  };
+  events: {
+    list(scope: EventReadScope, query?: NormalizedEventQuery): Promise<NormalizedEvent[]>;
+    get(scope: EventReadScope, eventId: string): Promise<NormalizedEvent | null>;
+    /** Events durably associated with one coalesced watch cadence slot. */
+    forWatchSlot(scope: EventReadScope, watchId: string, runAt: ISO, limit?: number): Promise<NormalizedEvent[]>;
+    /** False means this logical event was already durably recorded. */
+    add(workspaceId: string, event: NormalizedEvent): Promise<boolean>;
   };
   metricDefs: {
     list(workspaceId: string): Promise<MetricDefinitionRecord[]>;
@@ -193,6 +271,8 @@ export interface Repositories {
    */
   locks: {
     acquire(workspaceId: string, key: string, owner: string, until: ISO, now: ISO): Promise<boolean>;
+    /** Extends an unexpired lock only when `owner` still owns it. */
+    renew(workspaceId: string, key: string, owner: string, until: ISO, now: ISO): Promise<boolean>;
     release(workspaceId: string, key: string, owner: string): Promise<void>;
   };
   /** Morning briefs, as composed (the document a PM reads). Keyed by brief id; saving the same id replaces it. */
@@ -209,6 +289,21 @@ export interface Repositories {
     list(workspaceId: string): Promise<AuditEntry[]>;
   };
 }
+
+export interface EventReadScope {
+  organizationId: string;
+  workspaceId: string;
+}
+
+export interface NormalizedEventQuery {
+  sourceTargetId?: string;
+  type?: string;
+  from?: ISO;
+  to?: ISO;
+  limit?: number;
+}
+
+export const NORMALIZED_EVENT_READ_LIMIT = 100;
 
 /** Runs `fn` atomically: every write inside commits together or not at all. */
 export interface Transactor {

@@ -35,6 +35,7 @@ import { checkRolloutBeforeAction, runInvestigation, sourceDirectory } from '../
 import type { InvestigationPlanner } from '../agent/planner.js';
 import { proposeActions } from '../agent/actions.js';
 import { composeAlert, decideNotification } from './notify.js';
+import { normalizedEventRef, type NormalizedEvent } from '../events.js';
 
 /**
  * The monitoring loop:
@@ -66,6 +67,8 @@ export interface MonitorOptions {
    * notified levels all carry on). They are copied, never mutated in place.
    */
   investigations?: WatchInvestigation[];
+  /** Durable source events associated with the explicitly supplied watch job's cadence slot. */
+  normalizedEvents?: NormalizedEvent[];
   appBaseUrl?: string;
   recipient?: string;
   /**
@@ -74,6 +77,21 @@ export interface MonitorOptions {
    * A throwing listener never affects the run.
    */
   onEvent?: (e: RunEvent) => void;
+}
+
+function attachNormalizedEventContext(investigation: WatchInvestigation, events: NormalizedEvent[]) {
+  const refs = new Map((investigation.sourceEvents ?? []).map((ref) => [ref.eventId, ref]));
+  for (const event of events) refs.set(event.eventId, normalizedEventRef(event));
+  investigation.sourceEvents = [...refs.values()].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId));
+
+  for (const evidence of investigation.evidence) {
+    if (!evidence.provenance) continue;
+    const externalIds = new Set(evidence.provenance.records.map((record) => record.externalId));
+    const ids = events
+      .filter((event) => event.provider === evidence.provider && !!event.provenance.externalId && externalIds.has(event.provenance.externalId))
+      .map((event) => event.eventId);
+    if (ids.length) evidence.provenance.normalizedEventIds = [...new Set([...(evidence.provenance.normalizedEventIds ?? []), ...ids])].sort();
+  }
 }
 
 export type RunEvent =
@@ -620,6 +638,11 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
     }
 
     const opened = [...touched];
+    if (o.normalizedEvents?.length) {
+      for (const inv of investigations.filter((candidate) => opened.includes(candidate.id) || candidate.runs.some((run) => run.watchId === watch.id && run.at === at))) {
+        attachNormalizedEventContext(inv, o.normalizedEvents);
+      }
+    }
     log.push({
       jobId: job.id,
       type: 'watch_run',

@@ -55,4 +55,23 @@ describe('scheduler tick', () => {
     const r = await schedulerTick({ repos, queue, clock });
     expect(r.enqueued).toBe(1); // only the brief
   });
+
+  it('schedules one shared Sentry source check instead of one provider-backed run per watch', async () => {
+    const clock = manualClock('2026-09-24T08:00:00.000Z');
+    const { repos } = createMemoryPersistence();
+    const queue = createMemoryJobQueue(clock);
+    await repos.organizations.create({ id: 'org-a', name: 'Acme', createdAt: clock.now() });
+    await repos.workspaces.create(workspaceFixture('ws-a', { organizationId: 'org-a', brief: { enabled: false, time: '08:30', timezone: 'UTC' } }));
+    await repos.connections.save('ws-a', { id: 'conn-sentry', workspaceId: 'ws-a', source: 'sentry', provider: 'sentry', roles: ['metrics'], authKind: 'api_key', state: 'connected', detail: 'Sentry', config: {}, updatedAt: clock.now() });
+    await repos.sourceTargets.save('ws-a', { id: 'target-sentry', organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-sentry', provider: 'sentry', externalId: 'acme:42', displayName: 'Acme / 42', configuration: {}, checkIntervalMinutes: 15, status: 'active', createdAt: clock.now(), updatedAt: clock.now() });
+    for (const id of ['w1', 'w2']) {
+      const watch = watchFromTemplate(id, 'app_stability', { sources: ['sentry'], schedule: { frequency: '15m', dailyAt: '07:00' } }, '2026-09-24T07:00:00.000Z');
+      await repos.watches.save('ws-a', { ...watch, sourceTargetIds: ['target-sentry'] });
+    }
+    const report = await schedulerTick({ repos, queue, clock });
+    expect(report.enqueued).toBe(1);
+    expect(await queue.inspect('ws-a:source-check:target-sentry:2026-09-24T08:00:00.000Z')).toMatchObject({ state: 'queued' });
+    expect(await queue.inspect('ws-a:run:w1:2026-09-24T08:00:00.000Z')).toBeNull();
+    expect(await queue.inspect('ws-a:run:w2:2026-09-24T08:00:00.000Z')).toBeNull();
+  });
 });

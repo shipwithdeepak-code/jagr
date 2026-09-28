@@ -35,7 +35,7 @@ export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
   };
   return {
     async enqueue(spec) {
-      const r = await sql.query('insert into jobs (id, idempotency_key, kind, workspace_id, payload, run_at, max_attempts, state) values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) on conflict (idempotency_key) do nothing returning id', [
+      const r = await sql.query('insert into jobs (id, idempotency_key, kind, workspace_id, payload, run_at, max_attempts, state, created_at, updated_at) values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $9) on conflict (idempotency_key) do nothing returning id', [
         `job_${randomUUID()}`,
         spec.idempotencyKey,
         spec.kind,
@@ -44,6 +44,7 @@ export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
         spec.runAt ?? clock.now(),
         spec.maxAttempts ?? 5,
         'queued',
+        clock.now(),
       ]);
       return r.rows.length > 0;
     },
@@ -53,7 +54,8 @@ export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
       const kindFilter = kinds?.length ? `and kind = any($5::text[])` : '';
       if (kinds?.length) params.push(kinds);
       const r = await sql.query<Row>(
-        `update jobs set state = 'leased', attempts = attempts + 1, lease_token = $3, lease_until = $4
+        `update jobs set state = 'leased', attempts = attempts + 1, lease_token = $3, lease_until = $4,
+           first_attempted_at = coalesce(first_attempted_at, $1), last_attempted_at = $1, updated_at = $1
          where id in (select id from jobs where run_at <= $1 ${kindFilter} and (state = 'queued' or (state = 'leased' and lease_until <= $1))
                       order by run_at, id limit $2 for update skip locked)
          returning id, idempotency_key, kind, workspace_id, payload, run_at, attempts, max_attempts, lease_token, lease_until`,
@@ -61,14 +63,14 @@ export function postgresJobQueue(sql: SqlClient, clock: Clock): JobQueue {
       );
       return r.rows.map(toJob).sort((a, b) => a.runAt.localeCompare(b.runAt) || a.id.localeCompare(b.id));
     },
-    complete: (id, token) => owned(id, token, `state = 'done'`, []),
+    complete: (id, token) => owned(id, token, `state = 'done', completed_at = $3, updated_at = $3`, [clock.now()]),
     fail: (id, token, error, retryAt) =>
-      owned(id, token, `last_error = $3, state = case when $4::timestamptz is not null and attempts < max_attempts then 'queued' else 'dead' end, run_at = coalesce($4::timestamptz, run_at)`, [error, retryAt ?? null]),
+      owned(id, token, `last_error = $3, last_failed_at = $4, updated_at = $4, state = case when $5::timestamptz is not null and attempts < max_attempts then 'queued' else 'dead' end, run_at = coalesce($5::timestamptz, run_at)`, [error, clock.now(), retryAt ?? null]),
     extend: (id, token, leaseMs) => owned(id, token, `lease_until = $3`, [plus(leaseMs)]),
     async inspect(key) {
-      const r = await sql.query<{ state: JobState; attempts: number; last_error: string | null }>('select state, attempts, last_error from jobs where idempotency_key = $1', [key]);
+      const r = await sql.query<{ state: JobState; attempts: number; run_at: string | Date; created_at: string | Date; first_attempted_at: string | Date | null; last_attempted_at: string | Date | null; completed_at: string | Date | null; last_failed_at: string | Date | null; lease_until: string | Date | null; last_error: string | null }>('select state, attempts, run_at, created_at, first_attempted_at, last_attempted_at, completed_at, last_failed_at, lease_until, last_error from jobs where idempotency_key = $1', [key]);
       const j = r.rows[0];
-      return j ? { state: j.state, attempts: j.attempts, lastError: j.last_error ?? undefined } : null;
+      return j ? { state: j.state, attempts: j.attempts, runAt: iso(j.run_at), createdAt: iso(j.created_at), firstAttemptedAt: j.first_attempted_at ? iso(j.first_attempted_at) : undefined, lastAttemptedAt: j.last_attempted_at ? iso(j.last_attempted_at) : undefined, completedAt: j.completed_at ? iso(j.completed_at) : undefined, lastFailedAt: j.last_failed_at ? iso(j.last_failed_at) : undefined, leaseUntil: j.lease_until ? iso(j.lease_until) : undefined, lastError: j.last_error ?? undefined } : null;
     },
   };
 }

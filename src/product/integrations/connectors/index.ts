@@ -1,6 +1,6 @@
 import type { Connector } from '../../app/monitoring.js';
 import type { ConnectorDescriptor } from './types.js';
-import { checkConnector, connectorFactory } from './runtime.js';
+import { checkConnector, connectorFactory, sourceChecker } from './runtime.js';
 import { amplitudeConnector } from './amplitude.js';
 import { githubConnector } from './github.js';
 import { jiraConnector } from './jira.js';
@@ -15,7 +15,7 @@ import { sentryConnector } from './sentry.js';
 export const CONNECTORS: ConnectorDescriptor<any>[] = [amplitudeConnector, githubConnector, jiraConnector, intercomConnector, sentryConnector];
 
 export function connectorsFrom(list: ConnectorDescriptor<unknown>[]): Record<string, Connector> {
-  return Object.fromEntries(list.map((d) => [d.id, { build: connectorFactory(d), check: (conn, ctx) => checkConnector(d, conn, ctx) } satisfies Connector]));
+  return Object.fromEntries(list.map((d) => [d.id, { build: connectorFactory(d), check: (conn, ctx) => checkConnector(d, conn, ctx), ...(d.sourceCheck ? { sourceChecker: (conn, ctx) => sourceChecker(d, conn, ctx)! } : {}) } satisfies Connector]));
 }
 
 export type { ConnectorDescriptor, ConnectorContext, ConnectorCheck } from './types.js';

@@ -17,7 +17,7 @@ export const config = { maxDuration: 30 };
 let handle: ReturnType<typeof createPlannerHandler> | undefined;
 
 export default async function handler(req: IncomingMessage & { body?: unknown }, res: ServerResponse) {
-  handle ??= createPlannerHandler(process.env, (url, init) => fetch(url, init));
+  handle ??= createPlannerHandler(process.env, (url, init) => fetch(url, init), { allowUnauthenticatedPlanning: false });
   const url = new URL(req.url ?? '/', 'http://localhost');
   const sub = url.searchParams.get('path') ?? url.pathname.replace(/^\/api\/planner\/?/, '');
   await serveNode(handle, req, res, `/${sub.replace(/^\/+/, '')}`);

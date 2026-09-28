@@ -21,6 +21,10 @@ Status: **approved; in implementation** — see §12 for what is built · Branch
 | D8 | A versioned **Jagr Workspace Export v1** is the only path between a browser-local workspace and a server workspace (and, later, between backends). |
 | D9 | **Owner-configured single-tenant mode** is the early dogfooding path. |
 | D10 | Intercom is the first `FeedbackSource`. Slack is **outbound only**. No provider writes except Slack notifications. |
+| D11 | **Organization** is the commercial/security boundary; **Workspace** is the operational boundary. Authorization resolves user → organization membership → workspace membership. |
+| D12 | **Connection**, **SourceTarget**, **SourceState**, and **Watch** are distinct. Legacy provider-based watches remain readable through a compatibility resolver. |
+| D13 | Future ingestion converges on a tenant-aware, versioned, deduplicatable **NormalizedEvent** contract. Phase 0A defines the contract only; it does not add event processing. |
+| D14 | Entitlement decisions go through one `EntitlementPolicy`; the validation implementation is intentionally permissive. |
 
 ---
 
@@ -82,6 +86,8 @@ All ports live in `src/product/ports/`. Each is a TypeScript interface with no i
 
 ```ts
 interface Repositories {
+  organizations:  { get(id); create(org) };
+  organizationMembers: { forUser(userId); get(orgId, userId); add(membership) };
   workspaces:     { get(id): Promise<Workspace | null>; create(w): Promise<void>; update(w, expectedVersion): Promise<void> };
   members:        { forUser(userId): Promise<Membership[]>; forWorkspace(wsId): Promise<Membership[]>; add(m): Promise<void> };
   users:          { byIdentity(provider, subject): Promise<User | null>; create(u): Promise<User> };
@@ -89,6 +95,8 @@ interface Repositories {
   watches:        { list(wsId); get(wsId, id); save(wsId, w); remove(wsId, id) };
   metricDefs:     { list(wsId); save(wsId, d); remove(wsId, key) };
   connections:    { list(wsId); get(wsId, id); save(wsId, c); remove(wsId, id) };   // holds a SecretRef, never a secret
+  sourceTargets:  { list(wsId); get(wsId, id); save(wsId, target) };
+  sourceStates:   { get(wsId, sourceTargetId); save(wsId, state) };
   records:        { upsert(wsId, connId, batch: RoleRecordBatch); query(wsId, q: RoleRecordQuery); purge(wsId, connId) };
   metricCache:    { get(wsId, key); put(wsId, key, series, expiresAt) };
   cursors:        { get(connId, stream); set(connId, stream, cursor) };
@@ -129,16 +137,22 @@ function schedulerTick(deps: { repos: Repositories; queue: JobQueue; clock: Cloc
 interface Clock { now(): ISO }
 ```
 
-`schedulerTick` computes due watch runs, due syncs and due briefs since the last tick and enqueues them (idempotency key = `kind:target:dueAt`, so overlapping or duplicate ticks are harmless), then drains a bounded number of jobs. The Vercel Cron adapter is ~20 lines in `api/cron/tick.ts`: verify the cron secret, call `schedulerTick`. Replacing Vercel Cron means calling the same function from something else.
+`schedulerTick` computes due watch runs, due syncs and due briefs since the last tick and only enqueues them (idempotency key = `kind:target:dueAt`, so overlapping or duplicate ticks are harmless). A separate authenticated worker request claims exactly one job. The transitional GitHub Actions runner ticks once and makes at most ten worker requests; its cadence is best-effort rather than precise. Replacing that runner means calling the same two endpoints from another scheduler and worker host.
+
+### 2.3.1 Source-aware checks (Phase 2A)
+
+Targets with a neutral `checkIntervalMinutes` are scheduled as durable `source.check` jobs. The worker still claims exactly one job. A provider adapter observes one SourceTarget and returns `changed` or `unchanged`; provider failures remain errors. For Sentry, the adapter reads bounded metric buckets, new issues, and releases through the existing authenticated connector and emits bounded NormalizedEvent drafts. The application service persists deduplicated events, records each event/watch pair's stable cadence-slot mapping through the existing durable cursor store, and coalesces `monitor.watch` work by workspace, watch, and schedule slot. Source cadence controls observation, watch cadence controls when investigation work may run, and signal relevance controls whether it is triggered. The job keeps a SourceTarget reference while the individual normalized events remain durable and queryable. Only after all enqueue attempts succeed does an owner-checked transaction save SourceState's checkpoint. Event/watch mappings, cadence-slot job keys, and retry make overlap safe where queue enqueue and checkpoint storage cannot share one transaction.
+
+Phase 2B resolves those durable event/watch mappings when `monitor.watch` runs. Event reads require both organization and workspace scope, are capped at 100 records, and order by occurrence time then event id. The monitor receives the canonical events for that watch/cadence slot and records bounded references on each investigation affected by the run; matching evidence snapshots also name the normalized event ids that back them. Payloads remain in the normalized-event repository and can be fetched only through the authenticated workspace route. The queue job remains one `workspace + watch + cadence slot` reference, never one job or embedded payload per event.
 
 ### 2.4 SecretStore
 
 ```ts
 interface SecretStore {
   put(owner: { workspaceId: string; connectionId: string }, secret: SecretPayload): Promise<SecretRef>;
-  get(ref: SecretRef): Promise<{ secret: SecretPayload; version: number }>;
-  replace(ref: SecretRef, expectedVersion: number, secret: SecretPayload): Promise<void>;  // compare-and-swap: safe rotating refresh tokens
-  delete(ref: SecretRef): Promise<void>;
+  get(ref: SecretRef, owner: { workspaceId: string; connectionId: string }): Promise<{ secret: SecretPayload; version: number }>;
+  replace(ref: SecretRef, owner, expectedVersion: number, secret: SecretPayload): Promise<void>;  // compare-and-swap
+  delete(ref: SecretRef, owner): Promise<void>;
 }
 type SecretPayload =
   | { kind: 'api_key'; fields: Record<string, string> }                       // Amplitude key + secret
@@ -148,7 +162,7 @@ type SecretPayload =
 
 - Initial implementation: encrypted rows in Postgres. A per-secret data key encrypts the payload (AES-256-GCM); the data key is wrapped by a master key from `server/crypto` `KeyProvider` (`currentKey()`, `key(version)`). The master key comes from an environment variable; **KMS replaces only the `KeyProvider`**, not the store.
 - `replace` with an expected version prevents two workers from racing a rotating Jira refresh token.
-- Secrets never enter domain objects, logs, traces, exports, or HTTP responses. Connections hold an opaque `SecretRef`.
+- Secrets never enter domain objects, logs, traces, exports, or HTTP responses. Connections hold an opaque `SecretRef`, but the ref alone is not authorization: every operation also verifies its workspace and connection owner.
 
 ### 2.5 IdentityProvider
 
