@@ -8,7 +8,7 @@ An autonomous product investigator for PMs. Product signals live across analytic
 WATCH → DETECT → INVESTIGATE → CORRELATE → ASSESS → NOTIFY → APPROVE → ACT
 ```
 
-This is a V1, **not production-ready**. There are no accounts: a workspace lives in the browser it was created in.
+This is a V1, **not production-ready**. Workspaces can remain browser-local or use the authenticated server-workspace architecture when a Jagr server is configured.
 
 ## Try it with your own data (about 5 minutes)
 
