@@ -43,10 +43,19 @@ export interface JobStatus {
   lastError?: string;
 }
 
+export interface QueueStatus {
+  queued: number;
+  leased: number;
+  dead: number;
+  expiredLeases: number;
+  oldestQueuedAt?: string;
+  recentDead: { jobId: string; workspaceId: string; organizationId?: string; sourceTargetId?: string; kind: JobKind; attempts: number; failedAt?: string }[];
+}
+
 export interface JobQueue {
   /** Returns false when a job with the same idempotency key already exists (in any state). */
   enqueue(job: JobSpec): Promise<boolean>;
-  /** Claims due jobs, oldest first. Expired leases are claimable again. */
+  /** Claims due jobs fairly across tenants, oldest first within each tenant. Expired leases are claimable again. */
   claim(opts: { workerId: string; kinds?: JobKind[]; limit: number; leaseMs: number }): Promise<LeasedJob[]>;
   complete(jobId: string, leaseToken: string): Promise<void>;
   /** `retryAt` absent, or attempts exhausted → the job is dead-lettered. */
@@ -54,6 +63,8 @@ export interface JobQueue {
   extend(jobId: string, leaseToken: string, leaseMs: number): Promise<void>;
   /** For operations and tests. */
   inspect(idempotencyKey: string): Promise<JobStatus | null>;
+  /** Bounded, credential-free operator summary. */
+  status(): Promise<QueueStatus>;
 }
 
 export class LeaseLost extends Error {

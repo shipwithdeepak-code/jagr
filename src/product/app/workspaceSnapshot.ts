@@ -2,6 +2,7 @@ import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringR
 import type { AuditEntry, Decision, Membership, Repositories, Workspace } from '../ports/persistence.js';
 import type { ImportedDataset } from '../imports/schemas.js';
 import { connectionView, type ConnectionView } from '../connections/model.js';
+import { FULL_DOCUMENT_CHAR_LIMIT, HistorySizeError, readAllHistory, type HistoryReadBudget } from '../ports/history.js';
 
 /**
  * A server workspace as the browser sees it: everything the product UI renders, and nothing it must
@@ -56,18 +57,21 @@ export function watchRunsFromAudit(entries: AuditEntry[]): WatchRunRecord[] {
     .map((e) => ({ watchId: e.target!, at: e.at, outcome: (e.detail ?? '').replace(RUN_COUNTS, '') || 'Run completed' }));
 }
 
+/** The server route calls this inside Transactor.readSnapshot; never return a partial history. */
 export async function buildSnapshot(repos: Repositories, ws: Workspace, membership: Pick<Membership, 'role' | 'canApprove'>, at: ISO): Promise<WorkspaceSnapshot> {
-  const [connections, watches, investigations, decisions, notifications, imports, briefs, audit] = await Promise.all([
+  const [connections, watches] = await Promise.all([
     repos.connections.list(ws.id),
     repos.watches.list(ws.id),
-    repos.investigations.list(ws.id),
-    repos.decisions.list(ws.id),
-    repos.notifications.list(ws.id),
-    ws.mode === 'imported' ? repos.imports.list(ws.id) : Promise.resolve([]),
-    repos.briefs.list(ws.id),
-    ws.mode === 'connected' ? repos.audit.list(ws.id) : Promise.resolve([]),
   ]);
-  return {
+  const scope = ws.organizationId ? { organizationId: ws.organizationId, workspaceId: ws.id } : null;
+  const budget: HistoryReadBudget = { remainingChars: FULL_DOCUMENT_CHAR_LIMIT };
+  const investigations = scope ? (await readAllHistory(scope, repos.investigations.page, (item) => item.id, budget)).sort((a, b) => a.id.localeCompare(b.id)) : await repos.investigations.list(ws.id);
+  const decisions = scope ? (await readAllHistory(scope, repos.decisions.page, (item) => item.actionId, budget)).sort((a, b) => a.actionId.localeCompare(b.actionId)) : await repos.decisions.list(ws.id);
+  const notifications = scope ? (await readAllHistory(scope, repos.notifications.page, (item) => item.id, budget)).sort((a, b) => a.id.localeCompare(b.id)) : await repos.notifications.list(ws.id);
+  const imports = ws.mode === 'imported' ? (scope ? (await readAllHistory(scope, repos.imports.page, (item) => item.id, budget)).sort((a, b) => a.id.localeCompare(b.id)) : await repos.imports.list(ws.id)) : [];
+  const briefs = scope ? (await repos.briefs.page(scope, { limit: 14 })).items.reverse() : (await repos.briefs.list(ws.id)).slice(-14);
+  const audit = ws.mode === 'connected' ? (scope ? await repos.audit.recentWatchRuns(scope, RECENT_RUNS) : await repos.audit.list(ws.id)) : [];
+  const snapshot: WorkspaceSnapshot = {
     workspace: { id: ws.id, name: ws.name, mode: ws.mode, createdAt: ws.createdAt, settings: ws.settings, brief: ws.brief, version: ws.version },
     membership: { role: membership.role, canApprove: membership.canApprove },
     connections: connections.map((c) => connectionView(c, at)),
@@ -76,10 +80,12 @@ export async function buildSnapshot(repos: Repositories, ws: Workspace, membersh
     decisions: decisions.map(({ decidedBy, ...d }: Decision) => ({ ...d, decidedBy: decidedBy?.displayName })),
     notifications: notifications.map((n) => ({ id: n.id, channel: n.channel, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, detail: n.detail, email: n.email })),
     imports,
-    briefs: briefs.slice(-14),
+    briefs,
     runs: watchRunsFromAudit(audit),
     at,
   };
+  if (JSON.stringify(snapshot).length > FULL_DOCUMENT_CHAR_LIMIT) throw new HistorySizeError();
+  return snapshot;
 }
 
 /** The browser-local state shape a snapshot maps onto (a subset of the UI's ProductState). */

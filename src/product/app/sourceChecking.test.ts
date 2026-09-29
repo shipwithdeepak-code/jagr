@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { watchFromTemplate } from '../catalog';
+import { sentryEventRelevant } from '../integrations/connectors/sentry';
+import { ConnectorConfigError } from '../integrations/connectors/errors';
 import { manualClock } from '../ports/clock';
 import type { JobQueue } from '../ports/jobs';
 import { createMemoryJobQueue, createMemoryPersistence, createMemorySecretStore } from '../ports/memory';
 import type { SourceCheckResult } from '../ports/sourceCheck';
+import type { AdmissionService } from './admission';
 import type { HttpClient } from '../ports/http';
 import { response } from '../testkit/connectorContract';
-import { runOneJob } from './monitoring';
+import { drainJobs, runOneJob } from './monitoring';
 import { runSourceCheckJob, SourceCheckBusy } from './sourceChecking';
 
 const NOW = '2026-09-28T10:00:00.000Z';
@@ -22,7 +25,7 @@ async function setup(result: () => Promise<SourceCheckResult>) {
   const secretRef = await secrets.put({ workspaceId: 'ws-1', connectionId: 'conn-sentry' }, { kind: 'api_key', fields: { authToken: 'not-real' } });
   await repos.connections.save('ws-1', { id: 'conn-sentry', workspaceId: 'ws-1', source: 'sentry', provider: 'sentry', roles: ['metrics', 'changes', 'work_items'], authKind: 'api_key', state: 'connected', detail: 'Sentry', config: {}, secretRef, updatedAt: NOW });
   await repos.sourceTargets.save('ws-1', { id: 'target-a', organizationId: 'org-1', workspaceId: 'ws-1', connectionId: 'conn-sentry', provider: 'sentry', externalId: 'acme:42', displayName: 'Acme / 42', configuration: {}, status: 'active', createdAt: NOW, updatedAt: NOW });
-  const connectors = { sentry: { build: () => { throw new Error('not used'); }, check: async () => ({ state: 'connected' as const, detail: 'ok' }), sourceChecker: () => ({ check: result }) } };
+  const connectors = { sentry: { build: () => { throw new Error('not used'); }, check: async () => ({ state: 'connected' as const, detail: 'ok' }), sourceChecker: () => ({ check: result, relevant: sentryEventRelevant }) } };
   return { repos, tx, clock, queue, secrets, connectors, http: (async () => response({})) as HttpClient };
 }
 
@@ -127,6 +130,15 @@ describe('source-aware checking', () => {
     expect(await deps.repos.sourceStates.get('ws-1', 'target-a')).toMatchObject({ status: 'timeout', checkpoint: CHECKPOINT, version: 1 });
   });
 
+  it('a checker missing its relevance rule records an invalid target without advancing the checkpoint', async () => {
+    const deps = await setup(changed);
+    await deps.repos.sourceStates.save('ws-1', { organizationId: 'org-1', workspaceId: 'ws-1', sourceTargetId: 'target-a', provider: 'sentry', status: 'unchanged', version: 1, checkpoint: CHECKPOINT, updatedAt: CHECKPOINT });
+    deps.connectors.sentry.sourceChecker = () => { throw new ConnectorConfigError('missing relevance rule'); };
+    await expect(runSourceCheckJob(deps, job())).rejects.toThrow(/relevance rule/);
+    expect(await deps.repos.sourceStates.get('ws-1', 'target-a')).toMatchObject({ status: 'invalid_target', checkpoint: CHECKPOINT, version: 1 });
+    expect(await deps.repos.events.list(eventScope)).toEqual([]);
+  });
+
   it('a failed enqueue leaves the checkpoint old and retry safely completes processing', async () => {
     const deps = await setup(changed);
     const watch = watchFromTemplate('w1', 'customer_issues', { sources: ['sentry'] }, NOW);
@@ -192,7 +204,7 @@ describe('source-aware checking', () => {
     let finish!: () => void;
     const saving = new Promise<void>((resolve) => (entered = resolve));
     const gate = new Promise<void>((resolve) => (finish = resolve));
-    const tx = { run: <T>(fn: Parameters<typeof deps.tx.run<T>>[0]) => deps.tx.run((repos) => fn({ ...repos, sourceStates: { ...repos.sourceStates, save: async (...args: Parameters<typeof repos.sourceStates.save>) => { entered(); await gate; return repos.sourceStates.save(...args); } } })) };
+    const tx = { ...deps.tx, run: <T>(fn: Parameters<typeof deps.tx.run<T>>[0]) => deps.tx.run((repos) => fn({ ...repos, sourceStates: { ...repos.sourceStates, save: async (...args: Parameters<typeof repos.sourceStates.save>) => { entered(); await gate; return repos.sourceStates.save(...args); } } })) };
     const running = runSourceCheckJob({ ...deps, tx }, job());
     await saving;
     for (let i = 0; i < 4; i++) {
@@ -207,7 +219,7 @@ describe('source-aware checking', () => {
 
   it('does not settle a successful checkpoint after source-lock ownership is lost', async () => {
     const deps = await setup(async () => ({ outcome: 'unchanged', checkedAt: NOW, checkpoint: NOW, version: 'quiet' }));
-    const tx = { run: <T>(fn: Parameters<typeof deps.tx.run<T>>[0]) => deps.tx.run((repos) => fn({ ...repos, locks: { ...repos.locks, renew: async () => false } })) };
+    const tx = { ...deps.tx, run: <T>(fn: Parameters<typeof deps.tx.run<T>>[0]) => deps.tx.run((repos) => fn({ ...repos, locks: { ...repos.locks, renew: async () => false } })) };
     await expect(runSourceCheckJob({ ...deps, tx }, job())).rejects.toThrow(/lost before checkpoint/);
     expect(await deps.repos.sourceStates.get('ws-1', 'target-a')).toBeNull();
   });
@@ -224,5 +236,27 @@ describe('source-aware checking', () => {
     expect(await runOneJob(deps, { workerId: 'worker', leaseMs: 60_000 })).toMatchObject({ state: 'completed', idempotencyKey: 'check-a' });
     expect(await deps.queue.inspect('check-a')).toMatchObject({ state: 'done', attempts: 1 });
     expect(await deps.queue.inspect('check-b')).toMatchObject({ state: 'queued', attempts: 0 });
+  });
+
+  it('batch worker executes an admitted source.check and settles a denied source.check without retrying', async () => {
+    const admitted = await setup(async () => ({ outcome: 'unchanged', checkedAt: NOW, checkpoint: NOW, version: 'batch-admitted' }));
+    await admitted.queue.enqueue({ kind: 'source.check', workspaceId: 'ws-1', payload: { organizationId: 'org-1', sourceTargetId: 'target-a' }, runAt: NOW, idempotencyKey: 'batch-admitted' });
+    const admission: AdmissionService = {
+      withResource: <T>() => Promise.reject(new Error('unused')) as Promise<T>,
+      execution: async () => ({ allowed: true, code: 'allowed', detail: 'allowed' }),
+    };
+    expect(await drainJobs({ ...admitted, admission }, { workerId: 'batch', limit: 1, leaseMs: 60_000 })).toEqual({ done: 1, failed: 0 });
+    expect(await admitted.queue.inspect('batch-admitted')).toMatchObject({ state: 'done', attempts: 1 });
+    expect(await admitted.repos.sourceStates.get('ws-1', 'target-a')).toMatchObject({ status: 'unchanged', checkpoint: NOW });
+
+    const denied = await setup(async () => { throw new Error('denied source check must not run'); });
+    await denied.queue.enqueue({ kind: 'source.check', workspaceId: 'ws-1', payload: { organizationId: 'org-1', sourceTargetId: 'target-a' }, runAt: NOW, idempotencyKey: 'batch-denied' });
+    const denial: AdmissionService = {
+      withResource: <T>() => Promise.reject(new Error('unused')) as Promise<T>,
+      execution: async () => ({ allowed: false, code: 'limit_reached', detail: 'limit reached' }),
+    };
+    expect(await drainJobs({ ...denied, admission: denial }, { workerId: 'batch', limit: 1, leaseMs: 60_000 })).toEqual({ done: 1, failed: 0 });
+    expect(await denied.queue.inspect('batch-denied')).toMatchObject({ state: 'done', attempts: 1 });
+    expect(await denied.repos.sourceStates.get('ws-1', 'target-a')).toBeNull();
   });
 });

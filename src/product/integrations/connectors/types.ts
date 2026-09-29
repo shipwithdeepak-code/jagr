@@ -5,6 +5,8 @@ import type { HttpClient } from '../../ports/http.js';
 import type { Connection } from '../../ports/persistence.js';
 import type { SourceState, SourceTarget } from '../../ports/persistence.js';
 import type { SourceCheckResult } from '../../ports/sourceCheck.js';
+import type { NormalizedEvent } from '../../events.js';
+import type { Watch } from '../../types.js';
 import type { SecretPayload } from '../../ports/secrets.js';
 import type { RegisteredSource, Role, SourceId } from '../../roles/types.js';
 
@@ -65,6 +67,8 @@ export interface ConnectorDescriptor<C = unknown> {
   check(ctx: ConnectorContext<C>): Promise<ConnectorCheck>;
   /** Optional source-aware observation boundary. Phase 2A implements this only for Sentry. */
   sourceCheck?(ctx: ConnectorContext<C>, target: SourceTarget, state: SourceState | null): Promise<SourceCheckResult>;
+  /** Match a normalized event against one watch without exposing provider rules to source checking. */
+  sourceEventRelevant?(event: NormalizedEvent, watch: Watch): boolean;
   /** Neutral cadence copied onto SourceTarget when sourceCheck is implemented. */
   sourceCheckIntervalMinutes?: number;
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Connection } from '../../ports/persistence';
 import type { SecretPayload } from '../../ports/secrets';
 import { manualClock } from '../../ports/clock';
+import { watchFromTemplate } from '../../catalog';
+import type { NormalizedEvent } from '../../events';
 import { connectorContract, scriptedHttp } from '../../testkit/connectorContract';
 import { checkConnector, connectorFactory, sourceChecker } from './runtime';
 import { normalizeEventsStats, normalizeIssues, normalizeReleases, normalizeSessions, sentryConnector } from './sentry';
@@ -85,6 +87,10 @@ describe('Sentry normalization', () => {
 });
 
 describe('Sentry mapping', () => {
+  it('requires a relevance rule for every source-aware connector', () => {
+    expect(() => sourceChecker({ ...sentryConnector, sourceEventRelevant: undefined }, connection, { secret, http: scriptedHttp(sentryRoute).http, clock: manualClock(NOW) })).toThrow(/relevance rule/);
+  });
+
   it('source check emits bounded normalized drafts once, then reports unchanged after its checkpoint', async () => {
     const checker = sourceChecker(sentryConnector, connection, { secret, http: scriptedHttp(sentryRoute).http, clock: manualClock(NOW) })!;
     const target = { id: 'target-sentry', organizationId: 'org-1', workspaceId: 'ws-1', connectionId: connection.id, provider: 'sentry', externalId: 'acme:42', displayName: 'Acme / 42', configuration: CONFIG, status: 'active' as const, createdAt: NOW, updatedAt: NOW };
@@ -93,6 +99,13 @@ describe('Sentry mapping', () => {
     if (first.outcome === 'changed') {
       expect(first.events.length).toBeGreaterThan(0);
       expect(first.events.every((event) => event.type.startsWith('sentry.') && JSON.stringify(event).length < 16_384)).toBe(true);
+      const issue = first.events.find((event) => event.type === 'sentry.issue');
+      if (issue) {
+        const event = { ...issue, eventId: 'evt-1', schemaVersion: 1, organizationId: 'org-1', workspaceId: 'ws-1', connectionId: connection.id, sourceTargetId: target.id, provider: 'sentry', observedAt: NOW } as NormalizedEvent;
+        const watch = watchFromTemplate('watch-1', 'customer_issues', { sources: ['sentry'] }, NOW);
+        expect(checker.relevant(event, watch)).toBe(true);
+        expect(checker.relevant({ ...event, type: 'future.provider.event' }, watch)).toBe(false);
+      }
     }
     await expect(checker.check(target, { organizationId: 'org-1', workspaceId: 'ws-1', sourceTargetId: target.id, provider: 'sentry', status: 'changed', version: 1, checkpoint: NOW, updatedAt: NOW })).resolves.toMatchObject({ outcome: 'unchanged', checkpoint: NOW });
   });

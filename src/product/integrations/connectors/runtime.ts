@@ -51,6 +51,7 @@ export async function checkConnector<C>(d: ConnectorDescriptor<C>, conn: Connect
 /** Build the optional source-aware checker through the same validation, credential and host boundary. */
 export function sourceChecker<C>(d: ConnectorDescriptor<C>, conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }): SourceChecker | undefined {
   if (!d.sourceCheck) return undefined;
+  if (!d.sourceEventRelevant) throw new ConnectorConfigError(`${d.name} has no source-event relevance rule.`);
   const prepared = prepare(d, conn, ctx);
-  return { check: (target, state) => d.sourceCheck!(prepared, target, state) };
+  return { check: (target, state) => d.sourceCheck!(prepared, target, state), relevant: d.sourceEventRelevant };
 }

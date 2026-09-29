@@ -58,9 +58,10 @@ describe('normalized event investigation context', () => {
     expect(investigation.evidence.some((evidence) => evidence.provenance?.normalizedEventIds?.length)).toBe(true);
 
     const before = investigation.sourceEvents!.map((ref) => ref.eventId);
+    for (let i = 0; i < 105; i++) await deps.repos.investigations.save('ws-1', { ...investigation, id: `old-${String(i).padStart(3, '0')}`, startedAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T01:00:00.000Z', completedAt: '2026-08-01T01:00:00.000Z', status: 'RESOLVED', dedupeKey: `historical-${i}` });
     await runWatchJob(deps, { workspaceId: 'ws-1', payload: { watchId: 'w-stability', dueAt: NOW, sourceTargetId: 'target-sentry' } });
     const after = await deps.repos.investigations.list('ws-1');
-    expect(after).toHaveLength(1);
-    expect(after[0].sourceEvents!.map((ref) => ref.eventId)).toEqual(before);
+    expect(after).toHaveLength(106);
+    expect(after.find((inv) => inv.id === investigation.id)!.sourceEvents!.map((ref) => ref.eventId)).toEqual(before);
   });
 });

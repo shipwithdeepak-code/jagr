@@ -111,7 +111,6 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
   if (!messages.length || !deps.channels) return out;
   const conns = (await deps.repos.connections.list(ws.id)).filter((c) => !c.roles.length && c.state === 'connected' && Object.prototype.hasOwnProperty.call(deps.channels, c.provider));
   if (!conns.length) return out;
-  const byKey = new Map((await deps.repos.notifications.list(ws.id)).map((n) => [`${n.channel} ${n.dedupeKey}`, n]));
   for (const c of conns) {
     let built: ReturnType<ChannelFactory> | undefined;
     let setupError: string | undefined;
@@ -127,7 +126,7 @@ export async function deliver(deps: DeliveryDeps, ws: Workspace, messages: Notif
       const line = (detail: string) => clean(`${m.kind} · ${m.title}${detail ? ` · ${detail}` : ''}`).slice(0, 400);
       // Claim before sending. The store's (channel, dedupe key) uniqueness makes the claim atomic, so two
       // workers — or a retried job — never both send the same message. Delivered keeps the key forever.
-      const existing = byKey.get(`${c.provider} ${key}`);
+      const existing = await deps.repos.notifications.byDedupe(ws.id, c.provider, key);
       if (existing?.status === 'sending' && Date.parse(at) - Date.parse(existing.deliveredAt) > STUCK_CLAIM_MS) {
         // An attempt that never finished (the process stopped mid-send). Whether it reached the channel is
         // unknown; release its key and try again — a rare duplicate beats a lost alert.

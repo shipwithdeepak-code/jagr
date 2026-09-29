@@ -8,6 +8,9 @@ import { WriteConflict } from '../ports/persistence';
 import type { SecretStore } from '../ports/secrets';
 import { SecretVersionConflict } from '../ports/secrets';
 import { watchFromTemplate } from '../catalog';
+import type { WatchInvestigation } from '../types';
+import type { ImportedDataset } from '../imports/schemas';
+import type { HistoryPage, HistoryQuery, HistoryScope } from '../ports/history';
 
 /**
  * Port contract suites. Every implementation of a port — the in-memory reference and each real
@@ -42,6 +45,16 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       expect(await repos.watches.get('ws-b', 'w1')).toBeNull();
       expect(await repos.cursors.get('ws-b', 'k')).toBeNull();
       expect((await repos.watches.list('ws-a')).map((w) => w.id)).toEqual(['w1']);
+    });
+
+    it('selects connected scheduler workspaces by oldest attempt with a repository bound', async () => {
+      const { repos } = await make();
+      await repos.workspaces.create(workspaceFixture('ws-a'));
+      await repos.workspaces.create(workspaceFixture('ws-b'));
+      await repos.workspaces.create(workspaceFixture('ws-c', { mode: 'imported' }));
+      await repos.cursors.set('ws-a', 'scheduler.last_attempt', '2026-09-24T08:00:00.000Z');
+      expect((await repos.workspaces.listForScheduler(1)).map((workspace) => workspace.id)).toEqual(['ws-b']);
+      expect((await repos.workspaces.listForScheduler(2)).map((workspace) => workspace.id)).toEqual(['ws-b', 'ws-a']);
     });
 
     it('refuses a connection saved under another workspace', async () => {
@@ -80,6 +93,36 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       await expect(repos.watches.save('ws-a', { ...localWatch, id: 'foreign', sourceTargetIds: [otherTarget.id] })).rejects.toThrow('Source target');
     });
 
+    it('counts tenant resources and stores subscriptions and retry-safe usage by organization', async () => {
+      const { repos } = await make();
+      const at = '2026-09-24T08:00:00.000Z';
+      const end = '2026-10-01T00:00:00.000Z';
+      await repos.organizations.create({ id: 'org-a', name: 'A', createdAt: at });
+      await repos.organizations.create({ id: 'org-b', name: 'B', createdAt: at });
+      expect(await repos.subscriptions.get('org-a')).toMatchObject({ organizationId: 'org-a', planId: 'legacy', status: 'active' });
+      expect(await repos.subscriptions.get('org-b')).toMatchObject({ organizationId: 'org-b', planId: 'legacy', status: 'active' });
+      await repos.workspaces.create(workspaceFixture('ws-a', { organizationId: 'org-a' }));
+      await repos.workspaces.create(workspaceFixture('ws-b', { organizationId: 'org-b' }));
+      expect(await repos.workspaces.countForOrganization('org-a')).toBe(1);
+      expect((await repos.workspaces.listForOrganization('org-a')).map((workspace) => workspace.id)).toEqual(['ws-a']);
+      await repos.connections.save('ws-a', connection('ws-a'));
+      await repos.sourceTargets.save('ws-a', { id: 'target-a', organizationId: 'org-a', workspaceId: 'ws-a', connectionId: 'conn-1', provider: 'github', externalId: 'acme/repo', displayName: 'Acme', configuration: {}, status: 'active', createdAt: at, updatedAt: at });
+      await repos.watches.save('ws-a', { ...watchFromTemplate('w1', 'github_changes'), sourceTargetIds: ['target-a'] });
+      expect(await repos.sourceTargets.countForOrganization('org-a')).toBe(1);
+      expect(await repos.sourceTargets.countForOrganization('org-b')).toBe(0);
+      expect(await repos.watches.countForOrganization('org-a')).toBe(1);
+      const legacy = await repos.subscriptions.lock('org-a', at);
+      expect(legacy).toMatchObject({ organizationId: 'org-a', planId: 'legacy', status: 'active' });
+      await repos.subscriptions.save({ ...legacy, planId: 'paid', updatedAt: at });
+      expect(await repos.subscriptions.get('org-a')).toMatchObject({ planId: 'paid' });
+      const usage = { id: 'job-1', organizationId: 'org-a', workspaceId: 'ws-a', kind: 'investigation_execution' as const, amount: 1, periodStart: '2026-09-01T00:00:00.000Z', periodEnd: end, occurredAt: at };
+      expect(await repos.usage.add(usage)).toBe(true);
+      expect(await repos.usage.add(usage)).toBe(false);
+      expect(await repos.usage.sum('org-a', usage.kind, usage.periodStart, usage.periodEnd)).toBe(1);
+      expect(await repos.usage.sum('org-b', usage.kind, usage.periodStart, usage.periodEnd)).toBe(0);
+      expect(await repos.usage.get('org-b', usage.id)).toBeNull();
+    });
+
     it('normalized event reads are bounded, ordered, filterable, and tied to a watch cadence slot', async () => {
       const { repos } = await make();
       const at = '2026-09-24T08:00:00.000Z';
@@ -100,6 +143,71 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       expect((await repos.events.list(scope, { type: 'release', limit: 2 })).map((event) => event.eventId)).toEqual(['evt-001', 'evt-003']);
       expect((await repos.events.forWatchSlot(scope, 'w1', slot, 2)).map((event) => event.eventId)).toEqual(['evt-000', 'evt-001']);
       expect(await repos.events.forWatchSlot({ organizationId: 'org-other', workspaceId: 'ws-a' }, 'w1', slot)).toEqual([]);
+    });
+
+    it('pages histories deterministically without cross-tenant or cross-workspace cursors', async () => {
+      const { repos } = await make();
+      const at = '2026-09-24T08:00:00.000Z';
+      await repos.organizations.create({ id: 'org-history-a', name: 'A', createdAt: at });
+      await repos.organizations.create({ id: 'org-history-b', name: 'B', createdAt: at });
+      await repos.workspaces.create(workspaceFixture('history-a', { organizationId: 'org-history-a' }));
+      await repos.workspaces.create(workspaceFixture('history-a2', { organizationId: 'org-history-a' }));
+      await repos.workspaces.create(workspaceFixture('history-b', { organizationId: 'org-history-b' }));
+      const scope = { organizationId: 'org-history-a', workspaceId: 'history-a' };
+      for (let i = 0; i < 105; i++) {
+        const id = `h-${String(i).padStart(3, '0')}`;
+        await repos.audit.append({ id, workspaceId: scope.workspaceId, at, actor: { ref: 'system', displayName: 'Jagr' }, action: 'test' });
+        await repos.notifications.add(scope.workspaceId, { id, channel: 'chat', dedupeKey: id, deliveredAt: at, status: 'delivered' });
+        await repos.investigations.save(scope.workspaceId, { id, startedAt: at, updatedAt: at } as WatchInvestigation);
+        await repos.imports.save(scope.workspaceId, { id } as ImportedDataset);
+      }
+      const methods: Array<(scope: HistoryScope, query?: HistoryQuery) => Promise<HistoryPage<{ id: string }>>> = [repos.audit.page, repos.notifications.page, repos.investigations.page, repos.imports.page];
+      for (const method of methods) {
+        const first = await method(scope, { limit: 2 });
+        expect(first.items.map((item) => item.id)).toEqual(['h-104', 'h-103']);
+        expect(first.nextCursor).toBeTruthy();
+        const second = await method(scope, { limit: 2, cursor: first.nextCursor! });
+        expect(second.items.map((item) => item.id)).toEqual(['h-102', 'h-101']);
+        await expect(method({ organizationId: 'org-history-b', workspaceId: 'history-b' }, { cursor: first.nextCursor! })).rejects.toThrow('Invalid history cursor');
+        await expect(method({ organizationId: 'org-history-a', workspaceId: 'history-a2' }, { cursor: first.nextCursor! })).rejects.toThrow('Invalid history cursor');
+        await expect(method({ organizationId: 'org-history-b', workspaceId: 'history-a' })).rejects.toThrow('Workspace');
+        expect((await method(scope, { limit: 1000 })).items).toHaveLength(100);
+        const ids: string[] = [];
+        let cursor: string | null = null;
+        do {
+          const next = await method(scope, { limit: 17, ...(cursor ? { cursor } : {}) });
+          ids.push(...next.items.map((item) => item.id));
+          cursor = next.nextCursor;
+        } while (cursor);
+        expect(ids).toEqual(Array.from({ length: 105 }, (_, i) => `h-${String(104 - i).padStart(3, '0')}`));
+      }
+      const beforeInsert = await repos.audit.page(scope, { limit: 2 });
+      await repos.audit.append({ id: 'h-new', workspaceId: scope.workspaceId, at: '2026-09-25T08:00:00.000Z', actor: { ref: 'system', displayName: 'Jagr' }, action: 'test' });
+      expect((await repos.audit.page(scope, { limit: 2, cursor: beforeInsert.nextCursor! })).items.map((entry) => entry.id)).toEqual(['h-102', 'h-101']);
+      await expect(repos.notifications.page(scope, { cursor: beforeInsert.nextCursor! })).rejects.toThrow('Invalid history cursor');
+    });
+
+    it('uses scoped window pages and point lookups for briefs and decisions', async () => {
+      const { repos } = await make();
+      const at = '2026-09-25T08:00:00.000Z';
+      const since = '2026-09-24T08:00:00.000Z';
+      await repos.organizations.create({ id: 'org-window', name: 'A', createdAt: since });
+      await repos.workspaces.create(workspaceFixture('ws-window', { organizationId: 'org-window' }));
+      const scope = { organizationId: 'org-window', workspaceId: 'ws-window' };
+      await repos.investigations.save(scope.workspaceId, { id: 'old', startedAt: '2026-09-01T08:00:00.000Z', updatedAt: since, actions: [{ id: 'action-old' }] } as WatchInvestigation);
+      await repos.investigations.save(scope.workspaceId, { id: 'irrelevant', startedAt: '2026-09-01T08:00:00.000Z', updatedAt: '2026-09-02T08:00:00.000Z', actions: [] } as unknown as WatchInvestigation);
+      expect((await repos.investigations.pageForBriefWindow(scope, since, at, { limit: 1 })).items.map((item) => item.id)).toEqual(['old']);
+      expect((await repos.investigations.findByActionId(scope.workspaceId, 'action-old'))?.id).toBe('old');
+      expect(await repos.investigations.findByActionId('another-workspace', 'action-old')).toBeNull();
+      await repos.notifications.add(scope.workspaceId, { id: 'email', channel: 'in_app', dedupeKey: 'email', deliveredAt: at, status: 'delivered', investigationId: 'old', email: { sentAt: at } as never });
+      await repos.notifications.add(scope.workspaceId, { id: 'chat', channel: 'chat', dedupeKey: 'chat', deliveredAt: at, status: 'delivered' });
+      expect((await repos.notifications.pageForBriefWindow(scope, since, at)).items.map((item) => item.id)).toEqual(['email']);
+      expect((await repos.notifications.firstEmailForInvestigation(scope.workspaceId, 'old'))?.id).toBe('email');
+      expect(await repos.notifications.firstEmailForInvestigation('another-workspace', 'old')).toBeNull();
+      await expect(repos.notifications.pageForBriefWindow({ organizationId: 'wrong', workspaceId: scope.workspaceId }, since, at)).rejects.toThrow('Workspace');
+      const brief = { id: 'brief-latest', generatedAt: at, window: { start: since, end: at }, headline: 'One', items: [], quiet: { watchCount: 0, watchNames: [], note: '' }, deduplicated: [], stats: { watchRuns: 0, sourcesChecked: 0, emailsSent: 0, dismissed: 0 } };
+      await repos.briefs.save(scope.workspaceId, brief);
+      expect((await repos.briefs.page(scope, { limit: 1 })).items).toEqual([brief]);
     });
 
     it('returns copies: mutating a result never changes stored state', async () => {
@@ -169,8 +277,11 @@ export function repositoriesContract(name: string, make: () => Promise<{ repos: 
       const { repos } = await make();
       const claim = { id: 'c1', channel: 'chat', dedupeKey: 'k', deliveredAt: '2026-09-25T10:00:00.000Z', status: 'sending' as const };
       expect(await repos.notifications.add('ws-a', claim)).toBe(true);
+      expect(await repos.notifications.byDedupe('ws-a', 'chat', 'k')).toEqual(claim);
+      expect(await repos.notifications.byDedupe('ws-b', 'chat', 'k')).toBeNull();
       expect(await repos.notifications.add('ws-a', { ...claim, id: 'c2' })).toBe(false);
       await repos.notifications.settle('ws-a', { ...claim, status: 'failed', dedupeKey: 'k#failed' });
+      expect(await repos.notifications.byDedupe('ws-a', 'chat', 'k')).toBeNull();
       expect((await repos.notifications.list('ws-a')).map((n) => [n.id, n.status, n.dedupeKey])).toEqual([['c1', 'failed', 'k#failed']]);
       expect(await repos.notifications.add('ws-a', { ...claim, id: 'c2' })).toBe(true);
     });
@@ -225,6 +336,16 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       expect(await q.claim({ workerId: 'w2', limit: 10, leaseMs: 60_000 })).toEqual([]);
     });
 
+    it('lets another workspace make progress despite one older backlog', async () => {
+      const clock = manualClock('2026-09-24T08:00:00.000Z');
+      const q = await make(clock);
+      for (const key of ['hot-a', 'hot-b', 'hot-c']) await q.enqueue(spec(key, '2026-09-24T07:00:00.000Z'));
+      await q.enqueue({ ...spec('other', '2026-09-24T07:59:00.000Z'), workspaceId: 'ws-b' });
+      const claimed = (await q.claim({ workerId: 'w', limit: 2, leaseMs: 60_000 })).map((job) => job.idempotencyKey);
+      expect(claimed[0]).toMatch(/^hot-/);
+      expect(claimed[1]).toBe('other');
+    });
+
     it('an expired lease is claimable again, and the old holder can no longer complete it', async () => {
       const clock = manualClock('2026-09-24T08:00:00.000Z');
       const q = await make(clock);
@@ -252,6 +373,20 @@ export function jobQueueContract(name: string, make: (clock: Clock) => Promise<J
       const [b] = await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 });
       await q.fail(b.id, b.leaseToken, 'timeout again', '2026-09-24T08:10:00.000Z');
       expect(await q.inspect('k')).toMatchObject({ state: 'dead', attempts: 2, lastError: 'timeout again' });
+    });
+
+    it('reports bounded queue health without payloads or error text', async () => {
+      const clock = manualClock('2026-09-24T08:00:00.000Z');
+      const q = await make(clock);
+      await q.enqueue({ ...spec('dead'), kind: 'source.check', payload: { secret: 'must-not-leak', sourceTargetId: 'target-a' }, maxAttempts: 1 });
+      await q.enqueue(spec('waiting', '2026-09-24T09:00:00.000Z'));
+      const [job] = await q.claim({ workerId: 'w', limit: 1, leaseMs: 60_000 });
+      await q.fail(job.id, job.leaseToken, 'credential must-not-leak');
+      const status = await q.status();
+      expect(status).toMatchObject({ queued: 1, leased: 0, dead: 1, expiredLeases: 0, oldestQueuedAt: '2026-09-24T09:00:00.000Z' });
+      expect(status.recentDead).toHaveLength(1);
+      expect(status.recentDead[0]).toMatchObject({ jobId: job.id, workspaceId: 'ws-a', sourceTargetId: 'target-a', attempts: 1 });
+      expect(JSON.stringify(status)).not.toContain('must-not-leak');
     });
 
     it('a lease that expired but was not taken over is still the holder’s: it can extend and complete', async () => {

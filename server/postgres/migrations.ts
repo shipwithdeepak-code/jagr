@@ -112,6 +112,81 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
       where collection = 'normalized_events';
     `,
   },
+  {
+    id: '007_saas_control_plane',
+    sql: `
+      create table if not exists subscriptions (
+        organization_id text primary key references organizations(id) on delete cascade,
+        doc jsonb not null,
+        updated_at timestamptz not null default now()
+      );
+      insert into subscriptions (organization_id, doc)
+      select id, jsonb_build_object(
+        'organizationId', id,
+        'planId', 'legacy',
+        'status', 'active',
+        'createdAt', coalesce(doc->>'createdAt', created_at::text),
+        'updatedAt', now()::text
+      ) from organizations on conflict (organization_id) do nothing;
+
+      create table if not exists usage_events (
+        organization_id text not null references organizations(id) on delete cascade,
+        id text not null,
+        workspace_id text,
+        kind text not null,
+        amount integer not null check (amount > 0),
+        period_start timestamptz not null,
+        period_end timestamptz not null,
+        occurred_at timestamptz not null,
+        doc jsonb not null,
+        primary key (organization_id, id)
+      );
+      create index if not exists usage_events_period
+      on usage_events (organization_id, kind, period_start, period_end);
+      create index if not exists memberships_user on memberships (user_id, workspace_id);
+      create index if not exists organization_memberships_user on organization_memberships (user_id, organization_id);
+    `,
+  },
+  {
+    id: '008_fair_job_claims',
+    sql: `
+      create table if not exists job_claim_sequence (
+        id smallint primary key check (id = 1), next_turn bigint not null
+      );
+      insert into job_claim_sequence (id, next_turn) values (1, 0) on conflict (id) do nothing;
+      create table if not exists job_tenant_turns (
+        tenant_key text primary key, last_turn bigint not null
+      );
+      create index if not exists jobs_queued_due on jobs (run_at, id) where state = 'queued';
+      create index if not exists jobs_expired_due on jobs (lease_until, run_at, id) where state = 'leased';
+    `,
+  },
+  {
+    id: '009_history_pages',
+    sql: `
+      create index if not exists workspace_investigations_history
+      on workspace_docs (workspace_id, (doc->>'startedAt') desc, id desc)
+      where collection = 'investigations';
+      create index if not exists workspace_investigations_updated
+      on workspace_docs (workspace_id, (doc->>'updatedAt'))
+      where collection = 'investigations';
+      create index if not exists workspace_investigations_actions
+      on workspace_docs using gin ((doc->'actions'))
+      where collection = 'investigations';
+      create index if not exists workspace_notifications_history
+      on workspace_docs (workspace_id, (doc->>'deliveredAt') desc, id desc)
+      where collection = 'notifications';
+      create index if not exists workspace_notifications_investigation_email
+      on workspace_docs (workspace_id, (doc->>'investigationId'), id)
+      where collection = 'notifications' and doc->>'channel' = 'in_app' and doc ? 'email';
+      create index if not exists workspace_briefs_history
+      on workspace_docs (workspace_id, (doc->>'generatedAt') desc, id desc)
+      where collection = 'briefs';
+      create index if not exists audit_log_history on audit_log (workspace_id, at desc, id desc);
+      create index if not exists audit_log_watch_runs on audit_log (workspace_id, at desc, id desc)
+      where doc->>'action' = 'monitor.watch' and doc->>'target' is not null;
+    `,
+  },
 ];
 
 export async function migrate(sql: SqlClient): Promise<string[]> {

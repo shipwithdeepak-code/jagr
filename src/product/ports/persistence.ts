@@ -3,6 +3,8 @@ import type { ImportedDataset } from '../imports/schemas.js';
 import type { Role } from '../roles/types.js';
 import type { SecretRef } from './secrets.js';
 import type { NormalizedEvent } from '../events.js';
+import type { Subscription, UsageEvent, UsageKind } from './controlPlane.js';
+import type { HistoryPage, HistoryQuery, HistoryScope } from './history.js';
 
 /**
  * Persistence port — the workspace's durable state, as domain records.
@@ -193,6 +195,10 @@ export interface Repositories {
     create(w: Workspace): Promise<void>;
     update(w: Workspace, expectedVersion: number): Promise<void>;
     list(): Promise<Workspace[]>;
+    /** Oldest scheduler attempt first; at most `limit` connected workspaces. */
+    listForScheduler(limit: number): Promise<Workspace[]>;
+    countForOrganization(organizationId: string): Promise<number>;
+    listForOrganization(organizationId: string): Promise<Workspace[]>;
   };
   users: {
     get(id: string): Promise<User | null>;
@@ -219,6 +225,7 @@ export interface Repositories {
     list(workspaceId: string): Promise<SourceTarget[]>;
     get(workspaceId: string, id: string): Promise<SourceTarget | null>;
     save(workspaceId: string, target: SourceTarget): Promise<void>;
+    countForOrganization(organizationId: string): Promise<number>;
   };
   sourceStates: {
     get(workspaceId: string, sourceTargetId: string): Promise<SourceState | null>;
@@ -241,25 +248,49 @@ export interface Repositories {
     get(workspaceId: string, id: string): Promise<Watch | null>;
     save(workspaceId: string, w: Watch): Promise<void>;
     remove(workspaceId: string, id: string): Promise<void>;
+    countForOrganization(organizationId: string): Promise<number>;
+  };
+  subscriptions: {
+    get(organizationId: string): Promise<Subscription | null>;
+    /** Creates the compatibility subscription when absent and serializes admission in a transaction. */
+    lock(organizationId: string, at: ISO): Promise<Subscription>;
+    save(subscription: Subscription): Promise<void>;
+  };
+  usage: {
+    get(organizationId: string, id: string): Promise<UsageEvent | null>;
+    /** False means this operation identity was already accounted. */
+    add(event: UsageEvent): Promise<boolean>;
+    sum(organizationId: string, kind: UsageKind, periodStart: ISO, periodEnd: ISO, workspaceId?: string): Promise<number>;
   };
   imports: {
     list(workspaceId: string): Promise<ImportedDataset[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<ImportedDataset>>;
     save(workspaceId: string, d: ImportedDataset): Promise<void>;
     remove(workspaceId: string, id: string): Promise<void>;
   };
   investigations: {
     list(workspaceId: string): Promise<WatchInvestigation[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<WatchInvestigation>>;
+    pageForBriefWindow(scope: HistoryScope, since: ISO, at: ISO, query?: HistoryQuery): Promise<HistoryPage<WatchInvestigation>>;
+    findByActionId(workspaceId: string, actionId: string): Promise<WatchInvestigation | null>;
     get(workspaceId: string, id: string): Promise<WatchInvestigation | null>;
     /** The investigation as the engine left it: evidence (its snapshot of what it saw), trace, actions. */
     save(workspaceId: string, inv: WatchInvestigation): Promise<void>;
   };
   decisions: {
     list(workspaceId: string): Promise<Decision[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<Decision>>;
+    get(workspaceId: string, actionId: string): Promise<Decision | null>;
     /** Optimistic: fails with WriteConflict when a decision already exists and `expected` differs. */
     put(workspaceId: string, d: Decision, expected?: Decision | null): Promise<void>;
   };
   notifications: {
     list(workspaceId: string): Promise<NotificationRecord[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<NotificationRecord>>;
+    pageForBriefWindow(scope: HistoryScope, since: ISO, at: ISO, query?: HistoryQuery): Promise<HistoryPage<NotificationRecord>>;
+    firstEmailForInvestigation(workspaceId: string, investigationId: string): Promise<NotificationRecord | null>;
+    /** Point lookup for delivery idempotency; never scan a workspace's full delivery history. */
+    byDedupe(workspaceId: string, channel: string, dedupeKey: string): Promise<NotificationRecord | null>;
     /** Atomic: false when (channel, dedupeKey) is already taken — the claim that makes delivery at-most-once. */
     add(workspaceId: string, n: NotificationRecord): Promise<boolean>;
     /** Replace a record by id (settle a claim: delivered, or failed with its dedupe key released). */
@@ -278,6 +309,7 @@ export interface Repositories {
   /** Morning briefs, as composed (the document a PM reads). Keyed by brief id; saving the same id replaces it. */
   briefs: {
     list(workspaceId: string): Promise<MorningBriefDoc[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<MorningBriefDoc>>;
     save(workspaceId: string, b: MorningBriefDoc): Promise<void>;
   };
   cursors: {
@@ -287,6 +319,9 @@ export interface Repositories {
   audit: {
     append(e: AuditEntry): Promise<void>;
     list(workspaceId: string): Promise<AuditEntry[]>;
+    page(scope: HistoryScope, query?: HistoryQuery): Promise<HistoryPage<AuditEntry>>;
+    /** Latest watch-run entries only, oldest first, for the workspace snapshot. */
+    recentWatchRuns(scope: HistoryScope, limit: number): Promise<AuditEntry[]>;
   };
 }
 
@@ -308,6 +343,8 @@ export const NORMALIZED_EVENT_READ_LIMIT = 100;
 /** Runs `fn` atomically: every write inside commits together or not at all. */
 export interface Transactor {
   run<T>(fn: (repos: Repositories) => Promise<T>): Promise<T>;
+  /** One consistent read-only logical view across keyset pages. */
+  readSnapshot<T>(fn: (repos: Repositories) => Promise<T>): Promise<T>;
 }
 
 export class WriteConflict extends Error {

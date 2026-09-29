@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { Area } from '../../types.js';
+import type { Area, Watch } from '../../types.js';
+import type { NormalizedEvent } from '../../events.js';
 import type { ChangeRecord, ChangeTiming, MetricDefinition, MetricPoint, MetricSeries, TimeWindow, WorkItem } from '../../roles/types.js';
 import type { ConnectorContext, ConnectorDescriptor, ReadStamp } from './types.js';
 import { requestJson } from './http.js';
@@ -98,6 +99,20 @@ const fingerprint = (parts: string[]) => {
   for (const ch of parts.sort().join('\n')) hash = Math.imul(hash ^ ch.charCodeAt(0), 16_777_619);
   return (hash >>> 0).toString(16).padStart(8, '0');
 };
+
+/** Sentry's watch matching stays with the provider that defines these event types. */
+export function sentryEventRelevant(event: NormalizedEvent, watch: Watch): boolean {
+  if (event.type === 'sentry.release') return watch.signals.some((signal) => signal.key === 'changes');
+  if (event.type === 'sentry.issue') {
+    const area = (event.payload as { area?: string } | undefined)?.area;
+    return watch.signals.some((signal) => signal.key === 'work_items' && (!signal.area || signal.area === '*' || signal.area === area));
+  }
+  if (event.type === 'sentry.metric') {
+    const metric = (event.payload as { metric?: string } | undefined)?.metric;
+    return watch.signals.some((signal) => signal.key === `metric:${metric}`);
+  }
+  return false;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Normalization — pure, one function per API response. Exported for tests.
@@ -335,6 +350,7 @@ export const sentryConnector: ConnectorDescriptor<SentryConfig> = {
   credentialFields: [{ key: 'authToken', label: 'Auth token (org:read, project:read, event:read)' }],
   hosts: (cfg) => [HOST[cfg.region]],
   sourceCheckIntervalMinutes: 15,
+  sourceEventRelevant: sentryEventRelevant,
   build(ctx) {
     const r = new SentryReader(ctx);
     const find = (key: string) => ctx.config.metrics.find((m) => m.key === key);

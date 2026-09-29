@@ -11,6 +11,7 @@ import { manualClock } from './ports/clock';
 import { commitServerImport, exportLocalWorkspace, exportServerWorkspace, ExportRefused, localWorkspaceFromExport, planImport, upgradeExport, type LocalWorkspaceSnapshot } from './export/workspace';
 import { findSensitive } from './export/scan';
 import type { WorkspaceExportV1 } from './export/v1';
+import { FULL_DOCUMENT_CHAR_LIMIT, HistorySizeError } from './ports/history';
 
 const NOW = '2026-09-24T08:10:00.000Z';
 const APP = '1.1.0';
@@ -94,6 +95,31 @@ describe('Workspace Export v1 — round trips', () => {
     const second = await exportServerWorkspace(repos, 'ws-server-1', { clock, appVersion: APP });
     expect(normalized(second)).toEqual(normalized(first));
     expect((await repos.audit.list('ws-server-1')).map((a) => a.action)).toEqual(['workspace.imported']);
+  });
+
+  it('traverses every scoped history page for a full export without calling the whole-history list', async () => {
+    const first = exportLocalWorkspace(await sampleWorkspace(), { now: NOW, appVersion: APP });
+    const { repos, tx } = createMemoryPersistence();
+    const clock = manualClock(NOW);
+    await repos.organizations.create({ id: 'org-export', name: 'Export', createdAt: NOW });
+    await commitServerImport(tx, planImport(first, { alreadyImported: [] }), { workspaceId: 'ws-paged', organizationId: 'org-export', actor: { ref: 'user', displayName: 'User' }, clock });
+    const existing = await repos.investigations.list('ws-paged');
+    const original = existing[0];
+    expect(original).toBeDefined();
+    for (let i = 0; i < 125; i++) await repos.investigations.save('ws-paged', { ...original, id: `paged-${String(i).padStart(3, '0')}`, evidence: [], trace: [], runs: [], hypotheses: [], agentHypotheses: [] });
+    let pages = 0;
+    const scoped = { ...repos, investigations: { ...repos.investigations,
+      list: async () => { throw new Error('full investigation list must not be used'); },
+      page: async (...args: Parameters<typeof repos.investigations.page>) => { pages++; return repos.investigations.page(...args); },
+    } };
+    const exported = await exportServerWorkspace(scoped, 'ws-paged', { clock, appVersion: APP });
+    expect(exported.investigations).toHaveLength(existing.length + 125);
+    expect(new Set(exported.investigations.map((inv) => inv.id)).size).toBe(existing.length + 125);
+    expect(exported.investigations.map((inv) => inv.id)).toEqual([...exported.investigations.map((inv) => inv.id)].sort());
+    expect(pages).toBeGreaterThan(1);
+    expect((await repos.investigations.page({ organizationId: 'org-export', workspaceId: 'ws-paged' })).items).toHaveLength(100);
+    await repos.investigations.save('ws-paged', { ...original, id: 'oversized', summary: 'x'.repeat(FULL_DOCUMENT_CHAR_LIMIT) });
+    await expect(exportServerWorkspace(scoped, 'ws-paged', { clock, appVersion: APP })).rejects.toBeInstanceOf(HistorySizeError);
   });
 
   it('carries imported data and its rejected rows (the data is the source)', async () => {

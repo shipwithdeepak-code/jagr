@@ -52,6 +52,8 @@ export class ConnectionError extends Error {
 
 export interface ConnectionDeps extends MonitoringDeps {
   types: Record<string, ConnectionType>;
+  /** Optional control-plane wrapper used only when this call creates a new source. */
+  admitSource?: <T>(create: (repos: ConnectionDeps['repos']) => Promise<T>) => Promise<T>;
 }
 
 const MAX_FIELD = 8192;
@@ -121,11 +123,12 @@ export async function configureConnection(deps: ConnectionDeps, ws: Workspace, a
     createdAt: existing?.createdAt ?? existing?.updatedAt ?? now,
     updatedAt: now,
   };
-  await deps.repos.connections.save(ws.id, conn);
-  if (type.kind === 'source') {
+  const persist = async (repos: ConnectionDeps['repos']) => {
+    await repos.connections.save(ws.id, conn);
+    if (type.kind !== 'source') return;
     const targetId = legacySourceTargetId(conn.id);
-    const prior = await deps.repos.sourceTargets.get(ws.id, targetId);
-    await deps.repos.sourceTargets.save(ws.id, {
+    const prior = await repos.sourceTargets.get(ws.id, targetId);
+    await repos.sourceTargets.save(ws.id, {
       id: targetId,
       organizationId: ws.organizationId!,
       workspaceId: ws.id,
@@ -139,6 +142,14 @@ export async function configureConnection(deps: ConnectionDeps, ws: Workspace, a
       createdAt: prior?.createdAt ?? now,
       updatedAt: now,
     });
+  };
+  try {
+    if (!existing && type.kind === 'source' && deps.admitSource) await deps.admitSource(persist);
+    else await persist(deps.repos);
+  } catch (error) {
+    // A newly created credential must not survive a denied/rolled-back source creation.
+    if (!existing?.secretRef && secretRef) await deps.secrets.delete(secretRef, { workspaceId: ws.id, connectionId: conn.id }).catch(() => undefined);
+    throw error;
   }
   await audit(deps, ws, actor, existing ? 'connection.configured' : 'connection.connected', conn.id, `${type.name}: configuration${input.credential ? ' and credential' : ''} saved (${[...Object.keys(parsed.config), ...(input.credential ? type.credentialFields.map((f) => f.key) : [])].join(', ')}).`);
   return viewAfterCheck(deps, ws, conn.id);

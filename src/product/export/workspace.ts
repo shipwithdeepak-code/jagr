@@ -1,5 +1,6 @@
 import type { ActionDecision, BriefSchedule, EmailNotification, MonitoringResult, SourceConnection, Watch } from '../types.js';
 import type { ImportedDataset } from '../imports/schemas.js';
+import { FULL_DOCUMENT_CHAR_LIMIT, HistorySizeError, readAllHistory, type HistoryReadBudget } from '../ports/history.js';
 import type { Actor, Connection, Decision, MetricDefinitionRecord, NotificationRecord, Repositories, Transactor, Workspace } from '../ports/persistence.js';
 import type { Clock } from '../ports/clock.js';
 import { BUILTIN_SOURCE_ROLES } from '../catalog.js';
@@ -187,20 +188,23 @@ export function localWorkspaceFromExport(doc: WorkspaceExportV1, defaults: { ema
 
 // ── Server workspace (Repositories port) ─────────────────────
 
+/** The server route calls this inside Transactor.readSnapshot so all history pages describe one logical export. */
 export async function exportServerWorkspace(repos: Repositories, workspaceId: string, opts: { clock: Clock; appVersion: string }): Promise<WorkspaceExportV1> {
   const ws = await repos.workspaces.get(workspaceId);
   if (!ws) throw new Error(`Workspace ${workspaceId} not found.`);
-  const [connections, metricDefinitions, watches, imports, investigations, decisions, notifications] = await Promise.all([
+  const budget: HistoryReadBudget = { remainingChars: FULL_DOCUMENT_CHAR_LIMIT };
+  const scope = ws.organizationId ? { organizationId: ws.organizationId, workspaceId } : null;
+  const [connections, metricDefinitions, watches] = await Promise.all([
     repos.connections.list(workspaceId),
     repos.metricDefs.list(workspaceId),
     repos.watches.list(workspaceId),
-    repos.imports.list(workspaceId),
-    repos.investigations.list(workspaceId),
-    repos.decisions.list(workspaceId),
-    repos.notifications.list(workspaceId),
   ]);
+  const imports = scope ? await readAllHistory(scope, repos.imports.page, (item) => item.id, budget) : await repos.imports.list(workspaceId);
+  const investigations = scope ? await readAllHistory(scope, repos.investigations.page, (item) => item.id, budget) : await repos.investigations.list(workspaceId);
+  const decisions = scope ? await readAllHistory(scope, repos.decisions.page, (item) => item.actionId, budget) : await repos.decisions.list(workspaceId);
+  const notifications = scope ? await readAllHistory(scope, repos.notifications.page, (item) => item.id, budget) : await repos.notifications.list(workspaceId);
   const byId = <T extends { id: string }>(xs: T[]) => [...xs].sort((a, b) => a.id.localeCompare(b.id));
-  return seal({
+  const content: Omit<WorkspaceExportV1, 'exportId'> = {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
     exportedAt: opts.clock.now(),
@@ -214,7 +218,11 @@ export async function exportServerWorkspace(repos: Repositories, workspaceId: st
     approvals: [...decisions].sort((a, b) => a.actionId.localeCompare(b.actionId)).map((d): ExportApproval => ({ actionId: d.actionId, status: d.status, at: d.at, optionId: d.optionId, note: d.note, result: d.result, actor: d.decidedBy ?? { ref: 'unknown', displayName: 'Unknown' } })),
     // In-flight delivery claims are not history yet; the export carries settled records only.
     notifications: byId(notifications).flatMap((n): ExportNotification[] => (n.status === 'sending' ? [] : [{ id: n.id, channel: n.channel, dedupeKey: n.dedupeKey, deliveredAt: n.deliveredAt, status: n.status, investigationId: n.investigationId, email: n.email }])),
-  });
+  };
+  if (JSON.stringify(content).length > FULL_DOCUMENT_CHAR_LIMIT) throw new HistorySizeError();
+  const doc = seal(content);
+  if (JSON.stringify(doc).length > FULL_DOCUMENT_CHAR_LIMIT) throw new HistorySizeError();
+  return doc;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -329,7 +337,7 @@ export async function commitServerImport(tx: Transactor, plan: ImportPlan, opts:
   const doc = plan.doc;
   return tx.run(async (repos) => {
     // Re-check inside the transaction: another import of the same export may have landed meanwhile.
-    for (const w of await repos.workspaces.list()) {
+    for (const w of opts.organizationId ? await repos.workspaces.listForOrganization(opts.organizationId) : await repos.workspaces.list()) {
       if (w.importedExportIds.includes(doc.exportId)) throw new Error('This export has already been imported here.');
     }
     const now = opts.clock.now();

@@ -23,6 +23,7 @@ import { githubIdentity } from './identity/github.js';
 import { bootstrapSingleTenant, type BootstrapResult } from './singleTenant.js';
 import type { EntitlementPolicy } from '../src/product/ports/entitlements.js';
 import { permissiveEntitlements } from '../src/product/ports/entitlements.js';
+import { createAdmissionService, type AdmissionService } from '../src/product/app/admission.js';
 
 /**
  * Composition root: the only place that knows which implementation stands behind each port.
@@ -54,6 +55,7 @@ export interface Runtime extends MonitoringDeps {
   /** Connection types this deployment offers (connectors + outbound channels). */
   types: Record<string, ConnectionType>;
   entitlements: EntitlementPolicy;
+  admission: AdmissionService;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -87,6 +89,8 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     if (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET) identity.github = githubIdentity({ clientId: env.GITHUB_OAUTH_CLIENT_ID, clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET, http });
   }
   const secrets = postgresSecretStore(deps.sql, envKeyProvider(env));
+  const entitlements = deps.entitlements ?? permissiveEntitlements;
+  const admission = createAdmissionService({ repos, tx, entitlements, clock });
   const bootstrap = config.mode === 'single-tenant' ? await bootstrapSingleTenant({ repos, secrets, clock }, env, { fingerprintKey: config.sessionSecret, workspaceName: env.JAGR_OWNER_WORKSPACE_NAME }) : undefined;
   return {
     sql: deps.sql,
@@ -101,7 +105,8 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     connectors: deps.connectors ?? connectorsFrom(CONNECTORS),
     channels: deps.channels ?? CHANNELS,
     types: CONNECTION_TYPES,
-    entitlements: deps.entitlements ?? permissiveEntitlements,
+    entitlements,
+    admission,
     planner: serverPlanner(env, http),
     appBaseUrl: config.appBaseUrl,
     config,

@@ -25,6 +25,8 @@ import { ConnectionError, configureConnection, disconnectConnection, listConnect
 import { watchFromTemplate, WATCH_TEMPLATES } from '../src/product/catalog.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { resolveWorkspaceContext } from './authorization.js';
+import { AdmissionDenied } from '../src/product/app/admission.js';
+import { HistoryCursorError, HistorySizeError } from '../src/product/ports/history.js';
 
 /** Constant-time comparison (hashing first makes the lengths equal). */
 const sameSecret = (a: string, b: string) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
@@ -42,7 +44,7 @@ export const APP_VERSION = '1.1.0';
 const newId = (prefix: string) => `${prefix}_${randomToken(12)}`;
 
 const DecisionBody = z.object({ actionId: z.string().min(1), status: z.enum(['approved', 'rejected', 'done']), optionId: z.string().optional(), note: z.string().max(500).optional() }).strict();
-const ImportBody = z.object({ doc: z.unknown(), confirm: z.literal(true).optional() }).strict();
+const ImportBody = z.object({ doc: z.unknown(), confirm: z.literal(true).optional(), organizationId: z.string().min(1).optional() }).strict();
 const Attention = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const WatchBody = z
   .object({
@@ -69,7 +71,7 @@ const Credential = z.record(z.string().max(64), z.string().max(8192)).refine((r)
 const ConnectBody = z.object({ provider: z.string().min(1).max(40), config: z.record(z.string(), z.unknown()).default({}), credential: Credential.optional() }).strict();
 const ReconnectBody = z.object({ credential: Credential }).strict();
 const CONNECTION_ERROR_STATUS: Record<ConnectionError['code'], number> = { unknown_provider: 400, invalid_config: 400, invalid_credential: 400, managed_by_environment: 409, not_found: 404, wrong_workspace_mode: 409 };
-const WorkspaceBody = z.object({ name: z.string().min(1).max(80), mode: z.enum(['connected', 'imported']).default('connected') }).strict();
+const WorkspaceBody = z.object({ name: z.string().min(1).max(80), mode: z.enum(['connected', 'imported']).default('connected'), organizationId: z.string().min(1).optional() }).strict();
 
 /** What a member sees of a workspace: never secret references or connection errors with provider detail beyond the message. */
 function publicWorkspace(ws: Workspace) {
@@ -82,9 +84,13 @@ export function createApp(rt: Runtime) {
   const secure = rt.config.secureCookies;
   let labReport: Promise<EvaluationLabReport> | undefined;
 
-  async function organizationFor(p: Principal) {
-    const existing = p.organizationMemberships[0];
-    if (existing) return existing.organizationId;
+  async function organizationFor(p: Principal, requested?: string) {
+    if (requested) {
+      if (!p.organizationMemberships.some((membership) => membership.organizationId === requested)) return null;
+      return requested;
+    }
+    if (p.organizationMemberships.length === 1) return p.organizationMemberships[0].organizationId;
+    if (p.organizationMemberships.length > 1) return null;
     const id = `org_${p.user.id}`;
     if (!(await rt.repos.organizations.get(id))) await rt.repos.organizations.create({ id, name: `${p.user.displayName}'s organization`, createdAt: rt.clock.now() });
     await rt.repos.organizationMembers.add({ organizationId: id, userId: p.user.id, role: 'owner' });
@@ -142,7 +148,6 @@ export function createApp(rt: Runtime) {
     }
     // Watches are created from the catalog's templates; sources must be connections in this workspace.
     if (section === 'watches' && req.method === 'POST' && !sub) {
-      if (!(await rt.entitlements.canCreateWatch({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot create another watch.' });
       const body = WatchBody.safeParse(req.body);
       if (!body.success) return json(400, { error: 'Expected { templateId, sources? }.' });
       const tpl = WATCH_TEMPLATES.find((t) => t.id === body.data.templateId)!;
@@ -167,7 +172,7 @@ export function createApp(rt: Runtime) {
         const key = `metric:${m.def.key}` as const;
         if ((tpl.area === '*' || m.def.area === tpl.area || m.def.telemetry) && !watch.signals.some((x) => x.key === key)) watch.signals.unshift({ key });
       }
-      await rt.repos.watches.save(id, watch);
+      await rt.admission.withResource('watch', { userId: p.user.id, organizationId: context.organizationId, workspaceId: id }, (repos) => repos.watches.save(id, watch));
       await audit(id, p, 'watch.created', watch.id, tpl.name);
       return json(201, { watch });
     }
@@ -195,10 +200,13 @@ export function createApp(rt: Runtime) {
         if (!sub && req.method === 'GET') return json(200, { connections: await listConnections(rt, id) });
         if (!sub && req.method === 'PUT') {
           if (!canManage) return json(403, { error: 'Only workspace owners and admins can change connections.' });
-          if (!(await rt.entitlements.canConnectSource({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot connect another source.' });
           const body = ConnectBody.safeParse(req.body);
           if (!body.success) return json(400, { error: 'Expected { provider, config, credential? }.' });
-          return json(200, await configureConnection({ ...rt, types: rt.types }, ws, actor, body.data));
+          return json(200, await configureConnection({
+            ...rt,
+            types: rt.types,
+            admitSource: (create) => rt.admission.withResource('source', { userId: p.user.id, organizationId: context.organizationId, workspaceId: id }, create),
+          }, ws, actor, body.data));
         }
         const c = sub ? await rt.repos.connections.get(id, sub) : null;
         if (!c) return json(404, { error: 'Connection not found.' });
@@ -254,7 +262,7 @@ export function createApp(rt: Runtime) {
     if (section === 'investigations' && sub && rest[2] === 'replay' && req.method === 'GET') {
       const inv = await rt.repos.investigations.get(id, sub);
       if (!inv) return json(404, { error: 'Investigation not found.' });
-      const decisions = Object.fromEntries((await rt.repos.decisions.list(id)).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
+      const decisions = Object.fromEntries((await Promise.all(inv.actions.map((action) => rt.repos.decisions.get(id, action.id)))).filter((decision) => decision !== null).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
       const pass = req.query.pass ? Number(req.query.pass) : undefined;
       return json(200, replayInvestigation(inv, decisions, Number.isInteger(pass) ? pass : undefined));
     }
@@ -268,6 +276,8 @@ export function createApp(rt: Runtime) {
       const jobs = [];
       for (const watchId of inv.watchIds) {
         const idempotencyKey = `${id}:rerun:${inv.id}:${watchId}:${at}`;
+        const decision = await rt.admission.execution('investigation_execution', { userId: p.user.id, organizationId: context.organizationId, workspaceId: id }, idempotencyKey);
+        if (!decision.allowed) throw new AdmissionDenied(decision);
         jobs.push({ watchId, idempotencyKey, enqueued: await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId, dueAt: at }, runAt: at, idempotencyKey }) });
       }
       await audit(id, p, 'investigation.rerun', inv.id);
@@ -276,15 +286,15 @@ export function createApp(rt: Runtime) {
     if (section === 'investigations' && req.method === 'GET') {
       if (sub) {
         const inv = await rt.repos.investigations.get(id, sub);
-        return inv ? json(200, { investigation: inv, decisions: (await rt.repos.decisions.list(id)).filter((d) => inv.actions.some((a) => a.id === d.actionId)) }) : json(404, { error: 'Investigation not found.' });
+        return inv ? json(200, { investigation: inv, decisions: (await Promise.all(inv.actions.map((action) => rt.repos.decisions.get(id, action.id)))).filter((decision) => decision !== null) }) : json(404, { error: 'Investigation not found.' });
       }
-      const all = await rt.repos.investigations.list(id);
-      return json(200, { investigations: all.map((i: WatchInvestigation) => ({ id: i.id, title: i.title, area: i.area, status: i.status, attention: i.attention, updatedAt: i.updatedAt })) });
+      const page = await rt.repos.investigations.page({ organizationId: context.organizationId, workspaceId: id }, { limit: Number(req.query.limit), cursor: req.query.cursor });
+      return json(200, { investigations: page.items.map((i: WatchInvestigation) => ({ id: i.id, title: i.title, area: i.area, status: i.status, attention: i.attention, updatedAt: i.updatedAt })), nextCursor: page.nextCursor });
     }
     if (section === 'decisions' && req.method === 'POST') {
       const body = DecisionBody.safeParse(req.body);
       if (!body.success) return json(400, { error: 'Invalid decision.', issues: body.error.issues.map((i) => i.message) });
-      const inv = (await rt.repos.investigations.list(id)).find((i) => i.actions.some((a) => a.id === body.data.actionId));
+      const inv = await rt.repos.investigations.findByActionId(id, body.data.actionId);
       const action = inv?.actions.find((a) => a.id === body.data.actionId);
       if (!action) return json(404, { error: 'Action not found in this workspace.' });
       const consequential = action.risk === 'HIGH' || action.risk === 'CRITICAL';
@@ -302,7 +312,6 @@ export function createApp(rt: Runtime) {
       }
     }
     if (section === 'runs' && req.method === 'POST') {
-      if (!(await rt.entitlements.canRunInvestigation({ userId: p.user.id, organizationId: context.organizationId, workspaceId: id }))) return json(403, { error: 'Your organization cannot run an investigation.' });
       if (ws.mode === 'connected') {
         // "Run now" for live sources: the same scheduled-watch path, due now, for every active watch.
         const at = rt.clock.now();
@@ -310,24 +319,31 @@ export function createApp(rt: Runtime) {
         const jobs = [];
         for (const w of active) {
           const idempotencyKey = `${id}:manual:${w.id}:${at}`;
+          const decision = await rt.admission.execution('investigation_execution', { userId: p.user.id, organizationId: context.organizationId, workspaceId: id }, idempotencyKey);
+          if (!decision.allowed) throw new AdmissionDenied(decision);
           jobs.push({ watchId: w.id, idempotencyKey, enqueued: await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId: w.id, dueAt: at }, runAt: at, idempotencyKey }) });
         }
         await audit(id, p, 'monitor.requested', undefined, `${active.length} watch(es)`);
         return json(202, { kind: 'run_queued', workspaceId: id, watches: active.length, jobs });
       }
+      const at = rt.clock.now();
+      const operationId = `${id}:manual:workspace:${at}`;
+      const decision = await rt.admission.execution('investigation_execution', { userId: p.user.id, organizationId: context.organizationId, workspaceId: id }, operationId);
+      if (!decision.allowed) throw new AdmissionDenied(decision);
       const summary = await runWorkspaceNow(rt, id);
       await audit(id, p, 'monitor.requested');
       return json(200, summary);
     }
     // The latest morning brief as a PM reads it (same view as the Briefs page).
     if (section === 'briefs' && sub === 'latest' && req.method === 'GET') {
-      const briefs = await rt.repos.briefs.list(id);
-      const latest = briefs[briefs.length - 1];
+      const latest = ws.organizationId ? (await rt.repos.briefs.page({ organizationId: ws.organizationId, workspaceId: id }, { limit: 1 })).items[0] : (await rt.repos.briefs.list(id)).at(-1);
       if (!latest) return json(404, { error: 'No morning brief yet: one is composed at the workspace’s brief time.' });
-      const decisions = Object.fromEntries((await rt.repos.decisions.list(id)).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
-      return json(200, briefView(latest, { investigations: await rt.repos.investigations.list(id), watches: await rt.repos.watches.list(id), decisions }));
+      const investigations = (await Promise.all(latest.items.map((item) => rt.repos.investigations.get(id, item.investigationId)))).filter((inv) => inv !== null);
+      const actionIds = new Set(investigations.flatMap((inv) => inv.actions.map((action) => action.id)));
+      const decisions = Object.fromEntries((await Promise.all([...actionIds].map((actionId) => rt.repos.decisions.get(id, actionId)))).filter((decision) => decision !== null).map(({ actionId, decidedBy: _d, ...d }) => (void _d, [actionId, d])));
+      return json(200, briefView(latest, { investigations, watches: await rt.repos.watches.list(id), decisions }));
     }
-    if (section === 'snapshot' && req.method === 'GET') return json(200, await buildSnapshot(rt.repos, ws, m, rt.clock.now()));
+    if (section === 'snapshot' && req.method === 'GET') return json(200, await rt.tx.readSnapshot((repos) => buildSnapshot(repos, ws, m, rt.clock.now())));
     if (!section && req.method === 'PATCH') {
       if (m.role !== 'owner' && m.role !== 'admin') return json(403, { error: 'Only workspace owners and admins can change workspace settings.' });
       const body = WorkspacePatch.safeParse(req.body);
@@ -361,13 +377,19 @@ export function createApp(rt: Runtime) {
       return json(200, { ok: true });
     }
     if (section === 'export' && req.method === 'GET') {
-      const doc = await exportServerWorkspace(rt.repos, id, { clock: rt.clock, appVersion: APP_VERSION });
+      const doc = await rt.tx.readSnapshot((repos) => exportServerWorkspace(repos, id, { clock: rt.clock, appVersion: APP_VERSION }));
       await audit(id, p, 'workspace.exported', doc.exportId);
       return json(200, doc, { headers: { 'content-disposition': `attachment; filename="jagr-workspace-${doc.exportedAt.slice(0, 10)}.json"` } });
     }
     // Delivery log: what was sent where, and whether it arrived. Never message addresses or tokens.
-    if (section === 'notifications' && req.method === 'GET') return json(200, { notifications: (await rt.repos.notifications.list(id)).map(({ email: _e, ...n }) => (void _e, n)) });
-    if (section === 'audit' && req.method === 'GET') return json(200, { entries: await rt.repos.audit.list(id) });
+    if (section === 'notifications' && req.method === 'GET') {
+      const page = await rt.repos.notifications.page({ organizationId: context.organizationId, workspaceId: id }, { limit: Number(req.query.limit), cursor: req.query.cursor });
+      return json(200, { notifications: page.items.map(({ email: _e, ...n }) => (void _e, n)), nextCursor: page.nextCursor });
+    }
+    if (section === 'audit' && req.method === 'GET') {
+      const page = await rt.repos.audit.page({ organizationId: context.organizationId, workspaceId: id }, { limit: Number(req.query.limit), cursor: req.query.cursor });
+      return json(200, { entries: page.items, nextCursor: page.nextCursor });
+    }
     return json(404, { error: 'Not found.' });
   }
 
@@ -379,10 +401,14 @@ export function createApp(rt: Runtime) {
     if (head === 'auth' && a && b === 'start' && req.method === 'GET') return authStart(a, req);
     if (head === 'auth' && a && b === 'callback' && req.method === 'GET') return authCallback(a, req);
 
-    if (head === 'cron' && (a === 'tick' || a === 'worker')) {
+    if (head === 'cron' && (a === 'tick' || a === 'worker' || a === 'status')) {
       if (!rt.config.cronSecret || !sameSecret(req.headers.authorization ?? '', `Bearer ${rt.config.cronSecret}`)) return json(401, { error: 'Unauthorized.' });
       if (req.method !== 'POST' && req.method !== 'GET') return json(405, { error: 'Method not allowed.' });
-      if (a === 'tick') return json(200, { tick: await schedulerTick(rt) });
+      if (a === 'status') return req.method === 'GET' ? json(200, { queue: await rt.queue.status() }) : json(405, { error: 'Method not allowed.' });
+      if (a === 'tick') {
+        const tick = await schedulerTick(rt);
+        return json(tick.failedWorkspaceIds.length ? 503 : 200, { tick });
+      }
       return json(200, { worker: await runOneJob(rt, { workerId: `http-${randomToken(8)}`, leaseMs: 60_000 }) });
     }
 
@@ -409,17 +435,17 @@ export function createApp(rt: Runtime) {
       const list = [];
       for (const mem of p.memberships) {
         const w = await rt.repos.workspaces.get(mem.workspaceId);
-        if (w) list.push({ id: w.id, name: w.name, mode: w.mode, createdAt: w.createdAt, role: mem.role, canApprove: mem.canApprove });
+        if (w?.organizationId && p.organizationMemberships.some((membership) => membership.organizationId === w.organizationId) && (!req.query.organizationId || req.query.organizationId === w.organizationId)) list.push({ id: w.id, organizationId: w.organizationId, name: w.name, mode: w.mode, createdAt: w.createdAt, role: mem.role, canApprove: mem.canApprove });
       }
       return json(200, { workspaces: list });
     }
     if (head === 'workspaces' && !a && req.method === 'POST') {
       const body = WorkspaceBody.safeParse(req.body ?? {});
       if (!body.success) return json(400, { error: 'Invalid workspace.' });
-      const organizationId = await organizationFor(p);
-      if (!(await rt.entitlements.canCreateWorkspace({ userId: p.user.id, organizationId }))) return json(403, { error: 'Your organization cannot create another workspace.' });
+      const organizationId = await organizationFor(p, body.data.organizationId);
+      if (!organizationId) return json(p.organizationMemberships.length > 1 && !body.data.organizationId ? 400 : 403, { error: body.data.organizationId ? 'Organization not found.' : 'Select an organization.' });
       const ws: Workspace = { id: newId('ws'), organizationId, name: body.data.name, mode: body.data.mode, createdAt: rt.clock.now(), settings: { planner: 'deterministic', aiEgressAllowed: true, timezone: 'UTC' }, brief: { enabled: true, time: '08:00', timezone: 'UTC' }, importedExportIds: [], version: 1 };
-      await rt.tx.run(async (repos) => {
+      await rt.admission.withResource('workspace', { userId: p.user.id, organizationId }, async (repos) => {
         await repos.workspaces.create(ws);
         await repos.members.add({ workspaceId: ws.id, userId: p.user.id, role: 'owner', canApprove: true });
       });
@@ -432,15 +458,19 @@ export function createApp(rt: Runtime) {
     if (head === 'import' && (a === 'plan' || a === 'commit') && req.method === 'POST') {
       const body = ImportBody.safeParse(req.body);
       if (!body.success) return json(400, { error: 'Expected { doc, confirm? }.' });
-      const all = await rt.repos.workspaces.list();
+      const organizationId = await organizationFor(p, body.data.organizationId);
+      if (!organizationId) return json(p.organizationMemberships.length > 1 && !body.data.organizationId ? 400 : 403, { error: body.data.organizationId ? 'Organization not found.' : 'Select an organization.' });
+      const all = await rt.repos.workspaces.listForOrganization(organizationId);
       const plan = planImport(body.data.doc, { alreadyImported: all.flatMap((w) => w.importedExportIds) });
       if (a === 'plan' || !plan.report.ok) return json(plan.report.ok ? 200 : 422, { report: plan.report });
       if (!body.data.confirm) return json(400, { error: 'Confirm the dry-run report (confirm: true) to import.', report: plan.report });
       const workspaceId = newId('ws');
-      const organizationId = await organizationFor(p);
-      if (!(await rt.entitlements.canCreateWorkspace({ userId: p.user.id, organizationId }))) return json(403, { error: 'Your organization cannot create another workspace.' });
-      const ws = await commitServerImport(rt.tx, plan, { workspaceId, organizationId, actor: { ref: p.user.id, displayName: p.user.displayName }, clock: rt.clock });
-      await rt.repos.members.add({ workspaceId, userId: p.user.id, role: 'owner', canApprove: true });
+      const ws = await rt.admission.withResource('workspace', { userId: p.user.id, organizationId }, async (repos) => {
+        const scopedTx = { run: <T>(fn: (r: typeof repos) => Promise<T>) => fn(repos), readSnapshot: <T>(fn: (r: typeof repos) => Promise<T>) => fn(repos) };
+        const imported = await commitServerImport(scopedTx, plan, { workspaceId, organizationId, actor: { ref: p.user.id, displayName: p.user.displayName }, clock: rt.clock });
+        await repos.members.add({ workspaceId, userId: p.user.id, role: 'owner', canApprove: true });
+        return imported;
+      });
       return json(201, { workspace: publicWorkspace(ws), report: plan.report });
     }
     return json(404, { error: 'Not found.' });
@@ -450,6 +480,9 @@ export function createApp(rt: Runtime) {
     try {
       return await handle(req);
     } catch (e) {
+      if (e instanceof HistoryCursorError) return json(400, { error: e.message });
+      if (e instanceof HistorySizeError) return json(413, { error: e.message, code: 'history_too_large' });
+      if (e instanceof AdmissionDenied) return json(403, { error: e.message, code: e.decision.code });
       if (e instanceof WorkspaceBusy) return json(409, { error: e.message, code: 'workspace_busy' });
       // Never echo internals (or anything that might carry a credential) to the client.
       console.error('[jagr api]', req.method, req.path, redactPersonalData(String((e as Error)?.message ?? e)).slice(0, 300));

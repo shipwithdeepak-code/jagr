@@ -1,6 +1,7 @@
 import { defineNormalizedEvent, type NormalizedEvent } from '../events.js';
 import type { JobQueue, LeasedJob } from '../ports/jobs.js';
 import type { SourceState, SourceTarget } from '../ports/persistence.js';
+import type { SourceChecker } from '../ports/sourceCheck.js';
 import { sourceTargetIdsForWatch } from '../sourceIdentity.js';
 import { dailyOccurrences, nextRunAt } from '../scheduler.js';
 import { uniqueId } from './ids.js';
@@ -54,20 +55,6 @@ function failureStatus(error: Error): SourceState['status'] {
   return 'internal_error';
 }
 
-function relevant(target: SourceTarget, event: NormalizedEvent, watch: Awaited<ReturnType<MonitoringDeps['repos']['watches']['list']>>[number]) {
-  if (!sourceTargetIdsForWatch(watch, [target]).includes(target.id)) return false;
-  if (event.type === 'sentry.release') return watch.signals.some((signal) => signal.key === 'changes');
-  if (event.type === 'sentry.issue') {
-    const area = (event.payload as { area?: string } | undefined)?.area;
-    return watch.signals.some((signal) => signal.key === 'work_items' && (!signal.area || signal.area === '*' || signal.area === area));
-  }
-  if (event.type === 'sentry.metric') {
-    const metric = (event.payload as { metric?: string } | undefined)?.metric;
-    return watch.signals.some((signal) => signal.key === `metric:${metric}`);
-  }
-  return false;
-}
-
 /** Source checks may run more often than watches; investigation work waits for the watch's next schedule slot. */
 const nextWatchRun = (watch: Parameters<typeof nextRunAt>[0], observedAt: string) =>
   watch.schedule.frequency === 'daily'
@@ -99,9 +86,11 @@ export async function runSourceCheckJob(deps: MonitoringDeps & { queue: JobQueue
     if (!connector?.sourceChecker) throw new Error(`No source checker for ${connection.provider}.`);
     const secret = connection.secretRef ? (await deps.secrets.get(connection.secretRef, { workspaceId: workspace.id, connectionId: connection.id })).secret : undefined;
     const prior = await deps.repos.sourceStates.get(workspace.id, target.id);
+    let checker: SourceChecker;
     let observation;
     try {
-      observation = await connector.sourceChecker(connection, { secret, http: deps.http, clock: deps.clock }).check(target, prior);
+      checker = connector.sourceChecker(connection, { secret, http: deps.http, clock: deps.clock });
+      observation = await checker.check(target, prior);
     } catch (e) {
       const error = e as Error;
       const at = deps.clock.now();
@@ -134,9 +123,10 @@ export async function runSourceCheckJob(deps: MonitoringDeps & { queue: JobQueue
     // Fan out from the observed delta even when its events were inserted by an earlier partial attempt:
     // deterministic watch-job keys make retry finish the missing enqueue without duplicating completed work.
     const watches = (await deps.repos.watches.list(workspace.id)).filter((watch) => watch.status === 'active');
+    const attachedWatches = watches.filter((watch) => sourceTargetIdsForWatch(watch, [target]).includes(target.id));
     const runs = new Map<string, { watchId: string; runAt: string }>();
     for (const event of durableEvents) {
-      for (const watch of watches.filter((candidate) => relevant(target, event, candidate))) {
+      for (const watch of attachedWatches.filter((candidate) => checker.relevant(event, candidate))) {
         const triggerKey = `source-event:${event.eventId}:watch:${watch.id}`;
         const recorded = await deps.repos.cursors.get(workspace.id, triggerKey);
         const runAt = recorded || nextWatchRun(watch, event.observedAt);

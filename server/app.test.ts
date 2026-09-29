@@ -13,6 +13,8 @@ import { createApp } from './app';
 import type { ApiRequest, ApiResponse } from './http/types';
 import { hashToken } from './auth';
 import { permissiveEntitlements, type EntitlementPolicy } from '../src/product/ports/entitlements';
+import type { WatchInvestigation } from '../src/product/types';
+import { HistorySizeError } from '../src/product/ports/history';
 
 /**
  * The API end to end, on real Postgres (PGlite) with a fake identity provider standing in for
@@ -75,6 +77,56 @@ async function importFixture(app: ReturnType<typeof createApp>, s: Session): Pro
 }
 
 describe('auth', () => {
+  it('serves bounded, tenant-scoped history pages and rejects a foreign cursor', async () => {
+    const { app, rt } = await setup();
+    const ana = await signIn(app, 'code-ana');
+    const ben = await signIn(app, 'code-ben');
+    const wsA = await importFixture(app, ana);
+    const wsB = await importFixture(app, ben);
+    const at = '2026-09-25T10:00:00.000Z';
+    for (let i = 0; i < 3; i++) {
+      const id = `history-${i}`;
+      await rt.repos.audit.append({ id, workspaceId: wsA, at, actor: { ref: 'system', displayName: 'Jagr' }, action: 'test' });
+      await rt.repos.notifications.add(wsA, { id, channel: 'chat', dedupeKey: id, deliveredAt: at, status: 'delivered' });
+      await rt.repos.investigations.save(wsA, { id, startedAt: at, updatedAt: at, title: id, area: 'checkout', status: 'RESOLVED', attention: 'NONE' } as unknown as WatchInvestigation);
+    }
+    const audit = await app(req('GET', `/api/workspaces/${wsA}/audit?limit=2`, ana));
+    expect(audit.status).toBe(200);
+    const first = audit.body as { entries: { id: string }[]; nextCursor: string };
+    expect(first.entries).toHaveLength(2);
+    const next = await app(req('GET', `/api/workspaces/${wsA}/audit?limit=2&cursor=${encodeURIComponent(first.nextCursor)}`, ana));
+    expect(next.status).toBe(200);
+    expect((next.body as { entries: { id: string }[] }).entries.map((entry) => entry.id)).not.toContain(first.entries[0].id);
+    expect((await app(req('GET', `/api/workspaces/${wsB}/audit?cursor=${encodeURIComponent(first.nextCursor)}`, ben))).status).toBe(400);
+    expect((await app(req('GET', `/api/workspaces/${wsA}/audit?cursor=bad`, ana))).status).toBe(400);
+    expect((await app(req('GET', `/api/workspaces/${wsA}/audit?limit=2`, ben))).status).toBe(404);
+    expect((await app(req('GET', `/api/workspaces/${wsA}/snapshot`, ben))).status).toBe(404);
+    expect((await app(req('GET', `/api/workspaces/${wsA}/export`, ben))).status).toBe(404);
+    const notifications = await app(req('GET', `/api/workspaces/${wsA}/notifications?limit=2`, ana));
+    expect((notifications.body as { notifications: unknown[]; nextCursor: string }).notifications).toHaveLength(2);
+    expect((notifications.body as { nextCursor: string }).nextCursor).toBeTruthy();
+    const investigations = await app(req('GET', `/api/workspaces/${wsA}/investigations?limit=2`, ana));
+    expect((investigations.body as { investigations: unknown[]; nextCursor: string }).investigations).toHaveLength(2);
+    expect((investigations.body as { nextCursor: string }).nextCursor).toBeTruthy();
+  });
+
+  it('returns an explicit error rather than a partial snapshot or export when history exceeds the response bound', async () => {
+    const { app, rt } = await setup();
+    const ana = await signIn(app, 'code-ana');
+    const id = await importFixture(app, ana);
+    vi.spyOn(rt.tx, 'readSnapshot').mockRejectedValue(new HistorySizeError());
+    const snapshot = await app(req('GET', `/api/workspaces/${id}/snapshot`, ana));
+    expect(snapshot.status).toBe(413);
+    expect(snapshot.body).toMatchObject({ code: 'history_too_large' });
+    expect((await app(req('GET', `/api/workspaces/${id}/export`, ana))).status).toBe(413);
+    expect((await rt.repos.audit.list(id)).some((entry) => entry.action === 'workspace.exported')).toBe(false);
+  });
+  it('keeps queue health behind the cron credential', async () => {
+    const { app } = await setup();
+    expect((await app(req('GET', '/api/cron/status'))).status).toBe(401);
+    expect((await app(req('GET', '/api/cron/status', undefined, undefined, { authorization: 'Bearer cron-secret' }))).body).toMatchObject({ queue: { queued: 0, leased: 0, dead: 0, expiredLeases: 0, recentDead: [] } });
+  });
+
   it('health is public; everything else needs a session', async () => {
     const { app } = await setup();
     expect((await app(req('GET', '/api/health'))).body).toMatchObject({ ok: true, mode: 'multi-tenant', signIn: ['fake'] });
@@ -132,6 +184,44 @@ describe('central entitlement policy', () => {
     const session = await signIn(app, 'code-ana');
     expect((await app(req('POST', '/api/workspaces', session, { name: 'Blocked' }))).status).toBe(403);
     expect(canCreateWorkspace).toHaveBeenCalledWith(expect.objectContaining({ userId: expect.any(String), organizationId: expect.any(String) }));
+  });
+
+  it('enforces the workspace numeric limit without creating the denied workspace', async () => {
+    const { app, rt } = await setup({}, { ...permissiveEntitlements, limitsFor: async () => ({ maxWorkspaces: 1 }) });
+    const session = await signIn(app, 'code-ana');
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'First' }))).status).toBe(201);
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'Second' }))).status).toBe(403);
+    const me = (await app(req('GET', '/api/me', session))).body as { organizationMemberships: { organizationId: string }[] };
+    expect(await rt.repos.workspaces.countForOrganization(me.organizationMemberships[0].organizationId)).toBe(1);
+  });
+});
+
+describe('explicit organization selection', () => {
+  it('keeps the one-organization flow compatible, but requires a selection for multiple organizations', async () => {
+    const { app, rt } = await setup();
+    const session = await signIn(app, 'code-ana');
+    const first = (await app(req('POST', '/api/workspaces', session, { name: 'First' }))).body as { workspace: { organizationId: string } };
+    const user = ((await app(req('GET', '/api/me', session))).body as { user: { id: string } }).user;
+    await rt.repos.organizations.create({ id: 'org-second', name: 'Second', createdAt: rt.clock.now() });
+    await rt.repos.organizationMembers.add({ organizationId: 'org-second', userId: user.id, role: 'owner' });
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'Ambiguous' }))).status).toBe(400);
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'Selected', organizationId: 'org-second' }))).body).toMatchObject({ workspace: { organizationId: 'org-second' } });
+    expect((await app(req('POST', '/api/workspaces', session, { name: 'Foreign', organizationId: 'org-foreign' }))).status).toBe(403);
+    expect(first.workspace.organizationId).not.toBe('org-second');
+  });
+
+  it('scopes workspace discovery and import deduplication by authorized organization', async () => {
+    const { app, rt } = await setup();
+    const session = await signIn(app, 'code-ana');
+    const first = (await app(req('POST', '/api/workspaces', session, { name: 'First' }))).body as { workspace: { organizationId: string } };
+    const org1 = first.workspace.organizationId;
+    const user = ((await app(req('GET', '/api/me', session))).body as { user: { id: string } }).user;
+    await rt.repos.organizations.create({ id: 'org-second', name: 'Second', createdAt: rt.clock.now() });
+    await rt.repos.organizationMembers.add({ organizationId: 'org-second', userId: user.id, role: 'owner' });
+    expect((await app(req('POST', '/api/import/commit', session, { doc: fixture, confirm: true, organizationId: org1 }))).status).toBe(201);
+    expect((await app(req('POST', '/api/import/commit', session, { doc: fixture, confirm: true, organizationId: 'org-second' }))).status).toBe(201);
+    const org1List = (await app(req('GET', `/api/workspaces?organizationId=${org1}`, session))).body as { workspaces: { organizationId: string }[] };
+    expect(org1List.workspaces.every((workspace) => workspace.organizationId === org1)).toBe(true);
   });
 });
 
@@ -213,6 +303,53 @@ describe('workspace isolation and approvals', () => {
 });
 
 describe('server-side monitoring', () => {
+  it('uses common admission for manual runs, reruns, scheduled watches, and source checks', async () => {
+    const denied = { ...permissiveEntitlements, canRunInvestigation: async () => false };
+    const { app, rt } = await setup({}, denied);
+    const session = await signIn(app, 'code-ana');
+    const id = await importFixture(app, session);
+    expect((await app(req('POST', `/api/workspaces/${id}/runs`, session))).status).toBe(403);
+
+    const stored = (await rt.repos.workspaces.get(id))!;
+    await rt.repos.workspaces.update({ ...stored, mode: 'connected' }, stored.version);
+    const [investigation] = await rt.repos.investigations.list(id);
+    const rerunKey = `${id}:rerun:${investigation.id}:${investigation.watchIds[0]}:${rt.clock.now()}`;
+    expect((await app(req('POST', `/api/workspaces/${id}/investigations/${investigation.id}/rerun`, session))).status).toBe(403);
+    expect(await rt.queue.inspect(rerunKey)).toBeNull();
+
+    await rt.queue.enqueue({ kind: 'monitor.watch', workspaceId: id, payload: { watchId: investigation.watchIds[0], dueAt: rt.clock.now() }, runAt: rt.clock.now(), idempotencyKey: 'scheduled-denied' });
+    const cron = { authorization: 'Bearer cron-secret' };
+    expect((await app(req('POST', '/api/cron/worker', undefined, undefined, cron))).body).toMatchObject({ worker: { state: 'denied', idempotencyKey: 'scheduled-denied' } });
+    expect(await rt.queue.inspect('scheduled-denied')).toMatchObject({ state: 'done' });
+
+    await rt.queue.enqueue({ kind: 'source.check', workspaceId: id, payload: { organizationId: stored.organizationId, sourceTargetId: 'missing' }, runAt: rt.clock.now(), idempotencyKey: 'source-denied' });
+    expect((await app(req('POST', '/api/cron/worker', undefined, undefined, cron))).body).toMatchObject({ worker: { state: 'denied', idempotencyKey: 'source-denied' } });
+    expect(await rt.queue.inspect('source-denied')).toMatchObject({ state: 'done' });
+  });
+
+  it('denies imported manual runs before executing when the subscription is inactive or usage is exhausted', async () => {
+    let executionLimit: number | undefined;
+    const policy = { ...permissiveEntitlements, limitsFor: async () => ({ investigationExecutionsPerPeriod: executionLimit }) };
+    const { app, rt } = await setup({}, policy);
+    const session = await signIn(app, 'code-ana');
+    const id = await importFixture(app, session);
+    const workspace = (await rt.repos.workspaces.get(id))!;
+    const original = (await rt.repos.subscriptions.get(workspace.organizationId!))!;
+    const existingInvestigations = await rt.repos.investigations.list(id);
+    await rt.repos.subscriptions.save({ ...original, status: 'paused', updatedAt: rt.clock.now() });
+
+    const inactive = await app(req('POST', `/api/workspaces/${id}/runs`, session));
+    expect(inactive.status).toBe(403);
+    expect(await rt.repos.investigations.list(id)).toEqual(existingInvestigations);
+    expect(await rt.queue.inspect(`${id}:manual:workspace:${rt.clock.now()}`)).toBeNull();
+
+    await rt.repos.subscriptions.save({ ...original, status: 'active', updatedAt: rt.clock.now() });
+    executionLimit = 0;
+    expect((await app(req('POST', `/api/workspaces/${id}/runs`, session))).status).toBe(403);
+    expect(await rt.repos.investigations.list(id)).toEqual(existingInvestigations);
+    expect(await rt.queue.inspect(`${id}:manual:workspace:${rt.clock.now()}`)).toBeNull();
+  });
+
   it('an imported (sample) workspace runs on demand; investigations and notifications are persisted', async () => {
     const { app, rt } = await setup();
     const s = await signIn(app, 'code-ana');

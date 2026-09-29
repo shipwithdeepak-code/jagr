@@ -3,11 +3,13 @@ import type { JobQueue, JobSpec, JobState, LeasedJob } from './jobs';
 import { LeaseLost } from './jobs';
 import type { AuditEntry, Connection, Decision, MetricDefinitionRecord, Membership, NotificationRecord, Organization, OrganizationMembership, Repositories, Session, SourceState, SourceTarget, Transactor, User, Workspace } from './persistence';
 import { NORMALIZED_EVENT_READ_LIMIT, NotFound, WriteConflict } from './persistence';
+import { decodeHistoryCursor, historyPage, pageSize, type HistoryQuery, type HistoryScope } from './history';
 import type { SecretPayload, SecretRef, SecretStore } from './secrets';
 import { SecretNotFound, SecretVersionConflict } from './secrets';
 import type { MorningBriefDoc, Watch, WatchInvestigation } from '../types';
 import type { ImportedDataset } from '../imports/schemas';
 import type { NormalizedEvent } from '../events';
+import type { Subscription, UsageEvent } from './controlPlane';
 
 /**
  * In-memory implementations of the ports. Pure TypeScript, no I/O: used by tests, by the contract
@@ -42,11 +44,13 @@ interface State {
   identities: Map<string, string>;
   members: Membership[];
   sessions: Map<string, Session>;
+  subscriptions: Map<string, Subscription>;
+  usage: Map<string, UsageEvent>;
   data: Map<string, WsData>;
 }
 
 const emptyWs = (): WsData => ({ connections: new Map(), sourceTargets: new Map(), sourceStates: new Map(), events: new Map(), metricDefs: new Map(), watches: new Map(), imports: new Map(), investigations: new Map(), decisions: new Map(), notifications: new Map(), briefs: new Map(), locks: new Map(), cursors: new Map(), audit: [] });
-const emptyState = (): State => ({ organizations: new Map(), organizationMembers: [], workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), data: new Map() });
+const emptyState = (): State => ({ organizations: new Map(), organizationMembers: [], workspaces: new Map(), users: new Map(), identities: new Map(), members: [], sessions: new Map(), subscriptions: new Map(), usage: new Map(), data: new Map() });
 
 function copyState(s: State): State {
   const ws = new Map<string, WsData>();
@@ -68,17 +72,26 @@ function copyState(s: State): State {
       audit: clone(d.audit),
     });
   }
-  return { organizations: new Map(clone([...s.organizations])), organizationMembers: clone(s.organizationMembers), workspaces: new Map(clone([...s.workspaces])), users: new Map(clone([...s.users])), identities: new Map(s.identities), members: clone(s.members), sessions: new Map(clone([...s.sessions])), data: ws };
+  return { organizations: new Map(clone([...s.organizations])), organizationMembers: clone(s.organizationMembers), workspaces: new Map(clone([...s.workspaces])), users: new Map(clone([...s.users])), identities: new Map(s.identities), members: clone(s.members), sessions: new Map(clone([...s.sessions])), subscriptions: new Map(clone([...s.subscriptions])), usage: new Map(clone([...s.usage])), data: ws };
 }
 
-export function createMemoryPersistence(): { repos: Repositories; tx: Transactor } {
-  let state = emptyState();
+export function createMemoryPersistence(initialState: State = emptyState()): { repos: Repositories; tx: Transactor } {
+  let state = initialState;
   const ws = (id: string) => {
     let d = state.data.get(id);
     if (!d) state.data.set(id, (d = emptyWs()));
     return d;
   };
   const values = <T>(m: Map<string, T>) => clone([...m.values()]);
+  const page = <T>(scope: HistoryScope, collection: string, items: T[], keyOf: (item: T) => string, idOf: (item: T) => string, query: HistoryQuery = {}) => {
+    if (state.workspaces.get(scope.workspaceId)?.organizationId !== scope.organizationId) throw new NotFound('Workspace');
+    const position = decodeHistoryCursor(query.cursor, scope, collection);
+    const ordered = items.filter((item) => {
+      const key = keyOf(item);
+      return !position || key < position.key || (key === position.key && idOf(item) < position.id);
+    }).sort((a, b) => keyOf(b).localeCompare(keyOf(a)) || idOf(b).localeCompare(idOf(a)));
+    return historyPage(clone(ordered.slice(0, pageSize(query.limit) + 1)), scope, collection, keyOf, idOf, query.limit);
+  };
 
   const repos: Repositories = {
     organizations: {
@@ -86,6 +99,7 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
       create: async (o) => {
         if (state.organizations.has(o.id)) throw new WriteConflict(`Organization ${o.id}`);
         state.organizations.set(o.id, clone(o));
+        state.subscriptions.set(o.id, { organizationId: o.id, planId: 'legacy', status: 'active', createdAt: o.createdAt, updatedAt: o.createdAt });
       },
     },
     organizationMembers: {
@@ -98,6 +112,11 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
     workspaces: {
       get: async (id) => clone(state.workspaces.get(id) ?? null),
       list: async () => values(state.workspaces),
+      listForScheduler: async (limit) => values(state.workspaces).filter((w) => w.mode === 'connected')
+        .sort((a, b) => (ws(a.id).cursors.get('scheduler.last_attempt') ?? '').localeCompare(ws(b.id).cursors.get('scheduler.last_attempt') ?? '') || a.id.localeCompare(b.id))
+        .slice(0, Math.max(0, Math.min(limit, 100))),
+      listForOrganization: async (organizationId) => clone([...state.workspaces.values()].filter((w) => w.organizationId === organizationId)),
+      countForOrganization: async (organizationId) => [...state.workspaces.values()].filter((w) => w.organizationId === organizationId).length,
       create: async (w) => {
         if (state.workspaces.has(w.id)) throw new WriteConflict(`Workspace ${w.id}`);
         state.workspaces.set(w.id, clone(w));
@@ -157,6 +176,7 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
         if (target.workspaceId !== w || !workspace?.organizationId || target.organizationId !== workspace.organizationId || connection?.workspaceId !== w) throw new WriteConflict('Source target scope');
         ws(w).sourceTargets.set(target.id, clone(target));
       },
+      countForOrganization: async (organizationId) => [...state.workspaces.values()].filter((w) => w.organizationId === organizationId).reduce((n, w) => n + ws(w.id).sourceTargets.size, 0),
     },
     sourceStates: {
       get: async (w, id) => clone(ws(w).sourceStates.get(id) ?? null),
@@ -216,19 +236,54 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
         ws(w).watches.set(x.id, clone(x));
       },
       remove: async (w, id) => void ws(w).watches.delete(id),
+      countForOrganization: async (organizationId) => [...state.workspaces.values()].filter((w) => w.organizationId === organizationId).reduce((n, w) => n + ws(w.id).watches.size, 0),
+    },
+    subscriptions: {
+      get: async (organizationId) => clone(state.subscriptions.get(organizationId) ?? null),
+      lock: async (organizationId, at) => {
+        if (!state.organizations.has(organizationId)) throw new NotFound('Organization');
+        let subscription = state.subscriptions.get(organizationId);
+        if (!subscription) {
+          subscription = { organizationId, planId: 'legacy', status: 'active', createdAt: at, updatedAt: at };
+          state.subscriptions.set(organizationId, subscription);
+        }
+        return clone(subscription);
+      },
+      save: async (subscription) => {
+        if (!state.organizations.has(subscription.organizationId)) throw new NotFound('Organization');
+        state.subscriptions.set(subscription.organizationId, clone(subscription));
+      },
+    },
+    usage: {
+      get: async (organizationId, id) => clone(state.usage.get(`${organizationId}:${id}`) ?? null),
+      add: async (event) => {
+        const key = `${event.organizationId}:${event.id}`;
+        if (state.usage.has(key)) return false;
+        const workspace = event.workspaceId ? state.workspaces.get(event.workspaceId) : undefined;
+        if (!state.organizations.has(event.organizationId) || (event.workspaceId && workspace?.organizationId !== event.organizationId)) throw new NotFound('Usage scope');
+        state.usage.set(key, clone(event));
+        return true;
+      },
+      sum: async (organizationId, kind, periodStart, periodEnd, workspaceId) => [...state.usage.values()].filter((event) => event.organizationId === organizationId && event.kind === kind && event.periodStart === periodStart && event.periodEnd === periodEnd && (!workspaceId || event.workspaceId === workspaceId)).reduce((n, event) => n + event.amount, 0),
     },
     imports: {
       list: async (w) => values(ws(w).imports),
+      page: async (scope, query) => page(scope, 'imports', values(ws(scope.workspaceId).imports), (item) => item.id, (item) => item.id, query),
       save: async (w, d) => void ws(w).imports.set(d.id, clone(d)),
       remove: async (w, id) => void ws(w).imports.delete(id),
     },
     investigations: {
       list: async (w) => values(ws(w).investigations),
+      page: async (scope, query) => page(scope, 'investigations', values(ws(scope.workspaceId).investigations), (item) => item.startedAt, (item) => item.id, query),
+      pageForBriefWindow: async (scope, since, at, query) => page(scope, `brief-investigations:${since}:${at}`, values(ws(scope.workspaceId).investigations).filter((item) => (item.updatedAt >= since && item.updatedAt <= at) || (item.startedAt >= since && item.startedAt <= at)), (item) => item.startedAt, (item) => item.id, query),
+      findByActionId: async (w, actionId) => clone([...ws(w).investigations.values()].find((item) => item.actions.some((action) => action.id === actionId)) ?? null),
       get: async (w, id) => clone(ws(w).investigations.get(id) ?? null),
       save: async (w, inv) => void ws(w).investigations.set(inv.id, clone(inv)),
     },
     decisions: {
       list: async (w) => values(ws(w).decisions),
+      page: async (scope, query) => page(scope, 'decisions', values(ws(scope.workspaceId).decisions), (item) => item.actionId, (item) => item.actionId, query),
+      get: async (w, id) => clone(ws(w).decisions.get(id) ?? null),
       put: async (w, d, expected) => {
         const cur = ws(w).decisions.get(d.actionId) ?? null;
         if (expected !== undefined && JSON.stringify(cur) !== JSON.stringify(expected ?? null)) throw new WriteConflict(`Decision on ${d.actionId}`);
@@ -237,6 +292,10 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
     },
     notifications: {
       list: async (w) => values(ws(w).notifications),
+      page: async (scope, query) => page(scope, 'notifications', values(ws(scope.workspaceId).notifications), (item) => item.deliveredAt, (item) => item.id, query),
+      pageForBriefWindow: async (scope, since, at, query) => page(scope, `brief-notifications:${since}:${at}`, values(ws(scope.workspaceId).notifications).filter((item) => item.channel === 'in_app' && !!item.email && item.deliveredAt >= since && item.deliveredAt <= at), (item) => item.deliveredAt, (item) => item.id, query),
+      firstEmailForInvestigation: async (w, investigationId) => clone([...ws(w).notifications.values()].filter((item) => item.channel === 'in_app' && !!item.email && item.investigationId === investigationId).sort((a, b) => a.id.localeCompare(b.id))[0] ?? null),
+      byDedupe: async (w, channel, dedupeKey) => clone([...ws(w).notifications.values()].find((n) => n.channel === channel && n.dedupeKey === dedupeKey) ?? null),
       add: async (w, n) => {
         const m = ws(w).notifications;
         if ([...m.values()].some((x) => x.dedupeKey === n.dedupeKey && x.channel === n.channel)) return false;
@@ -264,6 +323,7 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
     },
     briefs: {
       list: async (w) => values(ws(w).briefs).sort((a, b) => a.generatedAt.localeCompare(b.generatedAt)),
+      page: async (scope, query) => page(scope, 'briefs', values(ws(scope.workspaceId).briefs), (item) => item.generatedAt, (item) => item.id, query),
       save: async (w, b) => void ws(w).briefs.set(b.id, clone(b)),
     },
     cursors: {
@@ -273,6 +333,8 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
     audit: {
       append: async (e) => void ws(e.workspaceId).audit.push(clone(e)),
       list: async (w) => clone(ws(w).audit),
+      page: async (scope, query) => page(scope, 'audit', clone(ws(scope.workspaceId).audit), (item) => item.at, (item) => item.id, query),
+      recentWatchRuns: async (scope, limit) => page(scope, 'audit', clone(ws(scope.workspaceId).audit).filter((item) => item.action === 'monitor.watch' && item.target), (item) => item.at, (item) => item.id, { limit }).items.reverse(),
     },
   };
 
@@ -289,6 +351,11 @@ export function createMemoryPersistence(): { repos: Repositories; tx: Transactor
           throw e;
         }
       });
+      chain = next.catch(() => undefined);
+      return next;
+    },
+    readSnapshot: <T>(fn: (r: Repositories) => Promise<T>) => {
+      const next = chain.then(() => fn(createMemoryPersistence(copyState(state)).repos));
       chain = next.catch(() => undefined);
       return next;
     },
@@ -310,9 +377,11 @@ interface StoredJob extends LeasedJob {
   lastError?: string;
 }
 
-export function createMemoryJobQueue(clock: Clock): JobQueue {
+export function createMemoryJobQueue(clock: Clock, tenantForWorkspace: (workspaceId: string) => string = (workspaceId) => workspaceId): JobQueue {
   const jobs: StoredJob[] = [];
   let seq = 0;
+  let turn = 0;
+  const tenantTurns = new Map<string, number>();
   const leased = (id: string, token: string) => {
     const j = jobs.find((x) => x.id === id);
     // Ownership is the lease token: an expired lease nobody else claimed is still the holder's.
@@ -328,11 +397,12 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
     },
     async claim({ workerId, kinds, limit, leaseMs }) {
       const now = clock.now();
-      const due = jobs
-        .filter((j) => (!kinds || kinds.includes(j.kind)) && j.runAt <= now && (j.state === 'queued' || (j.state === 'leased' && j.leaseUntil <= now)))
-        .sort((a, b) => a.runAt.localeCompare(b.runAt) || a.id.localeCompare(b.id))
-        .slice(0, limit);
-      return due.map((j) => {
+      const claimed: LeasedJob[] = [];
+      for (let i = 0; i < Math.min(Math.max(limit, 0), 100); i++) {
+        const j = jobs
+          .filter((candidate) => (!kinds || kinds.includes(candidate.kind)) && candidate.runAt <= now && (candidate.state === 'queued' || (candidate.state === 'leased' && candidate.leaseUntil <= now)))
+          .sort((a, b) => (tenantTurns.get(tenantForWorkspace(a.workspaceId)) ?? -1) - (tenantTurns.get(tenantForWorkspace(b.workspaceId)) ?? -1) || a.runAt.localeCompare(b.runAt) || a.id.localeCompare(b.id))[0];
+        if (!j) break;
         j.state = 'leased';
         j.attempts += 1;
         j.firstAttemptedAt ??= now;
@@ -342,8 +412,10 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
         const { state: _s, lastError: _e, createdAt: _c, firstAttemptedAt: _f, lastAttemptedAt: _a, completedAt: _d, lastFailedAt: _l, ...out } = j;
         void _s;
         void _e;
-        return clone(out);
-      });
+        claimed.push(clone(out));
+        tenantTurns.set(tenantForWorkspace(j.workspaceId), ++turn);
+      }
+      return claimed;
     },
     async complete(id, token) {
       const j = leased(id, token);
@@ -365,6 +437,18 @@ export function createMemoryJobQueue(clock: Clock): JobQueue {
     async inspect(key) {
       const j = jobs.find((x) => x.idempotencyKey === key);
       return j ? { state: j.state, attempts: j.attempts, runAt: j.runAt, createdAt: j.createdAt, firstAttemptedAt: j.firstAttemptedAt, lastAttemptedAt: j.lastAttemptedAt, completedAt: j.completedAt, lastFailedAt: j.lastFailedAt, leaseUntil: j.leaseUntil || undefined, lastError: j.lastError } : null;
+    },
+    async status() {
+      const queued = jobs.filter((j) => j.state === 'queued');
+      return {
+        queued: queued.length,
+        leased: jobs.filter((j) => j.state === 'leased').length,
+        dead: jobs.filter((j) => j.state === 'dead').length,
+        expiredLeases: jobs.filter((j) => j.state === 'leased' && j.leaseUntil <= clock.now()).length,
+        oldestQueuedAt: queued.map((j) => j.runAt).sort()[0],
+        recentDead: jobs.filter((j) => j.state === 'dead').sort((a, b) => (b.lastFailedAt ?? '').localeCompare(a.lastFailedAt ?? '') || b.id.localeCompare(a.id)).slice(0, 20)
+          .map((j) => ({ jobId: j.id, workspaceId: j.workspaceId, ...(j.kind === 'source.check' && typeof j.payload.sourceTargetId === 'string' ? { sourceTargetId: j.payload.sourceTargetId } : {}), kind: j.kind, attempts: j.attempts, failedAt: j.lastFailedAt })),
+      };
     },
   };
 }

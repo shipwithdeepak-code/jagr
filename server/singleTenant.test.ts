@@ -213,7 +213,7 @@ describe('single-tenant bootstrap', () => {
     const { session } = await signIn(app, 'code-owner');
     const log = await app(req('GET', `/api/workspaces/${OWNER_WORKSPACE_ID}/notifications`, session));
     expect(log.status).toBe(200);
-    expect(log.body).toEqual({ notifications: [] });
+    expect(log.body).toEqual({ notifications: [], nextCursor: null });
     for (const path of ['/api/slack/interactions', '/api/slack/events', '/api/slack/commands']) expect((await app(req('POST', path, session, {}))).status).toBe(404);
     const check = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-slack/check`, session));
     // The check verifies the bot token with auth.test (sending nothing); the test token is not a real one.

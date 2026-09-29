@@ -28,7 +28,7 @@ repository, a `VITE_`-prefixed variable, or a chat.
 3. Set it as `DATABASE_URL` in Vercel. Leave `DATABASE_SSL` unset (TLS with certificate verification).
 
 Migrations run automatically when a function instance starts (idempotent, recorded in `jagr_migrations`).
-Tables: `workspaces`, `users`, `identities`, `memberships`, `sessions`, `audit_log`, `jobs`, `secrets`,
+Tables: `organizations`, `organization_memberships`, `subscriptions`, `usage_events`, `workspaces`, `users`, `identities`, `memberships`, `sessions`, `audit_log`, `jobs`, `secrets`,
 and `workspace_docs` — the per-workspace documents: connections, watches, investigations, decisions
 (approvals), notifications, briefs, sync cursors, imports and run locks. Credentials live only in
 `secrets`, envelope-encrypted with `JAGR_SECRET_KEY`.
@@ -70,7 +70,7 @@ After changing variables, redeploy (Vercel applies them to new deployments only)
 
 ## 5. Scheduling (watches run with the browser closed)
 
-The scheduler is `/api/cron/tick`: with `Authorization: Bearer $CRON_SECRET` it only enqueues due source checks,
+The scheduler is `/api/cron/tick`: with `Authorization: Bearer $CRON_SECRET` it selects at most 50 connected workspaces per tick (oldest scheduler attempt first) and only enqueues due source checks,
 legacy watch runs, and briefs (idempotent keys make repeated or overlapping ticks harmless). Sentry target-backed
 watches share one source check rather than polling once per watch. `/api/cron/worker` claims and executes exactly one job per authenticated request.
 The transitional GitHub Actions workflow ticks once and then makes at most ten worker requests. A watch's slots are its frequency counted from when the watch was created (a 30-minute watch
@@ -82,6 +82,14 @@ created at 09:07 is due at 09:37, 10:07, …).
   after a gap still sees the changes made during it.
 - `enqueued: 0` is normal: no watch slot fell due between the previous tick and this one (e.g. every other
   15-minute tick for a 30-minute watch, or a manual tick right after a scheduled one).
+
+For queue diagnosis, `GET /api/cron/status` with the same bearer credential returns queued, leased, dead,
+and expired-lease counts, the oldest queued run time, and at most 20 recent dead jobs with tenant/workspace/source
+identifiers. It does not return job payloads or error text. Claims rotate between organizations, so a large
+backlog from one organization does not prevent another from being claimed. A tick handles at most 50
+workspaces; if more are due, subsequent ticks select the least recently attempted workspaces. A failed
+workspace keeps its last successful checkpoint for retry; the tick returns HTTP 503 with its id in
+`failedWorkspaceIds` while other selected workspaces still progress.
 
 Vercel Hobby allows Cron Jobs at most once a day, so the tick is driven by
 `.github/workflows/jagr-cron.yml` every 15 minutes. In GitHub → repository → Settings → Secrets and
