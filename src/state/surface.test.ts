@@ -118,14 +118,19 @@ describe('surface boundary in the app', () => {
     expect(app).not.toContain("?? 'Investigation'");
   });
 
-  it('14 · the landing and gate bring no sidebar, and sign-in is the existing Google flow', () => {
-    for (const f of ['pages/Landing.tsx', 'components/WorkspaceGate.tsx']) {
-      const code = src(f);
-      expect(code).not.toMatch(/AppShell|Sidebar|WorkspaceSwitcher/);
-      expect(code).toContain('serverApi.signInUrl(');
-      expect(code).toContain('onClick={markSigningIn}');
-      expect(code).not.toMatch(/fetch\(|'\/api\//);
-    }
+  it('14 · the gate brings no sidebar, and the homepage enters the original provider flow', () => {
+    const code = src('components/WorkspaceGate.tsx');
+    expect(code).not.toMatch(/AppShell|Sidebar|WorkspaceSwitcher/);
+    expect(code).toContain('serverApi.signInUrl(');
+    expect(code).toContain('markSigningIn');
+    expect(code).not.toMatch(/fetch\(|'\/api\//);
+    const landing = src('pages/Landing.tsx');
+    const document = src('pages/attention-day.production.html');
+    expect(landing).toContain("session.server?.signIn.includes('google')");
+    expect(landing).toContain("serverApi.signInUrl('google', '/')");
+    expect(landing).toContain("entry.addEventListener('click', markSigningIn)");
+    expect(document).toContain('/api/auth/google/start?returnTo=%2F');
+    expect(document).not.toContain('/auth?returnTo=%2F');
     // The gate's sign-in returns to the route that was asked for.
     expect(src('components/WorkspaceGate.tsx')).toContain("serverApi.signInUrl('google', `${pathname}${search}${hash}`)");
   });
@@ -137,10 +142,22 @@ describe('surface boundary in the app', () => {
   });
 
   it('16 · every figure on the landing is labelled illustrative', () => {
-    const landing = src('pages/Landing.tsx');
-    expect(landing).toContain('Figures on this page are illustrative.');
-    expect(landing).toContain('An illustrative night');
-    expect(landing).toContain('An illustrative investigation');
-    expect(landing).toContain('example workspace');
+    const landing = src('pages/attention-day.production.html');
+    expect(landing).toContain('ILLUSTRATIVE SAMPLE');
+    expect(landing).toContain('Illustrative product examples');
+    expect(landing).toContain('Illustrative Jagr investigation');
+    expect(landing).toContain('ILLUSTRATIVE WORKSPACE');
+  });
+
+  it('17 · the frozen production homepage keeps its narrative and original product entry contracts', () => {
+    const landing = src('pages/attention-day.production.html');
+    for (const copy of ['Know what', 'changed while', 'you were away.', 'The product never', 'clocks off.', 'You don’t need', 'The searching', 'Impact confirmed.', 'Cause remains open.', 'More sources, as your product grows.', 'Less checking.', 'Your product keeps moving.']) {
+      expect(landing).toContain(copy);
+    }
+    expect(landing.match(/href="\/api\/auth\/google\/start\?returnTo=%2F"/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(landing).toContain('data-local-entry');
+    expect(landing).toContain('href="/demo"');
+    expect(landing).toContain('href="/about"');
+    expect(landing).not.toMatch(/href="(?:#|javascript:|)"/);
   });
 });

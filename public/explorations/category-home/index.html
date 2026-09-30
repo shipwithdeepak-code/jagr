@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Jagr tells product teams what changed, why it matters, and what deserves attention.">
+  <title>Jagr — Know what changed while you were away</title>
+  <link rel="stylesheet" href="../shared/base.css"><link rel="stylesheet" href="./category-home.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-nav">
+    <a class="brand" href="/"><span class="brand-eye"><i></i></span>JAGR</a>
+    <nav aria-label="Homepage"><a href="#morning">Product</a><a href="#investigation">How it works</a><a href="#difference">Why Jagr</a></nav>
+    <div class="nav-actions"><a href="/demo">Watch a demo</a><a class="button" href="/">Open Jagr <span>↗</span></a></div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="night-clock"><span>22:00</span><i></i><span>06:47</span></div>
+      <div class="hero-copy">
+        <p class="hero-kicker">While you were away, your product kept moving.</p>
+        <h1 id="hero-title">Wake up to<br><em>what mattered.</em></h1>
+        <p class="hero-dek">Jagr watches the change, investigates the signal, and brings you the few things worth your attention.</p>
+        <div class="hero-links"><a class="button light" href="#morning">See this morning’s brief <span>↓</span></a><a href="/demo">Watch Jagr investigate →</a></div>
+      </div>
+
+      <div class="night-stage" aria-label="Illustrative overnight product activity">
+        <div class="activity-header"><span><i></i> JAGR IS WATCHING</span><span>ILLUSTRATIVE WORKSPACE</span></div>
+        <div class="activity-grid">
+          <span class="event muted" style="--x:5%;--y:18%;--d:.1s"><b>22:03</b> Sessions stable</span>
+          <span class="event" style="--x:56%;--y:12%;--d:.4s"><b>22:14</b> Release 4.8.1</span>
+          <span class="event muted" style="--x:17%;--y:44%;--d:.7s"><b>22:17</b> Search +1.2%</span>
+          <span class="event change" style="--x:47%;--y:39%;--d:1s"><b>22:19</b> Checkout −18%</span>
+          <span class="event" style="--x:67%;--y:62%;--d:1.3s"><b>22:23</b> 3 checkout issues</span>
+          <span class="event muted" style="--x:10%;--y:72%;--d:1.6s"><b>22:26</b> Signup stable</span>
+          <span class="event" style="--x:38%;--y:82%;--d:1.9s"><b>22:31</b> Payment complaints ↑</span>
+          <span class="event muted" style="--x:72%;--y:29%;--d:2.2s"><b>22:38</b> Latency normal</span>
+          <svg class="attention-path" viewBox="0 0 800 580" preserveAspectRatio="none" aria-hidden="true"><path d="M520 95 C490 160 400 180 420 250 S590 325 570 390 S400 455 420 510"/></svg>
+          <div class="resolved"><small>INVESTIGATION OPENED · 22:42</small><b>1 change deserves attention</b><span>Checkout health</span></div>
+        </div>
+      </div>
+      <div class="hero-bottom"><span>Monitoring ≠ understanding</span><span>Scroll into the morning</span></div>
+    </section>
+
+    <section class="morning" id="morning" data-scroll-stage aria-labelledby="morning-title">
+      <div class="sunrise" aria-hidden="true"></div>
+      <div class="morning-copy">
+        <p class="chapter">01 · THE MORNING AFTER</p>
+        <h2 id="morning-title">You don’t start with<br>six open tabs.</h2>
+        <p>You start with what needs you.</p>
+      </div>
+      <div class="overview-shell" aria-label="Illustrative Jagr morning overview">
+        <header><div class="app-mark"><span class="brand-eye"><i></i></span><b>Jagr</b></div><span>Tuesday, 23 September</span><div class="app-person">DP</div></header>
+        <aside><b>Overview</b><span>Watches</span><span>Investigations <i>1</i></span><span>Briefs</span><span>Sources</span><small>JAGR IS WATCHING<br><em>Next check in 12 min</em></small></aside>
+        <div class="overview-main">
+          <div class="good-morning"><span>Good morning.</span><h3>One thing needs<br>your attention.</h3><p>Five other watches are quiet.</p></div>
+          <article class="priority-finding"><div class="finding-top"><span>HIGH ATTENTION</span><time>Updated 22:42 UTC</time></div><h4>Checkout conversion dropped 18%.</h4><p>Impact confirmed across a core flow. A release is correlated in time; the cause is not established.</p><div class="finding-reading"><span><small>Observed</small>3.40% → 2.79%</span><span><small>Evidence</small>4 sources checked</span><span><small>Next</small>Compare rollout cohorts</span></div><a href="#investigation">Open investigation <b>↗</b></a></article>
+          <div class="quiet-line"><span><i></i> Signup health</span><b>Quiet</b><span><i></i> Search engagement</span><b>Quiet</b><span><i></i> Revenue</span><b>Quiet</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="context" aria-labelledby="context-title">
+      <div class="context-title" data-reveal><p class="chapter">02 · THE OLD MORNING</p><h2 id="context-title">The answer used to be<br>scattered everywhere.</h2></div>
+      <div class="tool-sweep" data-scroll-stage>
+        <div class="tool-stack" aria-label="The manual product-checking workflow"><div class="tool t1"><span>ANALYTICS</span><b>Which metric moved?</b><small>14 charts to inspect</small></div><div class="tool t2"><span>RELEASES</span><b>What shipped?</b><small>8 deployments overnight</small></div><div class="tool t3"><span>ISSUES</span><b>Is anyone reporting it?</b><small>27 new or updated</small></div><div class="tool t4"><span>FEEDBACK</span><b>What are customers saying?</b><small>43 conversations</small></div><div class="tool t5"><span>MONITORING</span><b>Did anything alert?</b><small>9 notifications</small></div></div>
+        <div class="compression"><span class="attention-line"></span><p>Jagr removes the search.<br><b>Not the evidence.</b></p></div>
+      </div>
+    </section>
+
+    <section class="transformation" aria-labelledby="transformation-title">
+      <header data-reveal><p class="chapter">03 · FROM CHANGE TO ATTENTION</p><h2 id="transformation-title">Most change<br><em>doesn’t need you.</em></h2></header>
+      <div class="change-river" data-scroll-stage>
+        <div class="river-labels"><span>PRODUCT ACTIVITY</span><span>JAGR INVESTIGATES</span><span>YOUR ATTENTION</span></div>
+        <div class="river-flow" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="river-copy"><p>Normal variation.</p><p>Routine releases.</p><p>Issues without impact.</p><p>Changes already understood.</p><strong>One persistent change in a core flow,<br>supported across four sources.</strong></div>
+        <div class="attention-result"><small>THE CHANGE THAT MADE IT THROUGH</small><b>Checkout conversion<br>dropped 18%.</b><span>HIGH ATTENTION</span></div>
+      </div>
+    </section>
+
+    <section class="investigation" id="investigation" aria-labelledby="investigation-title">
+      <div class="investigation-intro" data-reveal><p class="chapter">04 · JAGR FOUND IT. THEN KEPT GOING.</p><h2 id="investigation-title">An alert is a beginning.<br><em>Not an answer.</em></h2><p>Jagr gathers the surrounding evidence before it asks for yours.</p></div>
+      <div class="investigation-ui">
+        <header><span>← Investigations</span><span>JAGR-042 · SAMPLE</span><button>•••</button></header>
+        <div class="inv-main">
+          <div class="inv-title"><span class="severity">HIGH</span><span>Signal confirmed · cause open</span><h3>Checkout conversion dropped 18%.</h3><div class="big-metric"><b>2.79%</b><span>from 3.40% baseline</span><em>−18%</em></div></div>
+          <div class="evidence-nav" aria-label="Evidence categories"><input type="radio" name="evidence" id="ev-observed" checked><label for="ev-observed">Observed <i>03</i></label><input type="radio" name="evidence" id="ev-inferred"><label for="ev-inferred">Inferred <i>02</i></label><input type="radio" name="evidence" id="ev-unknown"><label for="ev-unknown">Unknown <i>03</i></label></div>
+          <div class="evidence-pages">
+            <div class="evidence-page observed-page"><article><span>AMPLITUDE · 22:19 UTC</span><b>Conversion fell from 3.40% to 2.79%.</b><p>Outside its normal range for 53 minutes.</p></article><article><span>GITHUB · 22:14 UTC</span><b>Release 4.8.1 reached production.</b><p>Five minutes before the decline began.</p></article><article><span>JIRA + APP REVIEWS</span><b>Reports describe checkout failures.</b><p>Three issues and rising payment complaints.</p></article></div>
+            <div class="evidence-page inferred-page"><article><span>CROSS-SOURCE READING</span><b>The signals concern the same product area.</b><p>Independent records align around checkout.</p></article><article><span>TIMING</span><b>The release and decline are correlated.</b><p>Correlation provides context, not cause.</p></article></div>
+            <div class="evidence-page unknown-page"><article><span>NOT ESTABLISHED</span><b>Whether release 4.8.1 caused the decline.</b><p>A rollout comparison could reduce this uncertainty.</p></article><article><span>NOT ESTABLISHED</span><b>Which customer cohorts are affected.</b><p>Current evidence is aggregate.</p></article><article><span>NOT ESTABLISHED</span><b>Whether a rollback would restore conversion.</b><p>Consequential action still requires approval.</p></article></div>
+          </div>
+        </div>
+        <aside><div><small>WHY IT MATTERS</small><p>A persistent decline in a core revenue flow, corroborated beyond the metric.</p></div><div><small>CHECKED</small><p>4 sources · 7 tool calls</p></div><div><small>BEST NEXT STEP</small><p>Compare rollout cohorts before intervening.</p></div><a href="/demo">Replay the investigation →</a></aside>
+      </div>
+    </section>
+
+    <section class="uncertainty" aria-labelledby="uncertainty-title">
+      <div class="uncertainty-lead" data-reveal><p class="chapter">05 · CLARITY INCLUDES THE LIMITS</p><h2 id="uncertainty-title">Jagr tells you<br>where the evidence ends.</h2></div>
+      <div class="sentence" data-scroll-stage><span class="fact">Conversion fell 18%.</span><span class="fact">The decline followed a release.</span><span class="inference">The two may be related.</span><span class="boundary">The cause is not established.</span></div>
+      <div class="truth-key"><span><i class="solid"></i>Observed</span><span><i class="dash"></i>Inferred</span><span><i class="open"></i>Unknown</span></div>
+    </section>
+
+    <section class="difference" id="difference" aria-labelledby="difference-title">
+      <header data-reveal><p class="chapter">06 · A DIFFERENT KIND OF PRODUCT SYSTEM</p><h2 id="difference-title">Less checking.<br>More knowing.</h2></header>
+      <div class="difference-rows">
+        <article data-reveal><span>MONITORING</span><p>Tells you something happened.</p><b>Jagr investigates whether it deserves attention.</b></article>
+        <article data-reveal><span>ANALYTICS</span><p>Gives you somewhere to look.</p><b>Jagr brings meaningful changes to you.</b></article>
+        <article data-reveal><span>ALERTING</span><p>Produces more notifications.</p><b>Jagr asks for attention after investigation.</b></article>
+        <article data-reveal><span>AI CHAT</span><p>Waits for the right question.</p><b>Jagr keeps watch while you do something else.</b></article>
+      </div>
+    </section>
+
+    <section class="how" aria-labelledby="how-title">
+      <div class="how-copy"><p class="chapter">07 · ALWAYS WATCHING. CAREFUL ABOUT INTERRUPTING.</p><h2 id="how-title">The work happens<br>before the notification.</h2></div>
+      <div class="loop" aria-label="How Jagr works"><div><span>01</span><b>Watch</b><p>Your product signals, continuously.</p></div><i>→</i><div><span>02</span><b>Notice</b><p>Meaningful change, not normal motion.</p></div><i>→</i><div><span>03</span><b>Investigate</b><p>Evidence, alternatives, and gaps.</p></div><i>→</i><div class="loop-hot"><span>04</span><b>Bring forward</b><p>Only what has earned attention.</p></div></div>
+    </section>
+
+    <section class="finale" aria-labelledby="finale-title">
+      <div class="finale-status"><span><i></i> JAGR IS WATCHING</span><time>06:47 UTC</time></div>
+      <h2 id="finale-title">Your product moves.<br><em>Know what matters.</em></h2>
+      <p>Come back to understanding—not another pile of things to check.</p>
+      <div><a class="button light" href="/">Open Jagr <span>↗</span></a><a href="/demo">Watch a demo →</a></div>
+      <div class="finale-line"><i></i><span>Next check in 12 minutes</span></div>
+    </section>
+  </main>
+
+  <footer><a class="brand" href="/"><span class="brand-eye"><i></i></span>JAGR</a><p>Product attention for teams who can’t watch everything.</p><div><a href="#morning">Product</a><a href="#investigation">How it works</a><a href="/about">About</a><a href="/demo">Demo night</a></div><span>Illustrative sample content · <i data-year></i></span></footer>
+  <script type="module" src="../shared/explorations.js"></script>
+</body></html>
