@@ -7,6 +7,7 @@
  */
 
 import type { ChangeKind, ChangeTiming } from './roles/types.js';
+import type { NormalizedEventRef } from './events.js';
 
 export type ISO = string;
 
@@ -96,6 +97,8 @@ export interface Watch {
   template: WatchTemplateId;
   area: Area | '*';
   sources: ProviderId[];
+  /** Stable monitored resources. Absent on legacy watches, which resolve through `sources`. */
+  sourceTargetIds?: string[];
   signals: WatchSignal[];
   schedule: WatchSchedule;
   timezone: string;
@@ -199,6 +202,8 @@ export interface EvidenceProvenance {
   fetchedAt: ISO;
   /** The records the statement rests on (capped), as they were when read. */
   records: { externalId: string; url?: string; observedAt: ISO }[];
+  /** Durable normalized source records that back this evidence item. */
+  normalizedEventIds?: string[];
   /** More records backed the statement than are listed. */
   moreRecords?: number;
   /** The source's data was complete only up to here at read time. */
@@ -365,6 +370,8 @@ export interface WatchInvestigation {
   confidenceReason: string;
   signals: DetectedSignal[];
   evidence: EvidenceItem[];
+  /** Bounded trigger context. Full payloads remain canonical in the normalized-event repository. */
+  sourceEvents?: NormalizedEventRef[];
   observed: string[];
   inferred: string[];
   unknowns: string[];

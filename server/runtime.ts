@@ -21,6 +21,9 @@ import { envKeyProvider } from './crypto/keys.js';
 import { googleIdentity } from './identity/google.js';
 import { githubIdentity } from './identity/github.js';
 import { bootstrapSingleTenant, type BootstrapResult } from './singleTenant.js';
+import type { EntitlementPolicy } from '../src/product/ports/entitlements.js';
+import { permissiveEntitlements } from '../src/product/ports/entitlements.js';
+import { createAdmissionService, type AdmissionService } from '../src/product/app/admission.js';
 
 /**
  * Composition root: the only place that knows which implementation stands behind each port.
@@ -51,6 +54,8 @@ export interface Runtime extends MonitoringDeps {
   bootstrap?: BootstrapResult;
   /** Connection types this deployment offers (connectors + outbound channels). */
   types: Record<string, ConnectionType>;
+  entitlements: EntitlementPolicy;
+  admission: AdmissionService;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -72,7 +77,7 @@ function serverPlanner(env: Env, http: HttpClient): InvestigationPlanner | undef
   return createPlannerManager({ primary: make(cfg.primary), fallback: cfg.fallback?.configured && cfg.fallback.config ? make(cfg.fallback) : undefined, timeoutMs: cfg.timeoutMs + 2000 });
 }
 
-export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: HttpClient; clock?: Clock; identity?: Record<string, IdentityProvider>; connectors?: Record<string, Connector>; channels?: Record<string, ChannelFactory> }): Promise<Runtime> {
+export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: HttpClient; clock?: Clock; identity?: Record<string, IdentityProvider>; connectors?: Record<string, Connector>; channels?: Record<string, ChannelFactory>; entitlements?: EntitlementPolicy }): Promise<Runtime> {
   const config = readRuntimeConfig(env);
   const http: HttpClient = deps.http ?? ((url, init) => fetch(url, init));
   const clock = deps.clock ?? systemClock;
@@ -84,6 +89,8 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     if (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET) identity.github = githubIdentity({ clientId: env.GITHUB_OAUTH_CLIENT_ID, clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET, http });
   }
   const secrets = postgresSecretStore(deps.sql, envKeyProvider(env));
+  const entitlements = deps.entitlements ?? permissiveEntitlements;
+  const admission = createAdmissionService({ repos, tx, entitlements, clock });
   const bootstrap = config.mode === 'single-tenant' ? await bootstrapSingleTenant({ repos, secrets, clock }, env, { fingerprintKey: config.sessionSecret, workspaceName: env.JAGR_OWNER_WORKSPACE_NAME }) : undefined;
   return {
     sql: deps.sql,
@@ -98,6 +105,8 @@ export async function createRuntime(env: Env, deps: { sql: SqlClient; http?: Htt
     connectors: deps.connectors ?? connectorsFrom(CONNECTORS),
     channels: deps.channels ?? CHANNELS,
     types: CONNECTION_TYPES,
+    entitlements,
+    admission,
     planner: serverPlanner(env, http),
     appBaseUrl: config.appBaseUrl,
     config,

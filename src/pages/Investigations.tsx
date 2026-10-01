@@ -99,7 +99,8 @@ export function InvestigationsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block text-[14px] font-medium">{investigationTitle(inv)}</span>
-                <span className="block text-[13px] text-ink-2">{investigationWatches(inv, product.state.watches)}</span>
+                <span className="block truncate text-[13px] text-ink-2">{inv.likelyExplanation}</span>
+                <span className="mt-0.5 block text-[12px] text-ink-3">{investigationWatches(inv, product.state.watches)}</span>
               </span>
               <span className="text-[13px]">
                 <span className="block text-ink">{status.signal}</span>

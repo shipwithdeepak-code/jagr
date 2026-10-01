@@ -25,22 +25,23 @@ export function postgresSecretStore(sql: SqlClient, keys: KeyProvider): SecretSt
       await sql.query('insert into secrets (ref, workspace_id, connection_id, version, key_version, wrapped_key, iv, tag, ciphertext) values ($1, $2, $3, 1, $4, $5, $6, $7, $8)', [ref, owner.workspaceId, owner.connectionId, e.keyVersion, e.wrappedKey, e.iv, e.tag, e.ciphertext]);
       return ref;
     },
-    async get(ref) {
-      const r = (await sql.query<{ version: number; key_version: number; wrapped_key: string; iv: string; tag: string; ciphertext: string }>('select version, key_version, wrapped_key, iv, tag, ciphertext from secrets where ref = $1', [ref])).rows[0];
+    async get(ref, owner) {
+      const r = (await sql.query<{ version: number; key_version: number; wrapped_key: string; iv: string; tag: string; ciphertext: string }>('select version, key_version, wrapped_key, iv, tag, ciphertext from secrets where ref = $1 and workspace_id = $2 and connection_id = $3', [ref, owner.workspaceId, owner.connectionId])).rows[0];
       if (!r) throw new SecretNotFound();
       const dataKey = open(keys.key(r.key_version), JSON.parse(r.wrapped_key));
       return { secret: JSON.parse(open(dataKey, r).toString('utf8')) as SecretPayload, version: r.version };
     },
-    async replace(ref, expectedVersion, secret) {
+    async replace(ref, owner, expectedVersion, secret) {
       const e = encrypt(secret);
-      const r = await sql.query('update secrets set version = version + 1, key_version = $3, wrapped_key = $4, iv = $5, tag = $6, ciphertext = $7, updated_at = now() where ref = $1 and version = $2 returning ref', [ref, expectedVersion, e.keyVersion, e.wrappedKey, e.iv, e.tag, e.ciphertext]);
+      const r = await sql.query('update secrets set version = version + 1, key_version = $5, wrapped_key = $6, iv = $7, tag = $8, ciphertext = $9, updated_at = now() where ref = $1 and workspace_id = $2 and connection_id = $3 and version = $4 returning ref', [ref, owner.workspaceId, owner.connectionId, expectedVersion, e.keyVersion, e.wrappedKey, e.iv, e.tag, e.ciphertext]);
       if (!r.rows.length) {
-        const exists = await sql.query('select 1 from secrets where ref = $1', [ref]);
+        const exists = await sql.query('select 1 from secrets where ref = $1 and workspace_id = $2 and connection_id = $3', [ref, owner.workspaceId, owner.connectionId]);
         throw exists.rows.length ? new SecretVersionConflict() : new SecretNotFound();
       }
     },
-    async delete(ref) {
-      await sql.query('delete from secrets where ref = $1', [ref]);
+    async delete(ref, owner) {
+      const r = await sql.query('delete from secrets where ref = $1 and workspace_id = $2 and connection_id = $3 returning ref', [ref, owner.workspaceId, owner.connectionId]);
+      if (!r.rows.length) throw new SecretNotFound();
     },
   };
 }

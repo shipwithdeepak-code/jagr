@@ -7,7 +7,7 @@
  * FOR UPDATE SKIP LOCKED (server/).
  */
 
-export type JobKind = 'monitor.watch' | 'sync.connection' | 'notify.deliver' | 'brief.compose';
+export type JobKind = 'source.check' | 'monitor.watch' | 'sync.connection' | 'notify.deliver' | 'brief.compose';
 
 export interface JobSpec {
   kind: JobKind;
@@ -30,17 +30,41 @@ export interface LeasedJob extends Required<Omit<JobSpec, 'maxAttempts' | 'runAt
 
 export type JobState = 'queued' | 'leased' | 'done' | 'dead';
 
+export interface JobStatus {
+  state: JobState;
+  attempts: number;
+  runAt: string;
+  createdAt: string;
+  firstAttemptedAt?: string;
+  lastAttemptedAt?: string;
+  completedAt?: string;
+  lastFailedAt?: string;
+  leaseUntil?: string;
+  lastError?: string;
+}
+
+export interface QueueStatus {
+  queued: number;
+  leased: number;
+  dead: number;
+  expiredLeases: number;
+  oldestQueuedAt?: string;
+  recentDead: { jobId: string; workspaceId: string; organizationId?: string; sourceTargetId?: string; kind: JobKind; attempts: number; failedAt?: string }[];
+}
+
 export interface JobQueue {
   /** Returns false when a job with the same idempotency key already exists (in any state). */
   enqueue(job: JobSpec): Promise<boolean>;
-  /** Claims due jobs, oldest first. Expired leases are claimable again. */
+  /** Claims due jobs fairly across tenants, oldest first within each tenant. Expired leases are claimable again. */
   claim(opts: { workerId: string; kinds?: JobKind[]; limit: number; leaseMs: number }): Promise<LeasedJob[]>;
   complete(jobId: string, leaseToken: string): Promise<void>;
   /** `retryAt` absent, or attempts exhausted → the job is dead-lettered. */
   fail(jobId: string, leaseToken: string, error: string, retryAt?: string): Promise<void>;
   extend(jobId: string, leaseToken: string, leaseMs: number): Promise<void>;
   /** For operations and tests. */
-  inspect(idempotencyKey: string): Promise<{ state: JobState; attempts: number; lastError?: string } | null>;
+  inspect(idempotencyKey: string): Promise<JobStatus | null>;
+  /** Bounded, credential-free operator summary. */
+  status(): Promise<QueueStatus>;
 }
 
 export class LeaseLost extends Error {

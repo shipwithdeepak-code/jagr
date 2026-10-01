@@ -28,7 +28,7 @@ repository, a `VITE_`-prefixed variable, or a chat.
 3. Set it as `DATABASE_URL` in Vercel. Leave `DATABASE_SSL` unset (TLS with certificate verification).
 
 Migrations run automatically when a function instance starts (idempotent, recorded in `jagr_migrations`).
-Tables: `workspaces`, `users`, `identities`, `memberships`, `sessions`, `audit_log`, `jobs`, `secrets`,
+Tables: `organizations`, `organization_memberships`, `subscriptions`, `usage_events`, `workspaces`, `users`, `identities`, `memberships`, `sessions`, `audit_log`, `jobs`, `secrets`,
 and `workspace_docs` — the per-workspace documents: connections, watches, investigations, decisions
 (approvals), notifications, briefs, sync cursors, imports and run locks. Credentials live only in
 `secrets`, envelope-encrypted with `JAGR_SECRET_KEY`.
@@ -70,10 +70,10 @@ After changing variables, redeploy (Vercel applies them to new deployments only)
 
 ## 5. Scheduling (watches run with the browser closed)
 
-The scheduler is `/api/cron/tick`: with `Authorization: Bearer $CRON_SECRET` it enqueues the watch runs
-and briefs that fell due since the previous tick (idempotent per watch and slot, so repeated or overlapping
-ticks never double-run), then drains up to 10 jobs under a lease (a job whose worker died is retried when its
-lease expires). A watch's slots are its frequency counted from when the watch was created (a 30-minute watch
+The scheduler is `/api/cron/tick`: with `Authorization: Bearer $CRON_SECRET` it selects at most 50 connected workspaces per tick (oldest scheduler attempt first) and only enqueues due source checks,
+legacy watch runs, and briefs (idempotent keys make repeated or overlapping ticks harmless). Sentry target-backed
+watches share one source check rather than polling once per watch. `/api/cron/worker` claims and executes exactly one job per authenticated request.
+The transitional GitHub Actions workflow ticks once and then makes at most ten worker requests. A watch's slots are its frequency counted from when the watch was created (a 30-minute watch
 created at 09:07 is due at 09:37, 10:07, …).
 
 - After a gap (a late or skipped tick) only the **latest** missed slot per watch runs; older ones are skipped,
@@ -82,6 +82,14 @@ created at 09:07 is due at 09:37, 10:07, …).
   after a gap still sees the changes made during it.
 - `enqueued: 0` is normal: no watch slot fell due between the previous tick and this one (e.g. every other
   15-minute tick for a 30-minute watch, or a manual tick right after a scheduled one).
+
+For queue diagnosis, `GET /api/cron/status` with the same bearer credential returns queued, leased, dead,
+and expired-lease counts, the oldest queued run time, and at most 20 recent dead jobs with tenant/workspace/source
+identifiers. It does not return job payloads or error text. Claims rotate between organizations, so a large
+backlog from one organization does not prevent another from being claimed. A tick handles at most 50
+workspaces; if more are due, subsequent ticks select the least recently attempted workspaces. A failed
+workspace keeps its last successful checkpoint for retry; the tick returns HTTP 503 with its id in
+`failedWorkspaceIds` while other selected workspaces still progress.
 
 Vercel Hobby allows Cron Jobs at most once a day, so the tick is driven by
 `.github/workflows/jagr-cron.yml` every 15 minutes. In GitHub → repository → Settings → Secrets and
@@ -96,11 +104,10 @@ the same bearer header) can replace the workflow.
 ### Verify scheduling
 
 1. GitHub → Actions → **Jagr scheduler tick** → *Run workflow* (manual trigger).
-2. The run's *Call /api/cron/tick* step must end without `::error::` — the endpoint answered HTTP 200.
-3. The step prints the tick counts, e.g.
-   `{"tick":{"at":"…","workspaces":1,"enqueued":1,"duplicates":0,"superseded":0},"run":{"done":1,"failed":0}}`:
-   `workspaces` = connected workspaces scheduled, `enqueued` = watch runs and briefs that fell due,
-   `run.done` / `run.failed` = jobs executed. `enqueued: 0` with `done: 0` only means nothing was due yet.
+2. The run's *Call /api/cron/tick* and *Run up to 10 queued jobs* steps must end without `::error::`.
+3. The tick step prints scheduling counts, e.g.
+   `{"tick":{"at":"…","workspaces":1,"enqueued":1,"duplicates":0,"superseded":0}}`.
+   Each following worker response reports one job as `completed`, `retrying`, `dead`, or `lease_lost`; `idle` stops the bounded loop. `enqueued: 0` or `idle` only means nothing was due.
 4. A scheduled run is recorded as a `monitor.watch` audit entry whose `target` is the watch id and whose detail
    is the run's outcome (e.g. `GitHub: 2 deployments, 0 releases in the last 6h`). It shows on the Watches page
    as the watch's *Last run*; while signed in, all entries are at `GET /api/workspaces/<id>/audit`.

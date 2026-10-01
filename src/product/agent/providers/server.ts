@@ -83,12 +83,16 @@ async function planWith(r: ResolvedProvider | undefined, cfg: PlannerConfig, sta
   return { status: 200, body: { outcome: rest, source: { ...source, latencyMs: Date.now() - started } } };
 }
 
-export function createPlannerHandler(env: Record<string, string | undefined>, http?: Fetch) {
+export function createPlannerHandler(env: Record<string, string | undefined>, http?: Fetch, opts: { allowUnauthenticatedPlanning?: boolean } = {}) {
   const cfg = readPlannerConfig(env);
+  const allowPlanning = opts.allowUnauthenticatedPlanning ?? env.NODE_ENV !== 'production';
   return async (req: PlannerHttpRequest): Promise<PlannerHttpResponse> => {
     const path = req.path.replace(/\/+$/, '') || '/';
     if (req.method === 'GET' && (path === '/health' || path === '/status')) return { status: 200, body: publicPlannerConfig(cfg) };
     if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
+    // The standalone endpoint is a development utility. Production investigations use the
+    // authenticated server runtime directly; public callers must never spend configured LLM capacity.
+    if (!allowPlanning) return { status: 401, body: { error: 'Planner execution is not available on this public endpoint.' } };
     const body = (req.body ?? {}) as { role?: string; state?: unknown };
     if (path === '/test') {
       if (cfg.mode !== 'llm') return { status: 200, body: { ...publicPlannerConfig(cfg), note: 'PLANNER_MODE is deterministic — no provider to test.' } };

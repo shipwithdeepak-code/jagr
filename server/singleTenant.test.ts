@@ -107,7 +107,7 @@ describe('single-tenant bootstrap', () => {
     expect(leaks(await dumpAll(sql))).toEqual([]);
     // …but the store can decrypt them for a connector.
     const gh = conns.find((c) => c.source === 'github')!;
-    expect((await rt.secrets.get(gh.secretRef!)).secret).toEqual({ kind: 'api_key', fields: { token: SECRETS.JAGR_GITHUB_TOKEN } });
+    expect((await rt.secrets.get(gh.secretRef!, { workspaceId: OWNER_WORKSPACE_ID, connectionId: gh.id })).secret).toEqual({ kind: 'api_key', fields: { token: SECRETS.JAGR_GITHUB_TOKEN } });
     const audit = await rt.repos.audit.list(OWNER_WORKSPACE_ID);
     expect(audit.filter((a) => a.action === 'connection.owner_env.configured')).toHaveLength(5);
   });
@@ -128,7 +128,7 @@ describe('single-tenant bootstrap', () => {
     expect(second.rt.bootstrap).toMatchObject({ configured: [], rotated: ['intercom'], removed: ['slack'] });
     const ic = (await second.rt.repos.connections.get(OWNER_WORKSPACE_ID, 'owner-intercom'))!;
     expect(ic.secretRef).toBe(ref);
-    expect((await second.rt.secrets.get(ref)).secret).toEqual({ kind: 'api_key', fields: { token: 'intercom-token-rotated' } });
+    expect((await second.rt.secrets.get(ref, { workspaceId: OWNER_WORKSPACE_ID, connectionId: 'owner-intercom' })).secret).toEqual({ kind: 'api_key', fields: { token: 'intercom-token-rotated' } });
     const slack = (await second.rt.repos.connections.get(OWNER_WORKSPACE_ID, 'owner-slack'))!;
     expect(slack.state).toBe('not_configured');
     expect(slack.secretRef).toBeUndefined();
@@ -213,7 +213,7 @@ describe('single-tenant bootstrap', () => {
     const { session } = await signIn(app, 'code-owner');
     const log = await app(req('GET', `/api/workspaces/${OWNER_WORKSPACE_ID}/notifications`, session));
     expect(log.status).toBe(200);
-    expect(log.body).toEqual({ notifications: [] });
+    expect(log.body).toEqual({ notifications: [], nextCursor: null });
     for (const path of ['/api/slack/interactions', '/api/slack/events', '/api/slack/commands']) expect((await app(req('POST', path, session, {}))).status).toBe(404);
     const check = await app(req('POST', `/api/workspaces/${OWNER_WORKSPACE_ID}/connections/owner-slack/check`, session));
     // The check verifies the bot token with auth.test (sending nothing); the test token is not a real one.

@@ -40,7 +40,7 @@ const route = (u: URL, init?: HttpRequest): Reply | undefined => {
 
 async function setup() {
   const clock = manualClock(NOW);
-  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
+  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test', CRON_SECRET: 'cron-secret' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
   return { rt, app: createApp(rt), clock };
 }
 type S = { cookie: string; csrf: string };
@@ -73,9 +73,9 @@ describe('server workspace (the browser path)', () => {
     expect(watch).toMatchObject({ name: 'Checkout issues', schedule: { frequency: '30m' } });
 
     const run = await app(req('POST', `/api/workspaces/${ws}/runs`, ana));
-    expect(run.status).toBe(200);
-    expect(run.body).toMatchObject({ watches: 1 });
-    expect((run.body as { investigations: number }).investigations).toBeGreaterThan(0);
+    expect(run.status).toBe(202);
+    expect(run.body).toMatchObject({ kind: 'run_queued', watches: 1, jobs: [expect.objectContaining({ enqueued: true })] });
+    await app(req('POST', '/api/cron/worker', undefined, undefined, { authorization: 'Bearer cron-secret' }));
 
     const snap = (await app(req('GET', `/api/workspaces/${ws}/snapshot`, ana))).body as WorkspaceSnapshot;
     expect(snap.workspace).toMatchObject({ id: ws, name: 'Acme', mode: 'connected' });

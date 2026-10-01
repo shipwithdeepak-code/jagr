@@ -64,6 +64,7 @@ async function setup() {
 }
 
 const cron = { authorization: 'Bearer cron-secret' };
+const work = (app: Awaited<ReturnType<typeof setup>>['app']) => app(req('POST', '/api/cron/worker', undefined, undefined, cron));
 
 describe('GitHub production changes — server, end to end', () => {
   it('connect → create the watch → a failed deployment opens one MEDIUM investigation; a later success closes it as a deployment outcome only', async () => {
@@ -81,8 +82,10 @@ describe('GitHub production changes — server, end to end', () => {
     // 10:05 a Production deployment fails.
     gh.deployments = [{ id: 11, sha: SHA_A, ref: SHA_A, environment: 'Production', created_at: '2026-09-25T10:05:00Z', statuses: [{ state: 'failure', created_at: '2026-09-25T10:08:00Z' }] }];
     await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    await work(app);
     clock.set('2026-09-25T10:15:00.000Z');
-    expect((await app(req('GET', '/api/cron/tick', undefined, undefined, cron))).body).toMatchObject({ run: { done: 1, failed: 0 } });
+    await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    expect((await work(app)).body).toMatchObject({ worker: { state: 'completed' } });
     let invs = await rt.repos.investigations.list(id);
     expect(invs).toHaveLength(1);
     expect(invs[0]).toMatchObject({ attention: 'MEDIUM', status: 'CONFIRMED', title: `Deployment failed: Deploy aaaaaaa to Production (acme/web)` });
@@ -91,6 +94,7 @@ describe('GitHub production changes — server, end to end', () => {
     // The next run sees the same failed deployment again: still one investigation.
     clock.set('2026-09-25T10:30:00.000Z');
     await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    await work(app);
     invs = await rt.repos.investigations.list(id);
     expect(invs).toHaveLength(1);
 
@@ -98,6 +102,7 @@ describe('GitHub production changes — server, end to end', () => {
     gh.deployments.push({ id: 12, sha: SHA_B, ref: SHA_B, environment: 'Production', created_at: '2026-09-25T10:38:00Z', statuses: [{ state: 'success', created_at: '2026-09-25T10:40:00Z' }] });
     clock.set('2026-09-25T10:45:00.000Z');
     await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    await work(app);
     invs = await rt.repos.investigations.list(id);
     expect(invs).toHaveLength(1);
     expect(invs[0].status).toBe('RESOLVED');
@@ -126,12 +131,15 @@ describe('GitHub production changes — server, end to end', () => {
 
     // Scheduled runs that find nothing (the 10:00 slot, when the watch was created, and 10:15).
     await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    await work(app);
     clock.set('2026-09-25T10:15:00.000Z');
-    expect((await app(req('GET', '/api/cron/tick', undefined, undefined, cron))).body).toMatchObject({ run: { done: 1, failed: 0 } });
+    await app(req('GET', '/api/cron/tick', undefined, undefined, cron));
+    await work(app);
     // A requested run after a deployment lands.
     gh.deployments = [{ id: 21, sha: SHA_A, ref: 'main', environment: 'Production', created_at: '2026-09-25T10:16:00Z', statuses: [{ state: 'success', created_at: '2026-09-25T10:18:00Z' }] }];
     clock.set('2026-09-25T10:20:00.000Z');
-    expect((await app(req('POST', `/api/workspaces/${id}/runs`, s))).status).toBe(200);
+    expect((await app(req('POST', `/api/workspaces/${id}/runs`, s))).status).toBe(202);
+    await work(app);
 
     snap = (await app(req('GET', `/api/workspaces/${id}/snapshot`, s))).body as WorkspaceSnapshot;
     expect(snap.runs).toEqual([
@@ -186,7 +194,7 @@ describe('Edit a connection’s configuration (the stored credential is kept)', 
     expect(fixed.connection).toMatchObject({ health: 'healthy', lastSuccessfulCheckAt: '2026-09-25T10:05:00.000Z', config: expect.objectContaining({ environments: ['Production'] }) });
     const after = (await rt.repos.connections.get(id, first.connection.id))!;
     expect(after.secretRef).toEqual(before.secretRef);
-    expect((await rt.secrets.get(after.secretRef!)).secret).toEqual({ kind: 'api_key', fields: { token: TOKEN } });
+    expect((await rt.secrets.get(after.secretRef!, { workspaceId: id, connectionId: after.id })).secret).toEqual({ kind: 'api_key', fields: { token: TOKEN } });
     // Recorded as a configuration change; the credential is never echoed back.
     const audit = await rt.repos.audit.list(id);
     expect(audit.filter((e) => e.action === 'connection.configured').map((e) => e.detail)).toEqual(['GitHub: configuration saved (repos, environments, releases, auth).']);
@@ -214,7 +222,11 @@ describe('Edit a connection’s configuration (the stored credential is kept)', 
 
 describe('production-path regressions (scheduler → GitHub → audit → snapshot)', () => {
   type Tick = { tick: { enqueued: number }; run: { done: number; failed: number } };
-  const tick = async (app: Awaited<ReturnType<typeof setup>>['app']) => (await app(req('GET', '/api/cron/tick', undefined, undefined, cron))).body as Tick;
+  const tick = async (app: Awaited<ReturnType<typeof setup>>['app']) => {
+    const scheduled = (await app(req('GET', '/api/cron/tick', undefined, undefined, cron))).body as { tick: { enqueued: number } };
+    const worker = (await work(app)).body as { worker: { state: string } };
+    return { tick: scheduled.tick, run: { done: worker.worker.state === 'completed' ? 1 : 0, failed: worker.worker.state === 'retrying' || worker.worker.state === 'dead' ? 1 : 0 } } as Tick;
+  };
   const watchRuns = async (rt: Awaited<ReturnType<typeof setup>>['rt'], id: string) => (await rt.repos.audit.list(id)).filter((e) => e.action === 'monitor.watch');
 
   async function githubWatch(env = 'Production') {

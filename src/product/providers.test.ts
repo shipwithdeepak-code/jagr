@@ -316,3 +316,12 @@ describe('architecture: the engine is provider-agnostic', () => {
     expect(src).not.toMatch(/anthropic|gemini|openai|claude|api[_-]?key|process\.env/i);
   });
 });
+
+describe('production planner endpoint security', () => {
+  it('rejects public planning capacity while leaving safe health visible', async () => {
+    const handle = createPlannerHandler({ NODE_ENV: 'production', LLM_PROVIDER: 'gemini', LLM_MODEL: 'model', LLM_API_KEY: 'test-key' }, async () => { throw new Error('must not call provider'); });
+    expect((await handle({ method: 'GET', path: '/health' })).status).toBe(200);
+    expect((await handle({ method: 'POST', path: '/plan', body: { state: SAMPLE_PLANNER_STATE } })).status).toBe(401);
+    expect((await handle({ method: 'POST', path: '/test' })).status).toBe(401);
+  });
+});

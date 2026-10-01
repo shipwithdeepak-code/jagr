@@ -6,6 +6,7 @@ import { SecretNotFound } from '../ports/secrets.js';
 import { connectionView, type ConnectionView } from '../connections/model.js';
 import { checkConnection, type MonitoringDeps } from './monitoring.js';
 import { uniqueId } from './ids.js';
+import { legacySourceTargetId } from '../sourceIdentity.js';
 
 /**
  * Connection lifecycle — connect / configure, test, reconnect, disconnect — for credentials a workspace
@@ -31,6 +32,7 @@ export interface ConnectionType {
   credentialFields: { key: string; label: string }[];
   /** A starting configuration to edit (placeholders, never real values). */
   configExample: Record<string, unknown>;
+  sourceCheckIntervalMinutes?: number;
   /** The provider's own config validation. */
   parseConfig(config: unknown): { ok: true; config: Record<string, unknown> } | { ok: false; errors: string[] };
 }
@@ -50,6 +52,8 @@ export class ConnectionError extends Error {
 
 export interface ConnectionDeps extends MonitoringDeps {
   types: Record<string, ConnectionType>;
+  /** Optional control-plane wrapper used only when this call creates a new source. */
+  admitSource?: <T>(create: (repos: ConnectionDeps['repos']) => Promise<T>) => Promise<T>;
 }
 
 const MAX_FIELD = 8192;
@@ -119,7 +123,34 @@ export async function configureConnection(deps: ConnectionDeps, ws: Workspace, a
     createdAt: existing?.createdAt ?? existing?.updatedAt ?? now,
     updatedAt: now,
   };
-  await deps.repos.connections.save(ws.id, conn);
+  const persist = async (repos: ConnectionDeps['repos']) => {
+    await repos.connections.save(ws.id, conn);
+    if (type.kind !== 'source') return;
+    const targetId = legacySourceTargetId(conn.id);
+    const prior = await repos.sourceTargets.get(ws.id, targetId);
+    await repos.sourceTargets.save(ws.id, {
+      id: targetId,
+      organizationId: ws.organizationId!,
+      workspaceId: ws.id,
+      connectionId: conn.id,
+      provider: conn.provider,
+      externalId: prior?.externalId ?? `legacy:${conn.id}`,
+      displayName: conn.externalAccount ?? conn.label?.name ?? type.name,
+      configuration: conn.config,
+      checkIntervalMinutes: type.sourceCheckIntervalMinutes,
+      status: 'active',
+      createdAt: prior?.createdAt ?? now,
+      updatedAt: now,
+    });
+  };
+  try {
+    if (!existing && type.kind === 'source' && deps.admitSource) await deps.admitSource(persist);
+    else await persist(deps.repos);
+  } catch (error) {
+    // A newly created credential must not survive a denied/rolled-back source creation.
+    if (!existing?.secretRef && secretRef) await deps.secrets.delete(secretRef, { workspaceId: ws.id, connectionId: conn.id }).catch(() => undefined);
+    throw error;
+  }
   await audit(deps, ws, actor, existing ? 'connection.configured' : 'connection.connected', conn.id, `${type.name}: configuration${input.credential ? ' and credential' : ''} saved (${[...Object.keys(parsed.config), ...(input.credential ? type.credentialFields.map((f) => f.key) : [])].join(', ')}).`);
   return viewAfterCheck(deps, ws, conn.id);
 }
@@ -132,6 +163,8 @@ export async function reconnectConnection(deps: ConnectionDeps, ws: Workspace, a
   const type = typeFor(deps, c.provider);
   const secretRef = await replaceOrPut(deps, ws.id, c.id, c.secretRef, credentialFrom(type, credential));
   await deps.repos.connections.save(ws.id, { ...c, secretRef, state: 'connected', detail: `${type.name} — reconnected, not checked yet`, lastError: undefined, lastErrorAt: undefined, updatedAt: deps.clock.now() });
+  const target = await deps.repos.sourceTargets.get(ws.id, legacySourceTargetId(c.id));
+  if (target) await deps.repos.sourceTargets.save(ws.id, { ...target, status: 'active', updatedAt: deps.clock.now() });
   await audit(deps, ws, actor, 'connection.reconnected', c.id, `${type.name}: new credential stored (${type.credentialFields.map((f) => f.key).join(', ')}).`);
   return viewAfterCheck(deps, ws, c.id);
 }
@@ -141,11 +174,13 @@ export async function disconnectConnection(deps: ConnectionDeps, ws: Workspace, 
   const c = await deps.repos.connections.get(ws.id, connectionId);
   if (!c) throw new ConnectionError('not_found', 'Connection not found.');
   if (c.authKind === 'owner_env') throw new ConnectionError('managed_by_environment', 'This connection is configured by the deployment environment; remove its variables there.');
-  if (c.secretRef) await deps.secrets.delete(c.secretRef).catch((e) => { if (!(e instanceof SecretNotFound)) throw e; });
+  if (c.secretRef) await deps.secrets.delete(c.secretRef, { workspaceId: ws.id, connectionId: c.id }).catch((e) => { if (!(e instanceof SecretNotFound)) throw e; });
   const { secretRef: _r, ...rest } = c;
   void _r;
   const next: Connection = { ...rest, state: 'not_configured', detail: 'Disconnected', lastError: undefined, lastErrorAt: undefined, updatedAt: deps.clock.now() };
   await deps.repos.connections.save(ws.id, next);
+  const target = await deps.repos.sourceTargets.get(ws.id, legacySourceTargetId(c.id));
+  if (target) await deps.repos.sourceTargets.save(ws.id, { ...target, status: 'disconnected', updatedAt: deps.clock.now() });
   await audit(deps, ws, actor, 'connection.disconnected', c.id, `${c.label?.name ?? c.provider}: disconnected; stored credential deleted.`);
   return connectionView(next, deps.clock.now());
 }
@@ -153,8 +188,9 @@ export async function disconnectConnection(deps: ConnectionDeps, ws: Workspace, 
 async function replaceOrPut(deps: ConnectionDeps, workspaceId: string, connectionId: string, ref: Connection['secretRef'], payload: SecretPayload) {
   if (ref) {
     try {
-      const cur = await deps.secrets.get(ref);
-      await deps.secrets.replace(ref, cur.version, payload);
+      const owner = { workspaceId, connectionId };
+      const cur = await deps.secrets.get(ref, owner);
+      await deps.secrets.replace(ref, owner, cur.version, payload);
       return ref;
     } catch (e) {
       if (!(e instanceof SecretNotFound)) throw e;

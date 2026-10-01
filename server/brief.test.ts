@@ -37,7 +37,7 @@ async function setup(briefMin: 'MEDIUM' | 'HIGH') {
   posts.length = 0;
   const idp: IdentityProvider = { id: 'fake', authorizationUrl: ({ state }) => `https://idp.example/a?state=${state}`, exchange: async () => ({ provider: 'fake', subject: 'ana-1', emailVerified: true, displayName: 'Ana' }) };
   const clock = manualClock(NOW);
-  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
+  const rt = await createRuntime({ JAGR_SESSION_SECRET: randomBytes(32).toString('hex'), JAGR_SECRET_KEY: randomBytes(32).toString('base64'), JAGR_APP_URL: 'https://jagr.test', CRON_SECRET: 'cron-secret' }, { sql: await freshPglite(), clock, identity: { fake: idp }, http: scriptedHttp(route).http });
   const app = createApp(rt);
   const req = (method: string, path: string, s?: { cookie: string; csrf: string }, body?: unknown, extra: Record<string, string> = {}): ApiRequest => {
     const [p, q] = path.split('?');
@@ -54,12 +54,25 @@ async function setup(briefMin: 'MEDIUM' | 'HIGH') {
   await app(req('PUT', `/api/workspaces/${ws}/connections`, s, { provider: 'slack', config: { channel: 'C0123456789' }, credential: { botToken: 'xoxb-brief-test' } }));
   await app(req('POST', `/api/workspaces/${ws}/watches`, s, { templateId: 'customer_issues', sources: ['jira'], notificationPolicy: { interruptAt: 'HIGH', briefMin, morningBrief: true } }));
   await app(req('POST', `/api/workspaces/${ws}/runs`, s));
+  await app(req('POST', '/api/cron/worker', undefined, undefined, { authorization: 'Bearer cron-secret' }));
   clock.set('2026-09-25T10:05:00.000Z');
   await composeBriefJob(rt, { workspaceId: ws, payload: { dueAt: '2026-09-25T10:05:00.000Z' } });
-  return { app, req, s, ws };
+  return { app, req, s, ws, rt, clock };
 }
 
 describe('morning brief (server workspace)', () => {
+  it('keeps an older alert timestamp for an investigation updated in a later brief window', async () => {
+    const { ws, rt, clock } = await setup('MEDIUM');
+    const inv = (await rt.repos.investigations.list(ws))[0];
+    const old = '2026-09-24T09:00:00.000Z';
+    await rt.repos.notifications.add(ws, { id: '000-first-email', channel: 'in_app', dedupeKey: '000-first-email', deliveredAt: old, status: 'delivered', investigationId: inv.id, email: { id: '000-first-email', kind: 'alert', sentAt: old, investigationId: inv.id } as never });
+    const later = '2026-09-26T10:05:00.000Z';
+    await rt.repos.investigations.save(ws, { ...inv, updatedAt: later });
+    clock.set(later);
+    await composeBriefJob(rt, { workspaceId: ws, payload: { dueAt: later } });
+    const latest = (await rt.repos.briefs.list(ws)).at(-1)!;
+    expect(latest.items.find((item) => item.investigationId === inv.id)?.emailedAt).toBe(old);
+  });
   it('is composed, stored and served from the same investigations and attention; the Slack brief says the same things', async () => {
     const { app, req, s, ws } = await setup('MEDIUM');
     const snap = (await app(req('GET', `/api/workspaces/${ws}/snapshot`, s))).body as WorkspaceSnapshot;

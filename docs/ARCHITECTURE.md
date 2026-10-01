@@ -21,6 +21,11 @@ Status: **approved; in implementation** — see §12 for what is built · Branch
 | D8 | A versioned **Jagr Workspace Export v1** is the only path between a browser-local workspace and a server workspace (and, later, between backends). |
 | D9 | **Owner-configured single-tenant mode** is the early dogfooding path. |
 | D10 | Intercom is the first `FeedbackSource`. Slack is **outbound only**. No provider writes except Slack notifications. |
+| D11 | **Organization** is the commercial/security boundary; **Workspace** is the operational boundary. Authorization resolves user → organization membership → workspace membership. |
+| D12 | **Connection**, **SourceTarget**, **SourceState**, and **Watch** are distinct. Legacy provider-based watches remain readable through a compatibility resolver. |
+| D13 | Future ingestion converges on a tenant-aware, versioned, deduplicatable **NormalizedEvent** contract. Phase 0A defines the contract only; it does not add event processing. |
+| D14 | Entitlement decisions go through one `EntitlementPolicy`; the validation implementation is intentionally permissive. |
+| D15 | Subscription and usage state belong to the organization control plane. One admission service applies numeric resource limits and retry-safe execution accounting before work reaches the existing execution plane. |
 
 ---
 
@@ -82,6 +87,8 @@ All ports live in `src/product/ports/`. Each is a TypeScript interface with no i
 
 ```ts
 interface Repositories {
+  organizations:  { get(id); create(org) };
+  organizationMembers: { forUser(userId); get(orgId, userId); add(membership) };
   workspaces:     { get(id): Promise<Workspace | null>; create(w): Promise<void>; update(w, expectedVersion): Promise<void> };
   members:        { forUser(userId): Promise<Membership[]>; forWorkspace(wsId): Promise<Membership[]>; add(m): Promise<void> };
   users:          { byIdentity(provider, subject): Promise<User | null>; create(u): Promise<User> };
@@ -89,6 +96,8 @@ interface Repositories {
   watches:        { list(wsId); get(wsId, id); save(wsId, w); remove(wsId, id) };
   metricDefs:     { list(wsId); save(wsId, d); remove(wsId, key) };
   connections:    { list(wsId); get(wsId, id); save(wsId, c); remove(wsId, id) };   // holds a SecretRef, never a secret
+  sourceTargets:  { list(wsId); get(wsId, id); save(wsId, target) };
+  sourceStates:   { get(wsId, sourceTargetId); save(wsId, state) };
   records:        { upsert(wsId, connId, batch: RoleRecordBatch); query(wsId, q: RoleRecordQuery); purge(wsId, connId) };
   metricCache:    { get(wsId, key); put(wsId, key, series, expiresAt) };
   cursors:        { get(connId, stream); set(connId, stream, cursor) };
@@ -129,16 +138,50 @@ function schedulerTick(deps: { repos: Repositories; queue: JobQueue; clock: Cloc
 interface Clock { now(): ISO }
 ```
 
-`schedulerTick` computes due watch runs, due syncs and due briefs since the last tick and enqueues them (idempotency key = `kind:target:dueAt`, so overlapping or duplicate ticks are harmless), then drains a bounded number of jobs. The Vercel Cron adapter is ~20 lines in `api/cron/tick.ts`: verify the cron secret, call `schedulerTick`. Replacing Vercel Cron means calling the same function from something else.
+`schedulerTick` computes due watch runs, due syncs and due briefs since the last tick and only enqueues them (idempotency key = `kind:target:dueAt`, so overlapping or duplicate ticks are harmless). A separate authenticated worker request claims exactly one job. The transitional GitHub Actions runner ticks once and makes at most ten worker requests; its cadence is best-effort rather than precise. Replacing that runner means calling the same two endpoints from another scheduler and worker host.
+
+### 2.3.1 Source-aware checks (Phase 2A)
+
+Targets with a neutral `checkIntervalMinutes` are scheduled as durable `source.check` jobs. The worker still claims exactly one job. A provider adapter observes one SourceTarget and returns `changed` or `unchanged`; provider failures remain errors. For Sentry, the adapter reads bounded metric buckets, new issues, and releases through the existing authenticated connector and emits bounded NormalizedEvent drafts. The application service persists deduplicated events, records each event/watch pair's stable cadence-slot mapping through the existing durable cursor store, and coalesces `monitor.watch` work by workspace, watch, and schedule slot. Source cadence controls observation, watch cadence controls when investigation work may run, and signal relevance controls whether it is triggered. The job keeps a SourceTarget reference while the individual normalized events remain durable and queryable. Only after all enqueue attempts succeed does an owner-checked transaction save SourceState's checkpoint. Event/watch mappings, cadence-slot job keys, and retry make overlap safe where queue enqueue and checkpoint storage cannot share one transaction.
+
+Phase 2B resolves those durable event/watch mappings when `monitor.watch` runs. Event reads require both organization and workspace scope, are capped at 100 records, and order by occurrence time then event id. The monitor receives the canonical events for that watch/cadence slot and records bounded references on each investigation affected by the run; matching evidence snapshots also name the normalized event ids that back them. Payloads remain in the normalized-event repository and can be fetched only through the authenticated workspace route. The queue job remains one `workspace + watch + cadence slot` reference, never one job or embedded payload per event.
+
+### 2.3.2 SaaS admission control (Phase 3A)
+
+Organizations own a durable Subscription document; the `legacy` plan is the migration/default compatibility plan and is permissive. `EntitlementPolicy` maps that commercial state to numeric limits and capabilities, while the admission application service owns resource counting and usage reservation. Workspace, watch, and source creation run under a transaction that locks the organization's subscription row before checking tenant-scoped counts. Execution usage is an immutable `UsageEvent`, keyed by the existing durable operation or job identity, so retries do not consume allowance twice. Manual runs and reruns reserve before enqueue; scheduled `monitor.watch` and `source.check` jobs are admitted by the worker from the job's durable workspace ownership. A controlled denial completes the job without running it and is not retried. Subscription and usage state never enter SourceTarget, SourceState, NormalizedEvent, Job, Investigation, or Notification.
+
+### 2.3.3 SaaS execution bounds (Phase 3B)
+
+Job claims rotate by organization, using a durable Postgres turn table and a short serialized claim transaction. Each organization still receives its oldest due job first; claim transactions never hold the turn lock while work executes. A workspace without an organization uses its workspace id as the fairness key for compatibility. Lease tokens, expiry, retry, and idempotency semantics are unchanged. Scheduler ticks select at most 50 connected workspaces by oldest scheduler attempt, so later ticks advance through a backlog even if one workspace fails. A failed workspace keeps its last successful checkpoint for retry; the tick reports affected workspace ids. This bounds workspace selection, not the number of watches or sources in one workspace.
+
+The source checker owns event-to-watch relevance. The application service checks target identity and performs durable event persistence, event/watch mapping, and cadence-slot enqueue. Sentry's matching rules live in its connector; a source-aware connector without a relevance rule fails configuration rather than silently dropping investigations. Operators can read `/api/cron/status` with the cron credential for queue counts, expired leases, oldest queued time, and up to 20 recent dead jobs with organization/workspace/source identifiers. The response omits payloads and error text.
+
+Phase 3C adds tenant-scoped keyset repository pages for investigations `(startedAt, id)`, notifications `(deliveredAt, id)`, audit `(at, id)`, imports `(id)`, decisions `(actionId)`, and briefs `(generatedAt, id)`, capped at 100. The immutable `startedAt` key avoids moves between pages when an investigation updates. HTTP investigation summaries, notification history, and audit history expose `nextCursor`; malformed or foreign cursors are rejected. Notification delivery uses an indexed dedupe-key lookup rather than loading the entire delivery log.
+
+The server snapshot and Export v1 still have complete logical contents: they traverse all relevant history pages inside a repeatable-read, read-only Postgres transaction. They never substitute the first page for the full document. Because the current API and export format return one JSON document, both fail explicitly with HTTP 413 `history_too_large` when the assembled document exceeds the internal eight-million-character technical limit; no partial document is returned. This is a response-size guard, not a retention period. The snapshot fetches only its documented 100 most recent watch runs and 14 most recent briefs, without reading entire audit/brief histories. Export keeps deterministic id ordering and its secret/personal-data scan. Legacy organization-less in-memory workspaces retain their compatibility list path.
+
+Monitoring still needs the complete investigation ledger: same-signal dedupe, six-hour reopening, and especially permanent failed-deployment dedupe can consult an old investigation. It traverses bounded pages and restores the existing production id order before invoking the unchanged engine; it does not cap the ledger or change the engine's decisions. Imported runs likewise page through all primary imported evidence. Brief composition fetches only investigations started or updated in its existing 24-hour window, alert emails in that window, and the first historical email per relevant investigation (which preserves the displayed emailed-at fact). Decisions are fetched by action id; approval lookup uses an indexed investigation-action predicate; latest-brief rendering fetches only the investigations referenced by that brief. The engine and one-document UI/export still materialize the complete data they logically require, so very large monitoring or imported-data runs remain a capacity concern rather than a changed product rule. Normalized-event reads remain capped at 100.
+
+Retention classification (internal architecture, not a customer policy):
+
+| Data | Classification | Deletion gate |
+| --- | --- | --- |
+| Subscription, immutable usage events, active source state/targets, watches, workspace configuration and import-dedupe markers | Must retain for correctness | No automatic deletion; usage events also carry retry identity and period accounting. |
+| Investigations, evidence snapshots/traces/actions/decisions, normalized events and event/watch cursor mappings | Retain while referenced or retryable | Investigation provenance and monitoring deduplication must remain resolvable. A completed investigation still has replay and evidence value; no safe expiry boundary is defined. |
+| Queued/leased jobs, workspace locks, and terminal job idempotency keys | Must retain while execution or duplicate enqueue remains possible | Deleting a terminal job now permits the same key to be enqueued again. Leased jobs are never cleanup candidates. |
+| Notifications, audit entries, briefs and terminal job diagnostics | Historical/eventual retention candidates | No duration or safe deletion policy is defined. Notification dedupe keys and auditability must be accounted for before cleanup. |
+| Imported datasets | Retain while workspace uses them | They are primary evidence, not a rebuildable cache. |
+
+No Phase 3C cleanup is enabled. There is no product-approved duration, and the current schema has no durable tombstone for expired canonical events or separate job idempotency ledger. A future bounded, tenant-scoped cleanup worker must select a small deterministic batch, recheck references and active/leased state within its transaction, preserve idempotency and usage, and record progress; it must not execute until those gates and a retention policy are defined. The older 90-day normalized-record figure elsewhere in this document was a proposal, not an implemented retention guarantee.
 
 ### 2.4 SecretStore
 
 ```ts
 interface SecretStore {
   put(owner: { workspaceId: string; connectionId: string }, secret: SecretPayload): Promise<SecretRef>;
-  get(ref: SecretRef): Promise<{ secret: SecretPayload; version: number }>;
-  replace(ref: SecretRef, expectedVersion: number, secret: SecretPayload): Promise<void>;  // compare-and-swap: safe rotating refresh tokens
-  delete(ref: SecretRef): Promise<void>;
+  get(ref: SecretRef, owner: { workspaceId: string; connectionId: string }): Promise<{ secret: SecretPayload; version: number }>;
+  replace(ref: SecretRef, owner, expectedVersion: number, secret: SecretPayload): Promise<void>;  // compare-and-swap
+  delete(ref: SecretRef, owner): Promise<void>;
 }
 type SecretPayload =
   | { kind: 'api_key'; fields: Record<string, string> }                       // Amplitude key + secret
@@ -148,7 +191,7 @@ type SecretPayload =
 
 - Initial implementation: encrypted rows in Postgres. A per-secret data key encrypts the payload (AES-256-GCM); the data key is wrapped by a master key from `server/crypto` `KeyProvider` (`currentKey()`, `key(version)`). The master key comes from an environment variable; **KMS replaces only the `KeyProvider`**, not the store.
 - `replace` with an expected version prevents two workers from racing a rotating Jira refresh token.
-- Secrets never enter domain objects, logs, traces, exports, or HTTP responses. Connections hold an opaque `SecretRef`.
+- Secrets never enter domain objects, logs, traces, exports, or HTTP responses. Connections hold an opaque `SecretRef`, but the ref alone is not authorization: every operation also verifies its workspace and connection owner.
 
 ### 2.5 IdentityProvider
 
@@ -287,7 +330,7 @@ Server tables (Postgres implementation detail, not a contract): `users, identiti
 | Outbound | Slack | on event | immediate | delivery log |
 
 - **Freshness rule:** negative evidence ("no deploys in window") is asserted only when every source for that role is `ok` and fresh through the window end; otherwise it becomes a recorded gap.
-- Backfill 30 days; retain normalized records 90 days; investigation snapshots live as long as the investigation.
+- Earlier proposal: backfill 30 days and retain normalized records 90 days. Neither is an implemented retention guarantee; Phase 3B leaves retention policy undecided pending evidence and usage requirements.
 - One sync in flight per connection; honor `Retry-After`; jittered backoff.
 
 ---

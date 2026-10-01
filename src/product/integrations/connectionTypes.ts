@@ -31,6 +31,7 @@ const fromConnector = (d: ConnectorDescriptor<unknown>): ConnectionType => ({
   kind: 'source',
   credentialFields: d.credentialFields,
   configExample: EXAMPLES[d.id] ?? {},
+  sourceCheckIntervalMinutes: d.sourceCheckIntervalMinutes,
   parseConfig: zodParse(d.config as never),
 });
 

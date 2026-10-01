@@ -7,3 +7,5 @@ export * from './secrets';
 export * from './identity';
 export * from './notify';
 export * from './blob';
+export * from './controlPlane';
+export * from './entitlements';

@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, CircleAlert, Lock } from 'lucide-react';
+import { ArrowLeft, ChevronRight, CircleAlert, Clock3, Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { WatchInvestigation } from '@/product/types';
@@ -126,6 +126,8 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
     [inv.status === 'RESOLVED' ? 'Resolved' : inv.status === 'DISMISSED' ? 'Dismissed' : '', inv.completedAt],
   ];
   const hypotheses = inv.agentHypotheses.filter((h) => h.status !== 'ruled_out');
+  const leadHypothesis = hypotheses[0];
+  const primaryAction = waiting[0] ?? actions.find((a) => a.effective === 'recommended') ?? actions[0];
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -157,6 +159,36 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             ))}
         </dl>
       </AttentionBanner>
+
+      <section aria-labelledby="decision-summary-h" className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <div className="border-b border-line px-4 py-3 sm:px-5">
+          <p className="text-[11px] font-semibold tracking-[0.11em] text-ink-3 uppercase">Decision summary</p>
+          <h2 id="decision-summary-h" className="mt-1 text-[18px] font-semibold tracking-tight">What needs your attention now</h2>
+        </div>
+        <div className="grid md:grid-cols-2 xl:grid-cols-4">
+          <DecisionCell label="Why it matters" className="border-b border-line md:border-r xl:border-b-0">
+            <p>{inv.attentionReason}</p>
+          </DecisionCell>
+          <DecisionCell label="What Jagr believes" className="border-b border-line xl:border-r xl:border-b-0">
+            <p>{inv.likelyExplanation}</p>
+            <p className="mt-2 text-[12px] text-ink-3">
+              {status.confidence} confidence the signal is real{leadHypothesis ? ` · ${leadHypothesis.evidenceFor.length} supporting, ${leadHypothesis.evidenceAgainst.length} contradicting` : ''}
+            </p>
+          </DecisionCell>
+          <DecisionCell label="What is still unknown" className="border-b border-line md:border-r md:border-b-0">
+            <p>{inv.unknowns[0] ?? inv.uncertainty}</p>
+          </DecisionCell>
+          <DecisionCell label="What should happen next">
+            <p className="font-medium text-ink">{inv.recommendedNextStep}</p>
+            {primaryAction && (
+              <a href="#what-to-do" className="interactive mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
+                {primaryAction.effective === 'awaiting_approval' ? 'Approval required' : primaryAction.effective === 'rejected' ? 'Not permitted' : primaryAction.effective === 'executed' || primaryAction.effective === 'done' || primaryAction.effective === 'approved' ? 'Already completed' : 'Review recommendation'}
+                <ChevronRight size={11} aria-hidden />
+              </a>
+            )}
+          </DecisionCell>
+        </div>
+      </section>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="min-w-0 space-y-8">
@@ -205,6 +237,10 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             <p className="mt-1 text-[13px] text-ink-2">{attentionRoute(inv.attention, owner?.notificationPolicy.interruptAt)}.</p>
           </Part>
 
+          <Part id="timeline" title="Timeline" hint="The sequence Jagr used to orient the investigation. Timing shows order, not causation.">
+            <InvestigationTimeline inv={inv} actions={actions} />
+          </Part>
+
           <Part id="evidence" title="Evidence" hint="What the sources show. Every fact names its source and links to the record.">
             <EvidenceChain chain={chain} stateOf={stateOf} stages={['observed', 'correlated']} label="Evidence" />
           </Part>
@@ -213,15 +249,19 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             <EvidenceChain chain={chain} stateOf={stateOf} stages={['inferred', 'assumed']} label="Inferences and assumptions" />
           </Part>
 
+          {hypotheses.length > 0 && (
+            <Part id="hypotheses" title="Hypotheses" hint="The leading explanation is shown first. Evidence strength is support, not proof of cause.">
+              <div className="mb-4 rounded-lg border border-accent/25 bg-accent-soft/35 px-4 py-3">
+                <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">Leading hypothesis</p>
+                <p className="mt-1 text-[15px] font-medium text-ink">{inv.likelyExplanation}</p>
+                <p className="mt-2 text-[12px] text-ink-2">{inv.confidenceReason}</p>
+              </div>
+              <HypothesisList hypotheses={inv.agentHypotheses} evidence={inv.evidence} />
+            </Part>
+          )}
+
           <Part id="unknown" title="What is not known" hint="What the evidence does not establish, and what could not be checked.">
             <EvidenceChain chain={chain} stateOf={stateOf} stages={['unknown']} label="Unknowns" />
-            {hypotheses.length > 0 && (
-              <div className="mt-5">
-                <h3 className="text-[13px] font-medium text-ink-2">Possible explanations</h3>
-                <p className="mb-2 text-[13px] text-ink-3">Strength is how much independent evidence lines up — not the probability it is the cause.</p>
-                <HypothesisList hypotheses={inv.agentHypotheses} evidence={inv.evidence} />
-              </div>
-            )}
           </Part>
 
           <Part id="what-to-do" title="What to do">
@@ -329,6 +369,40 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
         </aside>
       </div>
     </div>
+  );
+}
+
+function DecisionCell({ label, className = '', children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={`min-w-0 px-4 py-4 sm:px-5 ${className}`}>
+      <h3 className="text-[11px] font-semibold tracking-[0.09em] text-ink-3 uppercase">{label}</h3>
+      <div className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{children}</div>
+    </div>
+  );
+}
+
+type TimelineItem = { at: string; kind: 'SYSTEM' | 'JAGR' | 'HUMAN'; label: string };
+
+function InvestigationTimeline({ inv, actions }: { inv: WatchInvestigation; actions: ReturnType<typeof effectiveActions> }) {
+  const items: TimelineItem[] = [
+    { at: inv.signals[0].onsetAt, kind: 'SYSTEM' as const, label: `${inv.signals[0].label} ${inv.signals[0].magnitude}` },
+    ...(inv.releaseAssociation ? [{ at: inv.releaseAssociation.releasedAt, kind: 'SYSTEM' as const, label: `${inv.releaseAssociation.kind === 'deploy' ? 'Deployment' : 'Release'} ${inv.releaseAssociation.version} reached the watched environment` }] : []),
+    ...inv.statusHistory.map((entry): TimelineItem => ({ at: entry.at, kind: 'JAGR', label: entry.state === 'DETECTED' ? 'Meaningful change detected' : entry.state === 'INVESTIGATING' ? 'Investigation opened' : entry.state === 'CONFIRMED' ? 'Signal confirmed and recommendation prepared' : entry.state === 'RESOLVED' ? 'Investigation resolved' : 'Investigation dismissed' })),
+    { at: inv.updatedAt, kind: 'JAGR' as const, label: `Recommended next step: ${inv.recommendedNextStep}` },
+    ...actions.flatMap((action): TimelineItem[] => action.decision ? [{ at: action.decision.at, kind: 'HUMAN', label: `${action.decision.status === 'approved' ? 'Approved' : action.decision.status === 'rejected' ? 'Rejected' : 'Completed'}: ${action.title}` }] : []),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  return (
+    <ol className="overflow-hidden rounded-lg border border-line bg-surface" aria-label="Investigation timeline">
+      {items.map((item, index) => (
+        <li key={`${item.at}:${item.kind}:${index}`} className="grid grid-cols-[58px_62px_minmax(0,1fr)] items-start gap-3 border-b border-line px-3 py-2.5 last:border-b-0 sm:grid-cols-[70px_72px_minmax(0,1fr)] sm:px-4">
+          <time className="num pt-0.5 text-[12px] text-ink-3">{fmtTime(item.at)} UTC</time>
+          <span className="inline-flex items-center gap-1.5 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-ink-3">
+            <Clock3 size={11} aria-hidden /> {item.kind}
+          </span>
+          <span className="text-[13px] leading-relaxed text-ink">{item.label}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

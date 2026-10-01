@@ -8,6 +8,7 @@ import { ConnectorConfigError } from './errors.js';
 import type { SecretPayload } from '../../ports/secrets.js';
 import type { HttpClient } from '../../ports/http.js';
 import type { Clock } from '../../ports/clock.js';
+import type { SourceChecker } from '../../ports/sourceCheck.js';
 
 /** Provenance for a record read live from a connector. */
 export function provenance(stamp: ReadStamp, externalId: string, observedAt: string, url?: string): Provenance {
@@ -45,4 +46,12 @@ export async function checkConnector<C>(d: ConnectorDescriptor<C>, conn: Connect
     if (name === 'ProviderUnavailableError' || name === 'ConnectorRateLimited') return { state: (e as { state: string }).state === 'error' ? 'error' : 'unavailable', detail: (e as Error).message };
     return { state: 'error', detail: `${d.name} check failed unexpectedly.` };
   }
+}
+
+/** Build the optional source-aware checker through the same validation, credential and host boundary. */
+export function sourceChecker<C>(d: ConnectorDescriptor<C>, conn: Connection, ctx: { secret?: SecretPayload; http: HttpClient; clock: Clock }): SourceChecker | undefined {
+  if (!d.sourceCheck) return undefined;
+  if (!d.sourceEventRelevant) throw new ConnectorConfigError(`${d.name} has no source-event relevance rule.`);
+  const prepared = prepare(d, conn, ctx);
+  return { check: (target, state) => d.sourceCheck!(prepared, target, state), relevant: d.sourceEventRelevant };
 }

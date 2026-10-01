@@ -7,7 +7,7 @@ import type { NotificationMessage } from '../ports/notify';
 import { response } from '../testkit/connectorContract';
 import { CHANNELS } from '../integrations/channels/index';
 import { deliver, STUCK_CLAIM_MS } from './notifications';
-import { drainJobs, runWatchJob, WorkspaceBusy } from './monitoring';
+import { drainJobs, runOneJob, runWatchJob, WorkspaceBusy } from './monitoring';
 import { watchFromTemplate } from '../catalog';
 
 /** Production hardening: duplicate delivery, concurrent runs, audit completeness, job leases. */
@@ -126,5 +126,32 @@ describe('job leases', () => {
     expect(ran).toHaveLength(1);
     expect(taken).toHaveLength(2);
     expect(await queue.inspect('run:w2')).toMatchObject({ state: 'leased' });
+  });
+
+  it('renews the current job lease while a legitimate execution is still running', async () => {
+    const { repos, tx } = createMemoryPersistence();
+    await repos.workspaces.create(ws);
+    await repos.watches.save('ws-1', watchFromTemplate('w1', 'checkout_health', { sources: ['jira'] }, NOW));
+    const clock = manualClock(NOW);
+    const queue = createMemoryJobQueue(clock);
+    await queue.enqueue({ kind: 'monitor.watch', workspaceId: 'ws-1', idempotencyKey: 'run:w1', payload: { watchId: 'w1', dueAt: NOW }, runAt: NOW });
+    const slow = {
+      ...repos,
+      watches: {
+        ...repos.watches,
+        list: async (workspaceId: string) => {
+          clock.advance(60_000);
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return repos.watches.list(workspaceId);
+        },
+      },
+    };
+    const deps = { repos: slow, tx, secrets: createMemorySecretStore(), clock, http: (async () => response({})) as HttpClient, connectors: {}, queue };
+    const running = runOneJob(deps, { workerId: 'a', leaseMs: 15 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(await queue.claim({ workerId: 'b', limit: 1, leaseMs: 15 })).toEqual([]);
+    expect(await running).toMatchObject({ state: 'completed', idempotencyKey: 'run:w1' });
+    expect(await queue.inspect('run:w1')).toMatchObject({ state: 'done', attempts: 1 });
   });
 });

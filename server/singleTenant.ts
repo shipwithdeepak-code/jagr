@@ -7,6 +7,7 @@ import type { SecretPayload, SecretRef, SecretStore } from '../src/product/ports
 import { SecretNotFound } from '../src/product/ports/secrets.js';
 import type { Clock } from '../src/product/ports/clock.js';
 import type { Env } from './runtime.js';
+import { legacySourceTargetId } from '../src/product/sourceIdentity.js';
 
 /**
  * Single-tenant dogfood mode: one workspace, owned by the identities in JAGR_OWNER_IDENTITIES, whose
@@ -23,6 +24,7 @@ import type { Env } from './runtime.js';
  */
 
 export const OWNER_WORKSPACE_ID = 'ws_owner';
+export const OWNER_ORGANIZATION_ID = 'org_owner';
 
 interface OwnerConnectorSpec {
   source: ProviderId;
@@ -128,8 +130,11 @@ export interface BootstrapResult {
 export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets: SecretStore; clock: Clock }, env: Env, opts: { fingerprintKey: string; workspaceName?: string }): Promise<BootstrapResult> {
   const { repos, secrets, clock } = deps;
   const now = clock.now();
+  const existingWorkspace = await repos.workspaces.get(OWNER_WORKSPACE_ID);
+  const organizationId = existingWorkspace?.organizationId ?? OWNER_ORGANIZATION_ID;
   const ws: Workspace = {
     id: OWNER_WORKSPACE_ID,
+    organizationId,
     name: opts.workspaceName ?? 'Jagr',
     mode: 'connected',
     createdAt: now,
@@ -138,7 +143,14 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
     importedExportIds: [],
     version: 1,
   };
-  if (!(await repos.workspaces.get(ws.id))) {
+  if (!(await repos.organizations.get(organizationId))) {
+    try {
+      await repos.organizations.create({ id: organizationId, name: opts.workspaceName ?? 'Jagr', createdAt: now });
+    } catch (e) {
+      if (!(e instanceof WriteConflict)) throw e;
+    }
+  }
+  if (!existingWorkspace) {
     try {
       await repos.workspaces.create(ws);
     } catch (e) {
@@ -158,7 +170,7 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
 
     if (!vars) {
       if (existing && existing.authKind === 'owner_env' && existing.state !== 'not_configured') {
-        if (existing.secretRef) await secrets.delete(existing.secretRef).catch((e) => { if (!(e instanceof SecretNotFound)) throw e; });
+        if (existing.secretRef) await secrets.delete(existing.secretRef, { workspaceId: ws.id, connectionId: id }).catch((e) => { if (!(e instanceof SecretNotFound)) throw e; });
         const { secretRef: _r, ...rest } = existing;
         void _r;
         await repos.connections.save(ws.id, { ...rest, state: 'not_configured', detail: `Credentials were removed from the deployment environment (${spec.required.join(', ')}).`, updatedAt: now });
@@ -180,8 +192,9 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
       changed = true;
     } else if ((await repos.cursors.get(ws.id, cursorKey)) !== fp) {
       try {
-        const cur = await secrets.get(secretRef);
-        await secrets.replace(secretRef, cur.version, spec.secret(env));
+        const owner = { workspaceId: ws.id, connectionId: id };
+        const cur = await secrets.get(secretRef, owner);
+        await secrets.replace(secretRef, owner, cur.version, spec.secret(env));
       } catch (e) {
         if (!(e instanceof SecretNotFound)) throw e;
         secretRef = await secrets.put({ workspaceId: ws.id, connectionId: id }, spec.secret(env));
@@ -211,6 +224,23 @@ export async function bootstrapSingleTenant(deps: { repos: Repositories; secrets
       updatedAt: changed || !existing ? now : existing.updatedAt,
     };
     await repos.connections.save(ws.id, next);
+    if (next.roles.length) {
+      const targetId = legacySourceTargetId(next.id);
+      const prior = await repos.sourceTargets.get(ws.id, targetId);
+      await repos.sourceTargets.save(ws.id, {
+        id: targetId,
+        organizationId: ws.organizationId!,
+        workspaceId: ws.id,
+        connectionId: next.id,
+        provider: next.provider,
+        externalId: prior?.externalId ?? `legacy:${next.id}`,
+        displayName: next.externalAccount ?? next.label?.name ?? next.provider,
+        configuration: next.config,
+        status: next.state === 'not_configured' || next.state === 'needs_reconnect' ? 'disconnected' : 'active',
+        createdAt: prior?.createdAt ?? next.createdAt ?? now,
+        updatedAt: next.updatedAt,
+      });
+    }
     await repos.cursors.set(ws.id, cursorKey, fp);
   }
   return result;
