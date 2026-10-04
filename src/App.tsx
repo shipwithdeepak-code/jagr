@@ -10,6 +10,7 @@ import { ProductProvider } from '@/state/product';
 import { ServerSessionProvider, useServerSession } from '@/state/serverSession';
 import { useProduct } from '@/state/productContext';
 import { resolveSurface, type Surface } from '@/state/surface';
+import { internalToolsAvailable } from '@/state/customerBoundary';
 import { ProductOverviewPage } from '@/pages/ProductOverview';
 import { LandingPage } from '@/pages/Landing';
 import { WorkspaceGate } from '@/components/WorkspaceGate';
@@ -40,7 +41,7 @@ const TITLES: Record<string, string> = {
   '/watches': 'Watches',
   '/sources': 'Sources',
   '/briefs': 'Briefs',
-  '/demo': 'Demo night',
+  '/demo': 'See how Jagr works',
   '/tasks': 'Tasks',
   '/signals': 'Signals',
   '/trace': 'Agent trace',
@@ -117,6 +118,10 @@ function Surfaces() {
   );
 }
 
+function InternalOnly() {
+  return <EmptyState icon={Compass} title="Internal quality tools">Evaluation Lab and Agent Trace are available in the development build.</EmptyState>;
+}
+
 function Screens() {
   const { pathname } = useLocation();
   return (
@@ -135,9 +140,9 @@ function Screens() {
               <Route path="/investigations/:id" element={<InvestigationDetailPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/signals" element={<SignalsPage />} />
-              <Route path="/trace" element={<TracePage />} />
+              <Route path="/trace" element={internalToolsAvailable ? <TracePage /> : <InternalOnly />} />
               <Route path="/approvals" element={<ApprovalsPage />} />
-              <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route path="/evaluations" element={internalToolsAvailable ? <EvaluationsPage /> : <InternalOnly />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/demo/settings" element={<DemoSettingsPage />} />

@@ -1,3 +1,4 @@
+import type { AppEnvironment } from './environment';
 import { createContext, useContext } from 'react';
 import type { AgentEvent, ApprovalRequest, OvernightRun, Task, TaskDraft, TaskStatus, WorkspaceSettings } from '@/domain/types';
 import { TEAMS } from '@/domain/defaults';
@@ -22,7 +23,7 @@ export interface WorkspaceApi {
   runOvernight(fresh?: boolean): Promise<OvernightRun>;
   commitRun(run: OvernightRun): void;
   createTaskFromDraft(draft: TaskDraft): Promise<Task | null>;
-  setTaskStatus(taskId: string, status: TaskStatus): void;
+  setTaskStatus(taskId: string, status: TaskStatus, environment?: AppEnvironment): void;
   approve(approvalId: string): void;
   reject(approvalId: string, note?: string): void;
   requestMoreEvidence(approvalId: string): Promise<void>;

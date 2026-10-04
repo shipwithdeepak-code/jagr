@@ -11,6 +11,7 @@ import { AttentionBanner, LoadingState, MetricValue, StatusBadge } from '@/compo
 import { effectiveActions, traceWithDecisions } from '@/product/agent/decisions';
 import { confidenceBand } from '@/product/engine/monitor';
 import { EmptyState, Mono } from '@/components/ui';
+import { internalToolsAvailable, visibleSimulatedTasks } from '@/state/customerBoundary';
 import type { TaskDraft } from '@/domain/types';
 import { buildEvidenceChain } from '@/product/view/evidenceChain';
 import { canonicalReading, findingState, investigationTitle, investigationWatches } from '@/product/view/investigation';
@@ -68,7 +69,7 @@ export function WatchInvestigationPage() {
       </EmptyState>
     );
   }
-  return <Detail inv={inv} />;
+  return <Detail key={inv.id} inv={inv} />;
 }
 
 /** One part of the incident document: a heading that says what the part answers, then its content. */
@@ -93,7 +94,7 @@ function Part({ id, title, hint, children }: { id: string; title: string; hint?:
 function Detail({ inv }: { inv: WatchInvestigation }) {
   const { state, runMonitoring, running, location } = useProduct();
   const { createTaskFromDraft, state: ws } = useWorkspace();
-  const [filed, setFiled] = useState<string | null>(ws.tasks.find((t) => t.fingerprint === `watch:${inv.dedupeKey}`)?.id ?? null);
+  const [filed, setFiled] = useState<string | null>(visibleSimulatedTasks(ws.tasks, 'workspace', location, [inv])[0]?.id ?? null);
   const owner = state.watches.find((w) => w.id === inv.watchId);
   const emails = state.result?.emails.filter((e) => e.investigationId === inv.id) ?? [];
   const connections = state.result?.connections ?? state.connections;
@@ -182,7 +183,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             <p className="font-medium text-ink">{inv.recommendedNextStep}</p>
             {primaryAction && (
               <a href="#what-to-do" className="interactive mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
-                {primaryAction.effective === 'awaiting_approval' ? 'Approval required' : primaryAction.effective === 'rejected' ? 'Not permitted' : primaryAction.effective === 'executed' || primaryAction.effective === 'done' || primaryAction.effective === 'approved' ? 'Already completed' : 'Review recommendation'}
+                {primaryAction.effective === 'awaiting_approval' ? 'Approval required' : primaryAction.effective === 'rejected' ? 'Not permitted' : primaryAction.effective === 'executed' || primaryAction.effective === 'done' || primaryAction.effective === 'approved' ? 'View recorded decision' : 'Review recommendation'}
                 <ChevronRight size={11} aria-hidden />
               </a>
             )}
@@ -269,13 +270,13 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             {actions.length > 0 && (
               <div className="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
                 {actions.map((a) => (
-                  <ActionRow key={a.id} action={a} onDo={a.kind === 'create_work_item' || a.kind === 'create_incident' ? fileTask : undefined} />
+                  <ActionRow key={a.id} action={a} onDo={location === 'browser' && (a.kind === 'create_work_item' || a.kind === 'create_incident') ? fileTask : undefined} />
                 ))}
               </div>
             )}
             {filed && (
               <Link to={`/tasks?open=${filed}`} className="mt-2 inline-block text-[13px] font-medium text-accent hover:underline">
-                Task {filed} filed{location === 'browser' ? ' in the simulated tracker' : ''} — view in Tasks
+                Simulated task {filed} recorded locally — view in Tasks
               </Link>
             )}
             {approvals.length > 0 && (
@@ -303,14 +304,14 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                 <h3 className="mb-2 text-[14px] font-semibold">Replay</h3>
                 <InvestigationReplay inv={inv} decisions={state.decisions} onRunAgain={() => void runMonitoring()} running={running} />
               </section>
-              <section aria-label="Agent trace">
+              {internalToolsAvailable && <section aria-label="Agent trace">
                 <h3 className="text-[14px] font-semibold">Agent trace</h3>
                 <p className="mb-2 text-[13px] text-ink-2">Every planner decision, validator verdict, tool call and result, as recorded.</p>
                 <div className="mb-3">
                   <PlannerModeLine info={state.result?.planner} />
                 </div>
                 <AgentTraceTimeline steps={trace} connections={connections} />
-              </section>
+              </section>}
               <section aria-label="Run history">
                 <h3 className="text-[14px] font-semibold">Run history</h3>
                 <p className="mb-2 text-[13px] text-ink-2">{inv.runs.length} scheduled checks were merged into this investigation instead of opening duplicates.</p>
@@ -389,7 +390,7 @@ function InvestigationTimeline({ inv, actions }: { inv: WatchInvestigation; acti
     ...(inv.releaseAssociation ? [{ at: inv.releaseAssociation.releasedAt, kind: 'SYSTEM' as const, label: `${inv.releaseAssociation.kind === 'deploy' ? 'Deployment' : 'Release'} ${inv.releaseAssociation.version} reached the watched environment` }] : []),
     ...inv.statusHistory.map((entry): TimelineItem => ({ at: entry.at, kind: 'JAGR', label: entry.state === 'DETECTED' ? 'Meaningful change detected' : entry.state === 'INVESTIGATING' ? 'Investigation opened' : entry.state === 'CONFIRMED' ? 'Signal confirmed and recommendation prepared' : entry.state === 'RESOLVED' ? 'Investigation resolved' : 'Investigation dismissed' })),
     { at: inv.updatedAt, kind: 'JAGR' as const, label: `Recommended next step: ${inv.recommendedNextStep}` },
-    ...actions.flatMap((action): TimelineItem[] => action.decision ? [{ at: action.decision.at, kind: 'HUMAN', label: `${action.decision.status === 'approved' ? 'Approved' : action.decision.status === 'rejected' ? 'Rejected' : 'Completed'}: ${action.title}` }] : []),
+    ...actions.flatMap((action): TimelineItem[] => action.decision ? [{ at: action.decision.at, kind: 'HUMAN', label: `${action.decision.status === 'approved' ? 'Approved' : action.decision.status === 'rejected' ? 'Rejected' : 'Decision recorded'}: ${action.title}` }] : []),
   ].sort((a, b) => a.at.localeCompare(b.at));
   return (
     <ol className="overflow-hidden rounded-lg border border-line bg-surface" aria-label="Investigation timeline">

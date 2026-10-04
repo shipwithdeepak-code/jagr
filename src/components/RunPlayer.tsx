@@ -149,9 +149,9 @@ export function RunPlayer({ run, mode, onDone, onClose }: { run: OvernightRun; m
           <div className="flex min-w-0 items-center gap-2.5">
             <LogoMark size={20} />
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold">{mode === 'demo' ? 'Demo night — scripted replay' : 'Demo night — overnight run'}</div>
+              <div className="truncate text-[13px] font-semibold">{mode === 'demo' ? 'See how Jagr works — scripted replay' : 'Demo night — overnight run'}</div>
               <div className={cx('truncate text-[12px]', dark ? 'text-white/45' : 'text-ink-3')}>
-                Demo night · simulated data · replaying {run.events.length} real agent events in compressed time
+                DEMO · simulated data · replaying {run.events.length} real agent events in compressed time
               </div>
             </div>
           </div>

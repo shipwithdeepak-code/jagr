@@ -8,8 +8,9 @@ import { teamName, useWorkspace } from '@/state/workspace';
 import { Badge, Card, cx, Mono, PageHeader, RiskBadge, SimulationBadge, Tabs } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
 import { EnvironmentBadge, useEnvironmentScope } from '@/components/product';
-import { inScope, SCOPE_TABS, taskEnvironment } from '@/state/environment';
-import { pendingApprovals } from '@/product/agent/decisions';
+import { inScope, taskEnvironment } from '@/state/environment';
+import { pendingApprovals, effectiveActions } from '@/product/agent/decisions';
+import { visibleSimulatedTasks, recordedActionLabel } from '@/state/customerBoundary';
 import { useProduct } from '@/state/productContext';
 
 const COLS = 'md:grid-cols-[76px_1fr_92px_160px_100px_84px_130px_112px]';
@@ -18,13 +19,14 @@ export function TasksPage() {
   const { state } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const [who, setWho] = useState<'all' | 'nightwatch' | 'human'>('all');
-  const [scope, setScope] = useEnvironmentScope();
+  const [scope] = useEnvironmentScope();
   const product = useProduct();
   const openId = params.get('open');
-  const openTask = state.tasks.find((t) => t.id === openId) ?? null;
+  const visibleTasks = visibleSimulatedTasks(state.tasks, scope === 'demo' ? 'demo' : 'workspace', product.location, product.state.result?.investigations ?? []);
+  const openTask = visibleTasks.find((t) => t.id === openId) ?? null;
 
-  // Every task belongs to exactly one environment; the list shows the current one unless "All" is chosen.
-  const tasks = state.tasks.filter((t) => inScope(taskEnvironment(t), scope) && (who === 'all' || t.createdBy === who));
+  // Lists and direct task links share the same current-workspace boundary.
+  const tasks = visibleTasks.filter((t) => (who === 'all' || t.createdBy === who));
   const showDemo = inScope('demo', scope);
   const workspaceApprovals = inScope('workspace', scope) ? pendingApprovals(product.state.result?.investigations ?? [], product.state.decisions) : [];
   const created = tasks.filter((t) => t.createdBy === 'nightwatch' && t.status === 'todo');
@@ -34,21 +36,34 @@ export function TasksPage() {
   const approvals = showDemo ? state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested') : [];
   const invTitle = (id?: string) => state.run?.investigations.find((i) => i.id === id)?.title;
 
-  const open = (id: string) => setParams({ open: id });
+  const open = (id?: string) => setParams((current) => { const next = new URLSearchParams(current); if (id) next.set('open', id); else next.delete('open'); return next; });
 
   return (
     <>
       <PageHeader
         title="Tasks"
-        description="Work Jagr turned findings into, alongside the team’s own backlog. Issues live in a simulated issue tracker built behind the same interface a Linear or Jira connector would implement."
+        description={showDemo ? "Simulated tasks from the scripted replay. Nothing is written to an external issue tracker." : "Recommendations and recorded decisions from your workspace investigations. These are not externally created issues."}
         actions={
           <>
-            <SimulationBadge label="Simulated issue tracker" />
-            <Tabs value={scope} onChange={setScope} items={SCOPE_TABS} />
-            <Tabs value={who} onChange={setWho} items={[{ value: 'all', label: 'All' }, { value: 'nightwatch', label: 'Jagr' }, { value: 'human', label: 'Human' }]} />
+            {(showDemo || tasks.length > 0) && <SimulationBadge label="Simulated issue tracker" />}
+            {(showDemo || tasks.length > 0) && <Tabs value={who} onChange={setWho} items={[{ value: 'all', label: 'All' }, { value: 'nightwatch', label: 'Jagr' }, { value: 'human', label: 'Human' }]} />}
           </>
         }
       />
+
+      {!showDemo && (
+        <Section title="Recommendations and decisions" hint="Recorded in Jagr; no external action is confirmed here.">
+          {(product.state.result?.investigations ?? []).some((inv) => inv.actions.length) ? (
+            <Card padded={false}>
+              {(product.state.result?.investigations ?? []).flatMap((inv) => effectiveActions(inv, product.state.decisions).map((action) => (
+                <Link key={action.id} to={inv.jagrPath} className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                  <span>{action.title}</span><Badge>{recordedActionLabel(action.effective)}</Badge>
+                </Link>
+              )))}
+            </Card>
+          ) : <EmptyRow>No recommendations yet. Tell Jagr what to watch, then check your product for meaningful changes.</EmptyRow>}
+        </Section>
+      )}
 
       {showDemo && state.drafts.length > 0 && (
         <Section title="Drafted — ready to file" hint="Below the auto-file threshold, Jagr prepares the task and you decide.">
@@ -58,9 +73,9 @@ export function TasksPage() {
         </Section>
       )}
 
-      <Section title="Created by Jagr" count={created.length} hint="Filed autonomously under the Level 3 policy.">
-        <TaskTable tasks={created} onOpen={open} invTitle={invTitle} empty="Nothing new from Jagr. Run the overnight watch to see it file work." />
-      </Section>
+      {(showDemo || visibleTasks.length > 0) && <Section title="Simulated tasks from Jagr" count={created.length} hint="Local simulation only; no external issue was created.">
+        <TaskTable tasks={created} onOpen={open} invTitle={invTitle} empty={showDemo ? "Start the demo to see simulated work." : "No simulated tasks in this workspace."} />
+      </Section>}
 
       <Section title="Needs approval" count={approvals.length + workspaceApprovals.length} hint="Consequential actions waiting on a human. Jagr will not proceed on its own.">
         {workspaceApprovals.length > 0 && (
@@ -104,7 +119,8 @@ export function TasksPage() {
         )}
       </Section>
 
-      <Section title="In progress" count={inProgress.length}>
+      {(showDemo || visibleTasks.length > 0) && <>
+      <Section title="Simulated work in progress" count={inProgress.length}>
         <TaskTable tasks={inProgress} onOpen={open} invTitle={invTitle} empty="Nothing in progress." />
       </Section>
 
@@ -114,11 +130,12 @@ export function TasksPage() {
         </Section>
       )}
 
-      <Section title="Completed" count={done.length}>
-        <TaskTable tasks={done} onOpen={open} invTitle={invTitle} empty="Nothing completed yet." />
+      <Section title="Simulated work marked done" count={done.length}>
+        <TaskTable tasks={done} onOpen={open} invTitle={invTitle} empty="No simulated work marked done yet." />
       </Section>
 
-      <TaskDrawer task={openTask} onClose={() => setParams({})} />
+      </>}
+      <TaskDrawer task={openTask} onClose={() => open()} />
     </>
   );
 }

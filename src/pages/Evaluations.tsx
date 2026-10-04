@@ -31,7 +31,7 @@ export function EvaluationsPage() {
     <>
       <PageHeader
         title="Evaluation Lab"
-        description="An agent that acts without evaluation isn’t something to trust. Every case replays a fixture night through the real engine and checks behaviour, not wording: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
+        description="Internal quality tooling. An agent that acts without evaluation isn’t something to trust. Every case replays a fixture night through the real engine and checks behaviour, not wording: did it catch real problems, stay quiet on noise, refuse to invent causes, and respect approval gates?"
       />
 
       <EvaluationLab />

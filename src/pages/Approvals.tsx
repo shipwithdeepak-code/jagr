@@ -9,15 +9,14 @@ import { RunButtons } from './Overview';
 import { AgentApprovalCard } from '@/components/agent';
 import { effectiveActions } from '@/product/agent/decisions';
 import { useProduct } from '@/state/productContext';
-import { inScope, SCOPE_TABS } from '@/state/environment';
+import { inScope } from '@/state/environment';
 import { EnvironmentBadge, useEnvironmentScope } from '@/components/product';
-import { Tabs } from '@/components/ui';
 
 export function ApprovalsPage() {
   const { state } = useWorkspace();
   const product = useProduct();
   const { hash } = useLocation();
-  const [scope, setScope] = useEnvironmentScope();
+  const [scope] = useEnvironmentScope();
   // Identity: approvals from workspace investigations are Workspace; the scripted replay's are Demo night.
   const showWorkspace = inScope('workspace', scope);
   const showDemo = inScope('demo', scope);
@@ -41,7 +40,6 @@ export function ApprovalsPage() {
       <PageHeader
         title="Approvals"
         description="Actions that affect production, money or customers wait here with the evidence behind them. Jagr never runs them on its own."
-        actions={<Tabs value={scope} onChange={setScope} items={SCOPE_TABS} />}
       />
 
       {scope !== 'workspace' && (
@@ -83,7 +81,7 @@ export function ApprovalsPage() {
       )}
       {agentDecided.length > 0 && (
         <div className="mt-6 space-y-4">
-          <SectionTitle hint="Also recorded in each investigation's Agent Trace.">Decided</SectionTitle>
+          <SectionTitle hint="Recorded in the investigation history.">Decided</SectionTitle>
           {agentDecided.map(({ action, inv }) => (
             <AgentApprovalCard key={action.id} action={action} inv={inv} />
           ))}

@@ -238,7 +238,7 @@ function NoWorkspace() {
           Explore locally
         </button>
         <Link to="/demo" className={cx(quiet, 'inline-flex items-center gap-1')}>
-          Watch Demo night <ArrowRight size={13} aria-hidden />
+          See how Jagr works <ArrowRight size={13} aria-hidden />
         </Link>
       </Alternatives>
     </section>

@@ -27,7 +27,8 @@ import type { OvernightRun } from '@/domain/types';
 import { useWorkspace } from '@/state/workspace';
 import { pendingApprovals as pendingAgentApprovals } from '@/product/agent/decisions';
 import { useProduct } from '@/state/productContext';
-import { EnvironmentContext, environmentForPath, inEnvironment, taskEnvironment, type AppEnvironment } from '@/state/environment';
+import { EnvironmentContext, environmentForPath, inEnvironment, type AppEnvironment } from '@/state/environment';
+import { visibleSimulatedTasks, internalToolsAvailable } from '@/state/customerBoundary';
 import { monitoringStatus } from '@/product/view/watchCard';
 import { hasRunnableConnectedWatch, hasRunnableProductWatch } from '@/product/view/quickStart';
 import { Logo, LogoMark } from './Logo';
@@ -107,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     env === 'workspace'
       ? pendingAgentApprovals(product.state.result?.investigations ?? [], product.state.decisions).length
       : state.approvals.filter((a) => a.status === 'pending' || a.status === 'more_evidence_requested').length;
-  const openTasks = state.tasks.filter((t) => t.status !== 'done' && taskEnvironment(t) === env).length;
+  const openTasks = visibleSimulatedTasks(state.tasks, env, product.location, product.state.result?.investigations ?? []).filter((t) => t.status !== 'done').length;
   const watchFindings = product.state.result?.investigations.filter((i) => i.status !== 'DISMISSED' && i.attention !== 'LOW').length ?? 0;
   const canRun = product.location === 'server' && product.mode === 'connected' && product.server
     ? !product.server.loading && hasRunnableConnectedWatch({ connections: product.server.connections, watches: product.state.watches })
@@ -126,8 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: inEnvironment('/tasks', env), label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
   ];
   const advanced: NavItem[] = [
-    { to: inEnvironment('/trace', env), label: 'Agent trace', icon: ScrollText },
-    { to: '/evaluations', label: 'Evaluations', icon: FlaskConical },
+    ...(internalToolsAvailable ? [{ to: inEnvironment('/trace', env), label: 'Agent trace', icon: ScrollText }, { to: '/evaluations', label: 'Evaluation Lab', icon: FlaskConical }] : []),
     { to: '/about', label: 'About Jagr', icon: BookOpen },
   ];
   const demo: NavItem[] = [
@@ -190,12 +190,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       {review.map((it) => (
         <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
-      <NavGroup label="Advanced" compact={compact} />
+      <NavGroup label={internalToolsAvailable ? "Internal tools / About" : "About"} compact={compact} />
       {advanced.map((it) => (
         <NavRow key={it.to} item={it} compact={compact} env={env} />
       ))}
       <div className={cx('mt-4 border-t border-line pt-3', compact && 'mx-1')}>
-        <NavRow item={{ to: '/demo', label: 'Demo night', icon: Moon }} compact={compact} env={env} demoEntry />
+        <NavRow item={{ to: '/demo', label: 'See how Jagr works', icon: Moon }} compact={compact} env={env} demoEntry />
         {env === 'demo' && !compact && (
           <div className="mt-0.5 ml-3 border-l border-line pl-2">
             {demo.map((it) => (
@@ -253,8 +253,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="inline-flex min-w-0 items-center gap-2 text-[13px] text-ink-2">
                 <Moon size={14} aria-hidden className="shrink-0 text-ink-3" />
                 <span className="truncate">
-                  <span className="font-medium text-ink">Demo night</span>
-                  <span className="max-md:hidden"> · a scripted replay, separate from your workspace</span>
+                  <span className="font-medium text-ink">DEMO · SCRIPTED REPLAY</span>
+                  <span className="max-md:hidden"> · No changes are made to your workspace</span>
                 </span>
               </span>
               <div className="ml-auto flex shrink-0 items-center gap-2">

@@ -171,12 +171,14 @@ describe('tasks and approvals have an explicit environment identity', () => {
 
   it('pages default to the current environment and render approvals by environment, not mixed', () => {
     const product = readFileSync('src/components/product.tsx', 'utf8');
-    expect(product).toMatch(/useState<EnvironmentScope>\(environment\)/);
+    expect(product).toContain("return [environment as EnvironmentScope] as const");
+    expect(product).not.toContain("setScope");
     const approvals = readFileSync('src/pages/Approvals.tsx', 'utf8');
     expect(approvals).toMatch(/showWorkspace && \(/);
     expect(approvals).toMatch(/showDemo && \(/);
     const tasksPage = readFileSync('src/pages/Tasks.tsx', 'utf8');
-    expect(tasksPage).toMatch(/inScope\(taskEnvironment\(t\), scope\)/);
+    expect(tasksPage).toContain("visibleSimulatedTasks(state.tasks");
+    expect(tasksPage).toContain("visibleTasks.find((t) => t.id === openId)");
     expect(tasksPage).toMatch(/<EnvironmentBadge env=\{taskEnvironment\(t\)\} \/>/);
     const shell = readFileSync('src/components/AppShell.tsx', 'utf8');
     expect(shell).toMatch(/Badges count the current environment only/);

@@ -70,9 +70,10 @@ export function AiEgressSetting() {
       <div className="flex items-center justify-between gap-3 text-[13px]">
         <div>
           <div className="font-medium">Allow AI planning</div>
-          <p className="text-[13px] text-ink-3">When off, this workspace never sends evidence to an AI provider; the deterministic planner runs instead.</p>
+          <p className="text-[13px] text-ink-3">Controls whether this workspace may use an AI planner when a provider is configured.</p>
+          {!product.llmOption.available && <p className="mt-1 text-[13px] text-ink-2">AI planning is currently unavailable. This disabled control shows a saved policy preference, not active AI planning.</p>}
         </div>
-        <Toggle label="Allow AI planning" checked={server.settings.aiEgressAllowed} disabled={server.role === 'member'} onChange={(v) => void server.setAiEgressAllowed(v)} />
+        <Toggle label="Allow AI planning" checked={server.settings.aiEgressAllowed} disabled={server.role === 'member' || !product.llmOption.available} onChange={(v) => void server.setAiEgressAllowed(v)} />
       </div>
     </Card>
   );

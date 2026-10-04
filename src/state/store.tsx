@@ -8,7 +8,7 @@ import { checkoutRegressionScenario } from '@/simulation/scenarios';
 import type { EvaluationReport } from '@/evaluation/scenarios';
 import { addMinutes } from '@/lib/time';
 import { WorkspaceContext, type WorkspaceApi, type WorkspaceState } from './workspace';
-import { taskEnvironment } from './environment';
+import { taskEnvironment, type AppEnvironment } from './environment';
 
 /**
  * Workspace state. The UI reads from here and never from the simulation directly —
@@ -18,7 +18,7 @@ import { taskEnvironment } from './environment';
 type Msg =
   | { type: 'run_completed'; run: OvernightRun }
   | { type: 'task_created'; task: Task; draftFingerprint: string; event: AgentEvent }
-  | { type: 'task_status'; taskId: string; status: TaskStatus; event: AgentEvent }
+  | { type: 'task_status'; taskId: string; status: TaskStatus; environment?: AppEnvironment; event: AgentEvent }
   | { type: 'approval_updated'; approval: ApprovalRequest; event: AgentEvent }
   | { type: 'settings'; settings: WorkspaceSettings; event?: AgentEvent }
   | { type: 'evaluation'; report: EvaluationReport }
@@ -36,7 +36,7 @@ function reducer(state: WorkspaceState, msg: Msg): WorkspaceState {
     case 'run_completed': {
       const decided = state.approvals.filter((a) => a.status !== 'pending' && !msg.run.approvals.some((n) => n.fingerprint === a.fingerprint));
       const createdIds = new Set(msg.run.tasks.map((t) => t.id));
-      const tasks = [...state.tasks.filter((t) => !createdIds.has(t.id)), ...msg.run.tasks];
+      const tasks = [...state.tasks.filter((t) => isWorkspaceTask(t) || !createdIds.has(t.id)), ...msg.run.tasks.filter((t) => !isWorkspaceTask(t))];
       return {
         ...state,
         run: msg.run,
@@ -58,7 +58,7 @@ function reducer(state: WorkspaceState, msg: Msg): WorkspaceState {
     case 'task_status':
       return {
         ...state,
-        tasks: state.tasks.map((t) => (t.id === msg.taskId ? { ...t, status: msg.status } : t)),
+        tasks: state.tasks.map((t) => (t.id === msg.taskId && taskEnvironment(t) === (msg.environment ?? 'demo') ? { ...t, status: msg.status } : t)),
         humanEvents: [...state.humanEvents, msg.event],
         clock: msg.event.at,
       };
@@ -126,15 +126,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  const adapters = useCallback(() => {
+  const adapters = useCallback((environment: AppEnvironment = 'demo') => {
     const s = stateRef.current;
-    return createSimulationAdapters(checkoutRegressionScenario(), { availability: s.settings.integrations, seedIssues: s.tasks, teams: TEAMS });
+    return createSimulationAdapters(checkoutRegressionScenario(), { availability: s.settings.integrations, seedIssues: s.tasks.filter((task) => taskEnvironment(task) === environment), teams: TEAMS });
   }, []);
 
   /** `fresh` runs Demo night against a clean demo store regardless of pending state updates. */
   const runOvernight = useCallback(async (fresh = false) => {
     const s = fresh ? initialState() : stateRef.current;
-    return runScenario('checkout-regression', s.settings, { runId: `run-${String(HISTORICAL_STATS.runs + s.runCount + 1).padStart(3, '0')}`, seedTasks: s.tasks });
+    return runScenario('checkout-regression', s.settings, { runId: `run-${String(HISTORICAL_STATS.runs + s.runCount + 1).padStart(3, '0')}`, seedTasks: s.tasks.filter((task) => taskEnvironment(task) === 'demo') });
   }, []);
 
   const commitRun = useCallback((run: OvernightRun) => dispatch({ type: 'run_completed', run }), []);
@@ -144,7 +144,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const s = stateRef.current;
       const at = addMinutes(s.clock, 1);
       try {
-        const task = await adapters().issueTracker.createIssue(draft, at);
+        const task = await adapters(taskEnvironment(draft)).issueTracker.createIssue(draft, at);
         const created: Task = { ...task, createdBy: 'nightwatch' };
         dispatch({
           type: 'task_created',
@@ -165,10 +165,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [adapters],
   );
 
-  const setTaskStatus = useCallback((taskId: string, status: TaskStatus) => {
+  const setTaskStatus = useCallback((taskId: string, status: TaskStatus, environment: AppEnvironment = 'demo') => {
     const s = stateRef.current;
     const label = { todo: 'To do', in_progress: 'In progress', done: 'Done' }[status];
-    dispatch({ type: 'task_status', taskId, status, event: humanEvent(s, { action: `Moved ${taskId} to ${label}`, tool: 'issueTracker.updateStatus', result: label, status: 'ok' }) });
+    dispatch({ type: 'task_status', taskId, status, environment, event: humanEvent(s, { action: `Moved ${taskId} to ${label}`, tool: 'issueTracker.updateStatus', result: label, status: 'ok' }) });
   }, []);
 
   const approve = useCallback((approvalId: string) => {
