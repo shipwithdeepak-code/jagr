@@ -1,3 +1,4 @@
+import { recordedActionLabel } from '@/state/customerBoundary';
 import { useMemo, useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, CircleSlash, Lock, ShieldAlert, Wrench, X } from 'lucide-react';
 import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, PlannerRunInfo, SourceConnection, TraceStep, WatchInvestigation } from '@/product/types';
@@ -228,13 +229,13 @@ export function ActionRow({ action, onDo }: { action: EffectiveAction; onDo?: ()
         <span className="min-w-0 flex-1 text-[13px] font-medium">{action.title}</span>
         {done ? (
           <Badge tone="ok" dot>
-            {action.effective === 'executed' ? 'Done by Jagr' : action.effective === 'approved' ? 'Approved' : 'Done'}
+            {recordedActionLabel(action.effective)}
           </Badge>
         ) : action.effective === 'rejected' ? (
           <Badge tone="neutral">Rejected</Badge>
         ) : action.risk === 'MEDIUM' ? (
           <Button size="sm" icon={Check} onClick={doIt}>
-            {location === 'browser' ? 'Do it (simulated)' : 'Do it'}
+            {location === 'browser' ? 'Record simulated action' : 'Record decision'}
           </Button>
         ) : (
           <a href={`#approve-${action.id}`} className="text-[13px] font-medium text-accent hover:underline">
@@ -242,7 +243,7 @@ export function ActionRow({ action, onDo }: { action: EffectiveAction; onDo?: ()
           </a>
         )}
       </div>
-      <p className="mt-1 text-[12px] text-ink-3">{AUTONOMY_TEXT[action.risk]}</p>
+      <p className="mt-1 text-[12px] text-ink-3">This records a decision in Jagr. No external task, rollout or customer action is performed.</p>
       {(action.decision?.result ?? action.result) && <p className="mt-1 text-[12px] text-ink-2">{action.decision?.result ?? action.result}</p>}
     </div>
   );
@@ -259,7 +260,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
 
   const act = (status: 'approved' | 'rejected') => {
     const d = decide(action, { status, optionId: status === 'approved' ? optionId : undefined, note: note.trim() || undefined });
-    toast({ tone: status === 'approved' ? 'success' : 'info', title: status === 'approved' ? 'Approved' : 'Rejected', body: `${d.result} Recorded in the Agent Trace.` });
+    toast({ tone: status === 'approved' ? 'success' : 'info', title: status === 'approved' ? 'Approval recorded' : 'Rejection recorded', body: `${d.result} Recorded in the investigation history.` });
   };
 
   return (
@@ -286,7 +287,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
             ))}
           </ul>
         </Field>
-        <Field label="What will happen">{option ? `${option.label} — ${option.description}` : action.whatWillHappen}</Field>
+        <Field label="Recommended action (approval records your decision; no external execution)">{option ? `${option.label} — ${option.description}` : action.whatWillHappen}</Field>
         <Field label="What could go wrong" tone="text-crit">
           {action.whatCouldGoWrong}
         </Field>
@@ -298,7 +299,7 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
       {decided ? (
         <div className={cx('flex flex-wrap items-center gap-2 border-t border-line px-4 py-3 text-[13px]', decided.status === 'approved' ? 'bg-ok-soft/50' : 'bg-subtle')}>
           {decided.status === 'approved' ? <Check size={14} className="text-ok" /> : <CircleSlash size={14} className="text-ink-3" />}
-          <span className="font-medium">{decided.status === 'approved' ? `Approved${option ? `: ${option.label}` : ''}` : 'Rejected'}</span>
+          <span className="font-medium">{decided.status === 'approved' ? `Approval recorded${option ? `: ${option.label}` : ''}` : 'Rejected'}</span>
           <span className="text-ink-2">{decided.result}</span>
           {decided.note && <span className="w-full text-ink-3">Note: “{decided.note}”</span>}
         </div>
@@ -329,13 +330,13 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="success" icon={Check} onClick={() => act('approved')}>
-              Approve{action.options && action.options.length > 1 && option ? `: ${option.label}` : ''}
+              Record approval{action.options && action.options.length > 1 && option ? `: ${option.label}` : ''}
             </Button>
             <Button variant="danger" icon={X} onClick={() => act('rejected')}>
               Reject
             </Button>
             <span className="flex items-center gap-1 text-[12px] text-ink-3">
-              <Lock size={11} /> Simulated environment — approving changes no production system.
+              <Lock size={11} /> Approval records your decision. No external action is performed.
             </span>
           </div>
         </div>

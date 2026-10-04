@@ -5,7 +5,7 @@ import { PROVIDERS } from '@/product/integrations/adapters';
 import { fmtDate, fmtTime } from '@/lib/time';
 import { Badge, cx, Eyebrow, type Tone } from './ui';
 import { StatusBadge } from './primitives';
-import { useContext, useEffect, useState } from 'react';
+import { useContext } from 'react';
 import { ProductContext } from '@/state/productContext';
 import { useEnvironment, type EnvironmentScope } from '@/state/environment';
 
@@ -101,12 +101,11 @@ export function EnvironmentBadge({ env }: { env: 'workspace' | 'demo' }) {
   );
 }
 
-/** Scope follows the current environment; "All environments" is an explicit choice. */
+/** Customer records follow the URL environment, with no mixed-environment selection. */
 export function useEnvironmentScope() {
   const { environment } = useEnvironment();
-  const [scope, setScope] = useState<EnvironmentScope>(environment);
-  useEffect(() => setScope(environment), [environment]);
-  return [scope, setScope] as const;
+  // Customer record pages never combine real workspace and replay records.
+  return [environment as EnvironmentScope] as const;
 }
 
 const ATTENTION_TONE: Record<AttentionLevel, Tone> = { LOW: 'neutral', MEDIUM: 'med', HIGH: 'high', CRITICAL: 'crit' };

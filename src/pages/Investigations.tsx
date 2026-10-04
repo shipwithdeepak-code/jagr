@@ -31,6 +31,7 @@ import {
 } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
 import { useProduct } from '@/state/productContext';
+import { visibleSimulatedTasks } from '@/state/customerBoundary';
 import { AttentionBadge } from '@/components/product';
 import { findingState, investigationTitle, investigationWatches } from '@/product/view/investigation';
 import { AuditTable } from './Trace';
@@ -199,7 +200,7 @@ export function InvestigationDetailPage() {
   const leading = inv.hypotheses.find((h) => h.id === inv.leadingHypothesisId);
   const primary = run.signals.find((s) => s.id === inv.primarySignalId);
   const actions = run.actions.filter((a) => a.investigationId === inv.id);
-  const tasks = state.tasks.filter((t) => t.investigationId === inv.id);
+  const tasks = visibleSimulatedTasks(state.tasks, 'demo', 'browser', []).filter((t) => t.investigationId === inv.id);
   const drafts = state.drafts.filter((d) => d.investigationId === inv.id);
   const approvals = state.approvals.filter((a) => a.investigationId === inv.id);
   const events = allEvents(state).filter((e) => e.investigationId === inv.id);
@@ -501,7 +502,7 @@ export function InvestigationDetailPage() {
       </div>
 
       <EvidenceDrawer evidence={selected} inv={inv} run={run} onClose={() => setSelected(null)} />
-      <TaskDrawer task={state.tasks.find((t) => t.id === openTask) ?? null} onClose={() => setOpenTask(null)} />
+      <TaskDrawer task={tasks.find((t) => t.id === openTask) ?? null} onClose={() => setOpenTask(null)} />
     </div>
   );
 }

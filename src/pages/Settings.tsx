@@ -118,7 +118,7 @@ function Row({ title, status, body }: { title: string; status: string; body: Rea
   );
 }
 
-function PlannerSetting() {
+export function PlannerSetting() {
   const { plannerChoice, llmOption, setPlannerChoice, running, location, server } = useProduct();
   const value = plannerChoice === 'llm' && llmOption.available ? 'llm' : 'deterministic';
   const egressOff = location === 'server' && server && !server.settings.aiEgressAllowed;
@@ -131,20 +131,22 @@ function PlannerSetting() {
             <input type="radio" name="planner" className="mt-1 accent-[var(--ink)]" checked={value === 'deterministic'} disabled={running} onChange={() => setPlannerChoice('deterministic')} />
             <span>
               <span className="font-medium">Deterministic planner</span>
-              <span className="block text-[13px] text-ink-2">Fixed investigation rules. Nothing leaves this workspace.</span>
+              <span className="block text-[13px] text-ink-2">Uses fixed investigation rules to decide what to check next. Predictable, auditable, and available by default.</span>
             </span>
           </label>
           <label className="flex items-start gap-3 text-[14px]">
             <input type="radio" name="planner" className="mt-1 accent-[var(--ink)]" checked={value === 'llm'} disabled={running || !llmOption.available || !!egressOff} onChange={() => setPlannerChoice('llm')} />
             <span>
               <span className="font-medium">AI planner</span>
+              <span className="block text-[13px] text-ink-2">Uses an AI model to choose the next investigation step based on what Jagr has already observed.</span>
               <span className="block text-[13px] text-ink-2">
-                {!llmOption.available ? (llmOption.reason ?? 'No AI provider is configured on this server.') : egressOff ? 'Turned off for this workspace: AI planning is not allowed (see below).' : `${llmOption.label}. Investigation context, including summaries of evidence, is sent to this provider.`}
+                {!llmOption.available ? (llmOption.reason?.startsWith('No LLM provider configured') ? 'No AI provider is configured. AI planning is unavailable until a provider is configured.' : llmOption.reason ?? 'AI planning is currently unavailable.') : egressOff ? 'Turned off for this workspace: AI planning is not allowed (see below).' : `${llmOption.label}. Investigation context, including summaries of evidence, is sent to this provider.`}
               </span>
             </span>
           </label>
         </div>
       </fieldset>
+      <p className="mt-3 text-[13px] text-ink-3">The planner chooses what to check next. The deterministic planner can perform the complete investigation; this setting does not switch investigation on or off.</p>
     </Card>
   );
 }

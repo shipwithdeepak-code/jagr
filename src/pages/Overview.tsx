@@ -37,9 +37,9 @@ function BeforeTheNight() {
     <div className="animate-fade-up">
       <div className="mb-8">
         <Eyebrow>Wed Sep 23 · 6:00 PM</Eyebrow>
-        <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] sm:text-[28px]">Jagr is ready for tonight.</h1>
+        <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] sm:text-[28px]">See how Jagr works</h1>
         <p className="mt-2 max-w-2xl text-[16px] text-ink-2">
-          When the team logs off, Jagr monitors product signals, investigates anything that moves, files the work, and has a brief waiting at {settings.schedule.briefAt}. Consequential actions wait for you.
+          A guided example investigation: watch Jagr detect a checkout change, gather evidence, evaluate hypotheses and recommend what to do. All data and actions here are simulated.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <RunButtons />
@@ -71,7 +71,7 @@ function BeforeTheNight() {
           <Eyebrow>Autonomy</Eyebrow>
           <ul className="mt-2 space-y-1 text-[13px]">
             <li className="flex items-center gap-2"><Check size={13} className="text-ok" /> Observe, investigate, recommend</li>
-            <li className="flex items-center gap-2"><Check size={13} className="text-ok" /> Create tasks &amp; incident drafts</li>
+            <li className="flex items-center gap-2"><Check size={13} className="text-ok" /> Simulate tasks &amp; incident drafts</li>
             <li className="flex items-center gap-2"><ShieldCheck size={13} className="text-high" /> Production, payments, customers → your approval</li>
           </ul>
         </Card>
@@ -100,17 +100,17 @@ export function RunButtons() {
   return (
     <>
       <button
-        onClick={startRun}
+        onClick={requestDemo}
         disabled={running}
         className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink px-4 text-[14px] font-medium text-canvas shadow-card hover:opacity-90 disabled:opacity-60"
       >
-        <Play size={14} /> Run Overnight
+        <Play size={14} /> Start the demo
       </button>
       <button
-        onClick={requestDemo}
+        onClick={startRun}
         className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-[14px] font-medium shadow-card hover:bg-subtle"
       >
-        <Radar size={14} /> Reset &amp; replay Demo night
+        <Radar size={14} /> Replay with current demo settings
       </button>
       <TryYourOwnData />
     </>

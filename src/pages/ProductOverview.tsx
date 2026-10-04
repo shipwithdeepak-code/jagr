@@ -136,7 +136,7 @@ export function ProductOverviewPage() {
         <section aria-labelledby="watches-h">
           <SectionHeader title={<span id="watches-h">Watches</span>} action={<Link to="/watches" className="text-[13px] font-medium text-accent hover:underline">All watches</Link>} />
           {state.watches.length === 0 ? (
-            <EmptyPanel title="Create your first watch" why="A watch is a standing question — “Is checkout healthy?” — that Jagr answers over your data." action={<Link to="/watches?new=1"><LinkArrow>Create watch</LinkArrow></Link>} />
+            <EmptyPanel title="No active watches yet" why="Tell Jagr what matters to your product. Connect your product sources and create your first watch. Jagr will check for meaningful changes and investigate when something needs attention." action={<div className="flex flex-wrap gap-4"><Link to="/watches?new=1"><LinkArrow>Set up my first watch</LinkArrow></Link><Link to="/demo"><LinkArrow>See how Jagr works</LinkArrow></Link></div>} />
           ) : (
             <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
               {cards.map(({ w, card }) => {

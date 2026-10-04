@@ -1,3 +1,6 @@
+import { useProduct } from '@/state/productContext';
+import { investigationTitle } from '@/product/view/investigation';
+import { inEnvironment, taskEnvironment } from '@/state/environment';
 import { ArrowRight, Bot, Check, CircleCheck, FilePlus2, Info, Loader2, ShieldCheck, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,13 +18,13 @@ export function PriorityBadge({ p }: { p: Task['priority'] }) {
 }
 
 export function TaskStatusBadge({ status }: { status: Task['status'] }) {
-  return <Badge tone={status === 'done' ? 'ok' : status === 'in_progress' ? 'info' : 'neutral'}>{status === 'todo' ? 'To do' : status === 'in_progress' ? 'In progress' : 'Done'}</Badge>;
+  return <Badge tone={status === 'done' ? 'ok' : status === 'in_progress' ? 'info' : 'neutral'}>{status === 'todo' ? 'To do' : status === 'in_progress' ? 'In progress' : 'Marked done (simulated)'}</Badge>;
 }
 
 export function CreatedByBadge({ by }: { by: Task['createdBy'] }) {
   return by === 'nightwatch' ? (
     <Badge tone="accent">
-      <Bot size={11} /> AI-created
+      <Bot size={11} /> Jagr · simulated
     </Badge>
   ) : (
     <Badge>
@@ -86,7 +89,7 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
     setBusy(false);
     if (task) {
       setCreated(task);
-      toast({ tone: 'success', title: `Task created — ${task.id}`, body: `${task.title} · ${teamName(task.ownerTeamId)} · simulated issue tracker` });
+      toast({ tone: 'success', title: `Simulated task recorded — ${task.id}`, body: `${task.title} · ${teamName(task.ownerTeamId)} · simulated issue tracker` });
     } else {
       toast({ tone: 'warning', title: 'Task not created', body: 'The issue tracker is unavailable. The draft is kept — try again once it reconnects.' });
     }
@@ -97,10 +100,10 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
       <Card className="border-ok/30">
         <div className="flex items-center gap-2 text-[14px]">
           <CircleCheck size={16} className="text-ok" />
-          <span className="font-medium">Task created.</span>
+          <span className="font-medium">Simulated task recorded.</span>
           <Mono>{created.id}</Mono>
           <span className="text-ink-2">{created.title}</span>
-          <Link to={`/tasks?open=${created.id}`} className="ml-auto inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline">
+          <Link to={inEnvironment(`/tasks?open=${created.id}`, taskEnvironment(created))} className="ml-auto inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline">
             View in Tasks <ArrowRight size={12} />
           </Link>
         </div>
@@ -136,7 +139,7 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
         )}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button variant="primary" icon={busy ? Loader2 : FilePlus2} onClick={create} disabled={busy}>
-            {busy ? 'Creating…' : 'Create Task'}
+            {busy ? 'Creating…' : 'Record simulated task'}
           </Button>
           {compact && (
             <Button variant="ghost" onClick={() => setExpanded((e) => !e)}>
@@ -153,9 +156,11 @@ export function TaskDraftCard({ draft, compact }: { draft: TaskDraft; compact?: 
 /** Full task view, including why Jagr created it. */
 export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { state, setTaskStatus } = useWorkspace();
+  const product = useProduct();
   if (!task) return null;
-  const inv = state.run?.investigations.find((i) => i.id === task.investigationId);
-  const action: Action | undefined = state.run?.actions.find((a) => a.taskId === task.id && (a.type === 'create_task' || a.type === 'create_incident_draft'));
+  const workspaceInv = taskEnvironment(task) === 'workspace' ? product.state.result?.investigations.find((i) => i.id === task.investigationId) : undefined;
+  const inv = taskEnvironment(task) === 'demo' ? state.run?.investigations.find((i) => i.id === task.investigationId) : undefined;
+  const action: Action | undefined = taskEnvironment(task) === 'demo' ? state.run?.actions.find((a) => a.taskId === task.id && (a.type === 'create_task' || a.type === 'create_incident_draft')) : undefined;
   const humanFiled = state.humanEvents.find((e) => e.output === task.id && e.tool === 'issueTracker.createIssue');
   return (
     <Drawer
@@ -179,16 +184,16 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
       {task.createdBy === 'nightwatch' && (
         <div className="mt-5 rounded-lg border border-accent/25 bg-accent-soft/50 p-4">
           <div className="flex items-center gap-2 text-[13px] font-semibold">
-            <Info size={14} className="text-accent" /> Why Jagr created this
+            <Info size={14} className="text-accent" /> Why Jagr simulated this task
           </div>
           <KeyValue
             className="mt-3"
             items={[
-              { k: 'Finding', v: inv ? <Link className="font-medium text-accent hover:underline" to={`/investigations/${inv.id}`}>{inv.title}</Link> : task.investigationId ? 'From an earlier night' : '—' },
+              { k: 'Finding', v: workspaceInv ? <Link className="font-medium text-accent hover:underline" to={workspaceInv.jagrPath}>{investigationTitle(workspaceInv)}</Link> : inv ? <Link className="font-medium text-accent hover:underline" to={`/investigations/${inv.id}`}>{inv.title}</Link> : task.investigationId ? 'From an earlier night' : '—' },
               { k: 'Leading hypothesis', v: task.description.hypothesis },
               { k: 'Confidence', v: task.description.confidence },
-              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by Jagr, filed by you' : 'Filed on an earlier night' },
-              { k: 'Autonomy level', v: 'Level 3 — execute low-risk actions' },
+              { k: 'Policy decision', v: action ? action.decisionReason : humanFiled ? 'Drafted by Jagr, simulated by you' : 'Local simulation; no external issue was created' },
+              { k: 'Action boundary', v: 'Simulated tracker only; no external action' },
             ]}
           />
         </div>
@@ -216,14 +221,14 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
 
       <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-4">
         {task.status !== 'in_progress' && task.status !== 'done' && (
-          <Button onClick={() => setTaskStatus(task.id, 'in_progress')}>Start work</Button>
+          <Button onClick={() => setTaskStatus(task.id, 'in_progress', taskEnvironment(task))}>Start work</Button>
         )}
         {task.status !== 'done' && (
-          <Button variant="success" icon={Check} onClick={() => setTaskStatus(task.id, 'done')}>
+          <Button variant="success" icon={Check} onClick={() => setTaskStatus(task.id, 'done', taskEnvironment(task))}>
             Mark done
           </Button>
         )}
-        {task.status === 'done' && <Button onClick={() => setTaskStatus(task.id, 'todo')}>Reopen</Button>}
+        {task.status === 'done' && <Button onClick={() => setTaskStatus(task.id, 'todo', taskEnvironment(task))}>Reopen</Button>}
       </div>
     </Drawer>
   );

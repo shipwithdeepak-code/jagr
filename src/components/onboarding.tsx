@@ -128,7 +128,7 @@ export function FirstRunWelcome({ onContinue, onSkip }: { onContinue: () => void
 
         <div aria-label="Conceptual example of how Jagr investigates" className="min-w-0 rounded-xl border border-line bg-subtle/40 p-3 sm:p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-3 sm:text-[11px] sm:tracking-[0.12em]">
-            Conceptual example · not live data
+            See how Jagr works · scripted example · not your workspace data
           </div>
           <div className="mt-2 overflow-hidden rounded-lg border border-line bg-surface sm:mt-3">
             <div className="grid grid-cols-2 divide-x divide-line border-b border-line text-[11px] sm:text-[12px]">
@@ -173,7 +173,7 @@ export function FirstRunWelcome({ onContinue, onSkip }: { onContinue: () => void
                 <ShieldCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-ok" />
                 <div><span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-3 sm:text-[11px]">Decision</span><div className="text-[13px] font-semibold text-ink sm:text-[14px]">No interruption needed</div><p className="text-[11px] text-ink-3 sm:text-[12px]">Not corroborated across sources.</p></div>
               </div>
-              <div style={reveal('3250ms')} className="welcome-reveal mt-1.5 border-t border-line pt-1.5 text-[11px] text-ink-2 sm:mt-2 sm:pt-2 sm:text-[12px]"><span className="font-semibold uppercase tracking-[0.08em] text-ink-3">Brief</span><span className="ml-2">Recorded in your morning brief</span></div>
+              <div style={reveal('3250ms')} className="welcome-reveal mt-1.5 border-t border-line pt-1.5 text-[11px] text-ink-2 sm:mt-2 sm:pt-2 sm:text-[12px]"><span className="font-semibold uppercase tracking-[0.08em] text-ink-3">Brief</span><span className="ml-2">Recorded in the example brief</span></div>
             </div>
           </div>
           <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.04em] text-ink-3 sm:mt-3 sm:text-[11px] sm:tracking-[0.1em]">Connect → Watch → Investigate → Decide → Brief</p>
@@ -183,10 +183,10 @@ export function FirstRunWelcome({ onContinue, onSkip }: { onContinue: () => void
           <p className="flex items-center gap-2 text-[13px] font-semibold text-ink"><ShieldCheck size={15} aria-hidden className="shrink-0 text-accent" /> Jagr investigates before interrupting.</p>
           <div className="mt-3 grid gap-2 sm:mt-4 sm:flex sm:flex-wrap sm:items-center">
             <Button className="w-full sm:w-auto" variant="primary" onClick={onContinue}>Set up my first watch</Button>
-            <Link to="/demo" className="interactive inline-flex h-8.5 w-full items-center justify-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle sm:w-auto">See Jagr in action</Link>
+            <Link to="/demo" className="interactive inline-flex h-8.5 w-full items-center justify-center rounded-lg border border-line bg-surface px-3 text-[13px] font-medium hover:bg-subtle sm:w-auto">See how Jagr works</Link>
             <button type="button" className="interactive justify-self-center rounded px-2 py-1.5 text-[13px] text-ink-3 hover:text-ink" onClick={onSkip}>Skip for now</button>
           </div>
-          <p className="mt-2 text-[11px] text-ink-3 sm:pl-[163px]">Demo Night · scripted replay</p>
+          <p className="mt-2 text-[11px] text-ink-3 sm:pl-[163px]">Guided scripted replay · no changes to your workspace</p>
         </div>
       </div>
     </Card>
