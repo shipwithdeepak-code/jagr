@@ -18,6 +18,9 @@ const runResult = (investigations: WatchInvestigation[] = []): MonitoringResult 
 const input = (over: Partial<ConnectedQuickStartInput> = {}): ConnectedQuickStartInput => ({ loading: false, connections: [source('healthy')], productConnections: [productSource()], watches: [], running: false, clock: AT, snapshotAt: AT, ...over });
 
 describe('connected workspace Quick Start state', () => {
+  it('recommends checkout for connected Amplitude with optional technical and code context', () => {
+    expect(connectedQuickStartState(input({ connections: ['amplitude', 'sentry', 'github'].map(p => source('healthy', p)), productConnections: ['amplitude', 'sentry', 'github'].map(p => productSource(p as ProviderId)) }))).toMatchObject({ stage: 'watch', recommendedTemplate: 'checkout_health' });
+  });
   it('waits for the authoritative server snapshot', () => {
     expect(connectedQuickStartState(input({ loading: true, connections: [] })).stage).toBe('loading');
   });

@@ -97,7 +97,7 @@ describe('shell monitoring status', () => {
   });
 
   it('running, paused and empty states', () => {
-    expect(monitoringStatus([github], { location: 'server', clock: SNAPSHOT_AT, running: true })).toEqual({ tone: 'running', text: 'Checking watches…' });
+    expect(monitoringStatus([github], { location: 'server', clock: SNAPSHOT_AT, running: true })).toEqual({ tone: 'running', text: 'Requesting checks…' });
     expect(monitoringStatus([{ ...github, status: 'paused' }], { location: 'server', clock: SNAPSHOT_AT })).toEqual({ tone: 'idle', text: 'All watches paused' });
     expect(monitoringStatus([], { location: 'server', clock: SNAPSHOT_AT })).toEqual({ tone: 'idle', text: 'No watches yet' });
   });

@@ -1,3 +1,4 @@
+import { captureExecutionReceipt, type ExecutionResult } from './executionStatus.js';
 import type { EmailNotification, MonitoringResult, MorningBriefDoc, ProviderId, ScheduledJob, SourceConnection, Watch } from '../types.js';
 import type { Clock } from '../ports/clock.js';
 import type { HttpClient } from '../ports/http.js';
@@ -135,6 +136,7 @@ export interface RunSummary {
   investigations: number;
   touched: string[];
   notifications: number;
+  executionResult?: ExecutionResult;
 }
 
 async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResult, kind: string, at: string, watchId?: string): Promise<RunSummary> {
@@ -234,7 +236,7 @@ async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'wor
   const watchId = String(job.payload.watchId);
   const at = String(job.payload.dueAt);
   const watches = await deps.repos.watches.list(ws.id);
-  if (!watches.some((w) => w.id === watchId && w.status === 'active')) return { workspaceId: ws.id, investigations: 0, touched: [], notifications: 0 };
+  if (!watches.some((w) => w.id === watchId && w.status === 'active')) return { workspaceId: ws.id, investigations: 0, touched: [], notifications: 0, executionResult: { disposition: 'skipped', reason: 'watch_inactive_or_missing' } };
   const normalizedEvents = ws.organizationId
     ? await deps.repos.events.forWatchSlot({ organizationId: ws.organizationId, workspaceId: ws.id }, watchId, at)
     : [];
@@ -251,6 +253,10 @@ async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'wor
   // Alerts the engine decided to send go to the workspace's outbound channels (after the run is saved).
   const alerts = r.emails.filter((e) => e.kind === 'alert').map((e) => alertMessage(ws.id, e, r.investigations.find((i) => i.id === e.investigationId), deps.appBaseUrl));
   if (ws.mode === 'connected') await deliver(deps, ws, alerts);
+  const log = r.log.find((entry) => entry.type === 'watch_run' && entry.watchId === watchId);
+  const ids = [...new Set(log?.investigationIds ?? [])];
+  const coverage = log?.check?.coverage ?? 'unknown';
+  summary.executionResult = { disposition: 'checked', classification: log?.check?.findings ? 'findings' : coverage === 'complete' ? 'no_meaningful_change' : 'inconclusive', coverage, investigationIds: ids.slice(0, 100), truncated: ids.length > 100 };
   return summary;
 }
 
@@ -358,8 +364,12 @@ export async function runOneJob(deps: MonitoringDeps & { queue: JobQueue }, opts
     deniedReason = await executionDenial(deps, job);
     if (deniedReason) {
       // Controlled denial is terminal for this durable operation, not a retryable execution failure.
+      await captureExecutionReceipt(deps.repos, job, { disposition: 'blocked', reason: 'check_not_permitted' }, deps.clock.now());
     } else if (job.kind === 'source.check') await runSourceCheckJob(deps, job);
-    else if (job.kind === 'monitor.watch') await runWatchJob(deps, job);
+    else if (job.kind === 'monitor.watch') {
+      const summary = await runWatchJob(deps, job);
+      if (summary.executionResult) await captureExecutionReceipt(deps.repos, job, summary.executionResult, deps.clock.now());
+    }
     else if (job.kind === 'brief.compose') await composeBriefJob(deps, job);
     else throw new Error(`No handler for job kind ${job.kind}.`);
   } catch (e) {
@@ -402,12 +412,16 @@ export async function drainJobs(deps: MonitoringDeps & { queue: JobQueue }, opts
     try {
       const deniedReason = await executionDenial(deps, job);
       if (deniedReason) {
+        await captureExecutionReceipt(deps.repos, job, { disposition: 'blocked', reason: 'check_not_permitted' }, deps.clock.now());
         await deps.queue.complete(job.id, job.leaseToken);
         done++;
         continue;
       }
       if (job.kind === 'source.check') await runSourceCheckJob(deps, job);
-      else if (job.kind === 'monitor.watch') await runWatchJob(deps, job);
+      else if (job.kind === 'monitor.watch') {
+        const summary = await runWatchJob(deps, job);
+        if (summary.executionResult) await captureExecutionReceipt(deps.repos, job, summary.executionResult, deps.clock.now());
+      }
       else if (job.kind === 'brief.compose') await composeBriefJob(deps, job);
       else throw new Error(`No handler for job kind ${job.kind}.`);
     } catch (e) {

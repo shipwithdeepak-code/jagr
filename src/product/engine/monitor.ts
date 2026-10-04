@@ -149,18 +149,22 @@ async function observe(
   at: string,
   worldStart: string,
   P: (p: ProviderId) => ProviderLabel,
-): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[]; changeReads: ChangeRead[] }> {
+): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[]; changeReads: ChangeRead[]; coverage: 'complete' | 'incomplete' | 'unknown' }> {
   const findings: Finding[] = [];
   const failedDeployments: ObservedChange[] = [];
   const shipped: ObservedChange[] = [];
   const changeReads: ChangeRead[] = [];
   const gaps = new Set<ProviderId>();
+  let coverage: 'complete' | 'incomplete' | 'unknown' = watch.signals.length ? 'complete' : 'incomplete';
   const among = watch.sources.filter((p): p is SourceId => p !== 'email');
+  if (among.some((source) => !reg.get(source))) coverage = 'incomplete';
   const read = async (source: SourceId, fn: () => Promise<void>) => {
+    const freshAsOf = reg.connection(source)?.freshAsOf;
+    if (freshAsOf && freshAsOf < at) coverage = 'incomplete';
     try {
       await fn();
     } catch (err) {
-      if (err instanceof ProviderUnavailableError) gaps.add(source);
+      if (err instanceof ProviderUnavailableError) { gaps.add(source); coverage = 'incomplete'; }
       else throw err;
     }
   };
@@ -170,6 +174,7 @@ async function observe(
       // Deployments and releases from the watch's change sources. Only a deployment the source reports
       // as failed is a finding; successful deployments and published releases are context. A source that
       // cannot be read is a gap, never "nothing changed".
+      if (!reg.withRole('changes', among).length) coverage = 'incomplete';
       for (const s of reg.withRole('changes', among)) {
         await read(s.id, async () => {
           const records = await s.changes!.getChanges({ window: { start: addMinutes(at, -CHANGE_LOOKBACK_MIN), end: at } });
@@ -184,11 +189,14 @@ async function observe(
     }
     if (meta.kind === 'metric') {
       const m = reg.metricSource(metricKeyOf(sig.key)!, among);
-      if (!m) continue;
+      if (!m) { coverage = 'incomplete'; continue; }
       const provider = m.source;
       await read(provider, async () => {
         const raw = await reg.get(provider)!.metrics!.getSeries({ metric: m.def.key, window: { start: worldStart, end: at } });
-        if (!raw) return;
+        if (!raw) { coverage = 'incomplete'; return; }
+        // The portable series has no completeness/freshness guarantee. Do not invent one.
+        if (raw.points.length < 4) coverage = 'incomplete';
+        else if (coverage !== 'incomplete') coverage = 'unknown';
         const series = withWatchThreshold(raw, watch.thresholds);
         const r = readMetric(series);
         if (r.status === 'normal') return;
@@ -199,6 +207,7 @@ async function observe(
         });
       });
     } else if (meta.kind === 'work_items') {
+      if (!reg.withRole('work_items', among).length) coverage = 'incomplete';
       for (const s of reg.withRole('work_items', among)) {
         await read(s.id, async () => {
           const items = await s.work_items!.getWorkItems({ window: { start: addMinutes(at, -180), end: at } });
@@ -216,6 +225,7 @@ async function observe(
         });
       }
     } else {
+      if (!reg.withRole('feedback', among).length) coverage = 'incomplete';
       for (const s of reg.withRole('feedback', among)) {
         await read(s.id, async () => {
           const items = await s.feedback!.getFeedback({ window: { start: addMinutes(at, -360), end: at } });
@@ -235,7 +245,7 @@ async function observe(
       }
     }
   }
-  return { findings, gaps: [...gaps], failedDeployments, shipped, changeReads };
+  return { findings, gaps: [...gaps], failedDeployments, shipped, changeReads, coverage };
 }
 
 /** Group findings that describe one problem: same area (or an area-specific watch) and onsets within 2 hours. */
@@ -310,7 +320,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
 
     const watch = o.watches.find((w) => w.id === job.watchId)!;
     const at = job.at;
-    const { findings, gaps, failedDeployments, shipped: seen, changeReads } = await observe(reg, watch, at, o.world.start, P);
+    const { findings, gaps, failedDeployments, shipped: seen, changeReads, coverage } = await observe(reg, watch, at, o.world.start, P);
     const changesOnly = watch.signals.every((sig) => signalMeta(sig.key).kind === 'changes');
     for (const c of seen) shipped.set(c.record.id, c);
     const touched = new Set<string>();
@@ -656,6 +666,7 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       ]
         .filter(Boolean)
         .join(' · '),
+      check: { findings: findings.length > 0 || failedDeployments.length > 0, coverage },
       investigationIds: opened,
       emailIds: sent,
     });

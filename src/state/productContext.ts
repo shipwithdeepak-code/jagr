@@ -7,6 +7,7 @@ import type { ImportedDataset, ImportKind } from '@/product/imports/schemas';
 import type { ImportedWorld } from '@/product/imports/world';
 import type { ConnectionView } from '@/product/connections/model';
 import type { CreateWatchResult } from '@/product/view/watchCreation';
+import type { ManualExecutionStatus } from '@/product/app/executionStatus';
 
 /**
  * sample = the simulated sample night · imported = the user's own CSV / JSON evidence ·
@@ -97,6 +98,8 @@ export interface ProductApi {
     loading: boolean;
     /** The last failed server call, shown until the next successful one. */
     error?: string;
+    executionStatuses?: Record<string, ManualExecutionStatus | undefined>;
+    executionStatusError?: boolean;
     refresh(): Promise<void>;
     setAiEgressAllowed(allowed: boolean): Promise<void>;
   };

@@ -27,6 +27,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { resolveWorkspaceContext } from './authorization.js';
 import { AdmissionDenied } from '../src/product/app/admission.js';
 import { HistoryCursorError, HistorySizeError } from '../src/product/ports/history.js';
+import { readManualExecution } from './postgres/executionStatus.js';
 
 /** Constant-time comparison (hashing first makes the lengths equal). */
 const sameSecret = (a: string, b: string) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
@@ -310,6 +311,14 @@ export function createApp(rt: Runtime) {
         if (e instanceof ApprovalRequiredError) return json(409, { error: e.message });
         throw e;
       }
+    }
+    if (section === 'runs' && sub === 'status') {
+      if (rest.length !== 2) return json(404, { error: 'Execution not found.' });
+      if (req.method !== 'GET') return json(405, { error: 'Method not allowed.' });
+      const key = req.query.key;
+      if (!key || key.length > 1024) return json(400, { error: 'Expected one execution key (1–1024 characters).' });
+      const status = await readManualExecution(rt.sql, { organizationId: context.organizationId, workspaceId: id }, key, rt.clock.now());
+      return json(status ? 200 : 404, status ?? { error: 'Execution not found.' }, { headers: { 'cache-control': 'private, no-store' } });
     }
     if (section === 'runs' && req.method === 'POST') {
       if (ws.mode === 'connected') {

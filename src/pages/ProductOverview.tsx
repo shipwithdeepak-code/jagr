@@ -1,3 +1,5 @@
+import { ManualCheckStatus } from '@/components/executionStatus';
+import { executionStatusText } from '@/product/view/executionStatus';
 import { signalMeta } from '@/product/catalog';
 import { nativeMetricSignal } from '@/product/integrations/bridge';
 import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
@@ -48,7 +50,7 @@ export function ProductOverviewPage() {
   // The workspace gate (App) covers restoring and choosing; this shows only if a server workspace's data is unavailable.
   if (!mode) return <LoadingState label={server ? `Loading ${server.name}…` : 'Loading…'} />;
 
-  const headline = running ? 'Jagr is checking your watches…' : !r ? (mode === 'imported' && !state.watches.length ? 'Create a watch to start monitoring' : 'Jagr is ready') : attention.length ? `${attention.length} ${attention.length === 1 ? 'investigation needs' : 'investigations need'} your attention` : 'Nothing needs your attention';
+  const headline = running ? (location === 'server' ? 'Requesting checks…' : 'Jagr is checking your watches…') : !r ? (mode === 'imported' && !state.watches.length ? 'Create a watch to start monitoring' : 'Jagr is ready') : attention.length ? `${attention.length} ${attention.length === 1 ? 'investigation needs' : 'investigations need'} your attention` : location === 'server' ? 'No investigations currently need your attention' : 'Nothing needs your attention';
 
   return (
     <div className="animate-fade-up">
@@ -89,6 +91,7 @@ export function ProductOverviewPage() {
         </div>
       </header>
 
+      <ManualCheckStatus />
       {state.stale && r && (
         <p className="mb-6 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
           <span className="size-1.5 rounded-full bg-high" aria-hidden />
@@ -103,17 +106,17 @@ export function ProductOverviewPage() {
       <section className="mb-10" aria-labelledby="attention-h">
         <SectionHeader title={<span id="attention-h">Needs your attention</span>} count={r ? attention.length : undefined} />
         {!r ? (
-          <EmptyPanel title="No investigations yet" why={mode === 'imported' ? 'Jagr needs a watch and product evidence before it can investigate changes.' : location === 'server' ? 'Watches run on their schedule. Run now to check every active watch immediately.' : 'Run monitoring to see what changed.'} action={mode === 'imported' && !state.watches.length ? <Link to="/watches?new=1"><LinkArrow>Create your first watch</LinkArrow></Link> : undefined} />
+          <EmptyPanel title="No investigations yet" why={mode === 'imported' ? 'Jagr needs a watch and product evidence before it can investigate changes.' : location === 'server' ? 'Watches run on their schedule. Run now to request a check for every active watch.' : 'Run monitoring to see what changed.'} action={mode === 'imported' && !state.watches.length ? <Link to="/watches?new=1"><LinkArrow>Create your first watch</LinkArrow></Link> : undefined} />
         ) : attention.length === 0 ? (
           <div className="rounded-lg border border-line bg-surface px-4 py-4">
-            <p className="text-[14px] text-ink">Nothing needs your attention.</p>
+            <p className="text-[14px] text-ink">{location === 'server' ? 'No investigations currently need your attention.' : 'Nothing needs your attention.'}</p>
             <p className="num mt-0.5 text-[13px] text-ink-2">
               {lastChecked ? `Last checked ${fmtTime(lastChecked)} UTC · ` : ''}
-              {healthy} of {activeWatches.length} watch{activeWatches.length === 1 ? '' : 'es'} healthy
+              {location === 'server' ? 'Check results appear in requested checks and investigations' : `${healthy} of ${activeWatches.length} watches healthy`}
             </p>
             {location === 'server' && latestRun && !(r?.investigations.length) && (
               <p className="mt-2 text-[13px] text-ink-2">
-                {runHasEvidenceGap(latestRun.outcome) ? `Check completed with an evidence gap: ${latestRun.outcome}. No conclusion was drawn from the unavailable source.` : `Check completed: ${latestRun.outcome}. No investigation was opened.`}
+                {runHasEvidenceGap(latestRun.outcome) ? `Recorded watch outcome with an evidence gap: ${latestRun.outcome}. No conclusion was drawn from the unavailable source.` : `Recorded watch outcome: ${latestRun.outcome}. Use requested check status for its execution result.`}
                 {nextRun ? ` Next scheduled check: ${fmtDateTime(nextRun)} UTC.` : ''}
                 {latestWatch ? ` ${latestWatch.name} will interrupt at ${latestWatch.notificationPolicy.interruptAt} and above; CRITICAL is immediate and other qualifying findings wait for confirmation.` : ''}
               </p>
@@ -139,7 +142,8 @@ export function ProductOverviewPage() {
               {cards.map(({ w, card }) => {
                 const top = open.find((i) => i.watchIds.includes(w.id));
                 const ran = location === 'server' ? !!card.lastRun : !!r;
-                const health = w.status === 'paused' ? { label: 'Paused', cls: 'bg-line-strong' } : top ? { label: 'Needs attention', cls: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' } : ran ? { label: 'Healthy', cls: 'bg-ok' } : { label: 'Not run yet', cls: 'bg-line-strong' };
+                const execution = Object.values(server?.executionStatuses ?? {}).find((entry) => entry?.watchId === w.id);
+                const health = location === 'server' && execution ? { label: executionStatusText(execution), cls: execution.publicStatus === 'quiet' ? 'bg-ok' : 'bg-line-strong' } : w.status === 'paused' ? { label: 'Paused', cls: 'bg-line-strong' } : top ? { label: 'Needs attention', cls: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' } : ran ? { label: location === 'server' ? 'Check result unavailable' : 'Healthy', cls: location === 'server' ? 'bg-line-strong' : 'bg-ok' } : { label: 'Not run yet', cls: 'bg-line-strong' };
                 return (
                   <li key={w.id} className="flex items-center gap-3 px-4 py-3">
                     <span aria-hidden className={cx('size-2 shrink-0 rounded-full', health.cls)} />

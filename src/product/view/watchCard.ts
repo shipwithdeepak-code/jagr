@@ -55,7 +55,7 @@ export interface MonitoringStatus {
 }
 
 export function monitoringStatus(watches: Watch[], ctx: WatchCardContext & { running?: boolean }): MonitoringStatus {
-  if (ctx.running) return { tone: 'running', text: 'Checking watches…' };
+  if (ctx.running) return { tone: 'running', text: ctx.location === 'server' ? 'Requesting checks…' : 'Checking watches…' };
   const active = watches.filter((w) => w.status === 'active');
   if (!active.length) return { tone: 'idle', text: watches.length ? 'All watches paused' : 'No watches yet' };
   if (ctx.location !== 'server') return { tone: 'idle', text: 'Local · runs on demand' };
