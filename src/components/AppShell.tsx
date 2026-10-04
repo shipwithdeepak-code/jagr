@@ -285,6 +285,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="ml-auto"
                   icon={RefreshCw}
                   aria-label="Run monitoring now"
+                  type="button"
                   disabled={product.running || !canRun}
                   title={!canRun ? 'Create or resume a compatible watch first' : 'Check every active watch now'}
                   onClick={async () => {

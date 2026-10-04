@@ -102,6 +102,8 @@ export interface ProductApi {
     error?: string;
     executionStatuses?: Record<string, ManualExecutionStatus | undefined>;
     executionStatusError?: boolean;
+    /** Read only the previously requested checks; does not refresh workspace loading state. */
+    refreshExecutionStatus(): Promise<void>;
     refresh(): Promise<void>;
     setAiEgressAllowed(allowed: boolean): Promise<void>;
   };

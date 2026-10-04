@@ -49,6 +49,23 @@ async function setup() {
 }
 
 describe('manual execution contract on Postgres', () => {
+  it('repeated status GETs preserve the queued job, watch and audit without another check request', async () => {
+    const t = await setup();
+    const key = await t.enqueue();
+    const before = await t.status(key);
+    const watches = await t.rt.repos.watches.list('w');
+    const audit = await t.rt.repos.audit.list('w');
+    const enqueue = vi.spyOn(t.rt.queue, 'enqueue');
+    for (let n = 0; n < 3; n++) expect(await t.status(key)).toEqual(before);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(await t.rt.repos.watches.list('w')).toEqual(watches);
+    expect(await t.rt.repos.audit.list('w')).toEqual(audit);
+    const claimed = await t.rt.queue.claim({ workerId: 'read-isolation', limit: 10, leaseMs: 60_000 });
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0].idempotencyKey).toBe(key);
+    expect((await t.status(key)).publicStatus).toBe('checking');
+  });
+
   it('completes unavailable evidence without calling it quiet or an execution failure', async () => {
     const t = await setup();
     t.fail(new ProviderUnavailableError('github', 'unavailable', 'provider outage'));

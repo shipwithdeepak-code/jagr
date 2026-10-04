@@ -421,6 +421,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         error: serverError,
         executionStatuses: executionReads?.workspaceId === serverId ? executionReads.statuses : undefined,
         executionStatusError: executionReads?.workspaceId === serverId ? executionReads.error : undefined,
+        refreshExecutionStatus: async () => { await refreshExecutions(serverId); },
         refresh: async () => { await Promise.all([loadServer(serverId), refreshExecutions(serverId)]); },
         setAiEgressAllowed: async (allowed: boolean) => void (await onServer((id) => serverApi.updateWorkspace(id, { aiEgressAllowed: allowed }))),
       },
