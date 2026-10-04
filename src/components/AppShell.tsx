@@ -133,6 +133,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const demo: NavItem[] = [
     { to: '/demo', label: 'Replay', icon: Radar },
     { to: '/signals', label: 'Signals', icon: Activity },
+    { to: '/demo/investigations', label: 'Investigations', icon: Telescope },
+    { to: '/demo/brief', label: 'Brief', icon: Newspaper },
+    { to: inEnvironment('/tasks', 'demo'), label: 'Tasks', icon: ListChecks, count: openTasks || undefined },
     { to: '/integrations', label: 'Integrations', icon: Plug },
     { to: '/demo/settings', label: 'Demo settings', icon: Settings },
   ];
@@ -182,31 +185,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           <X size={16} />
         </button>
       </div>
-      <WorkspaceSwitcher compact={compact} env={env} />
-      {primary.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} env={env} />
-      ))}
-      <NavGroup label="Review" compact={compact} />
-      {review.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} env={env} />
-      ))}
-      <NavGroup label={internalToolsAvailable ? "Internal tools / About" : "About"} compact={compact} />
-      {advanced.map((it) => (
-        <NavRow key={it.to} item={it} compact={compact} env={env} />
-      ))}
-      <div className={cx('mt-4 border-t border-line pt-3', compact && 'mx-1')}>
-        <NavRow item={{ to: '/demo', label: 'See how Jagr works', icon: Moon }} compact={compact} env={env} demoEntry />
-        {env === 'demo' && !compact && (
-          <div className="mt-0.5 ml-3 border-l border-line pl-2">
-            {demo.map((it) => (
-              <NavRow key={it.to} item={it} compact={false} env={env} />
-            ))}
+      {env === 'demo' ? (
+        <>
+          <NavGroup label="DEMO NIGHT" compact={compact} />
+          {!compact && <p className="mb-3 px-2 text-[12px] text-ink-3">Scripted replay · Separate from your workspace</p>}
+          {demo.map((it) => <NavRow key={it.to} item={it} compact={compact} env={env} />)}
+          <div className="mt-4 border-t border-line pt-3">
+            <NavRow item={{ to: '/', label: 'Back to workspace', icon: ArrowLeft }} compact={compact} env={env} />
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <>
+          <WorkspaceSwitcher compact={compact} env={env} />
+          {primary.map((it) => <NavRow key={it.to} item={it} compact={compact} env={env} />)}
+          <NavGroup label="Review" compact={compact} />
+          {review.map((it) => <NavRow key={it.to} item={it} compact={compact} env={env} />)}
+          <NavGroup label={internalToolsAvailable ? "Internal tools / About" : "About"} compact={compact} />
+          {advanced.map((it) => <NavRow key={it.to} item={it} compact={compact} env={env} />)}
+          <div className={cx('mt-4 border-t border-line pt-3', compact && 'mx-1')}>
+            <NavRow item={{ to: '/demo', label: 'See how Jagr works', icon: Moon }} compact={compact} env={env} demoEntry />
+          </div>
+        </>
+      )}
       {/* Configuration and the session, apart from the product pages above. */}
       <div className={cx('mt-auto flex flex-col gap-0.5 border-t border-line pt-3', compact && 'mx-1')}>
-        <NavRow item={{ to: '/settings', label: 'Settings', icon: Settings }} compact={compact} env={env} />
+        {env === 'workspace' && <NavRow item={{ to: '/settings', label: 'Settings', icon: Settings }} compact={compact} env={env} />}
         <AccountMenu compact={compact} theme={theme} setTheme={setTheme} />
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -310,6 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
         </header>
+        {env === 'demo' && <div role="note" className="border-b border-line bg-subtle px-4 py-2 text-center text-[12px] text-ink-2">DEMO · SCRIPTED REPLAY · No changes are made to your workspace</div>}
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
           {env === 'workspace' && product.server?.error && (
             <p role="alert" className="mb-4 rounded-lg border border-crit/40 bg-crit-soft px-3 py-2 text-[13px] text-crit">
@@ -364,7 +368,7 @@ function NavRow({ item, compact = false, env, demoEntry = false }: { item: NavIt
   // The Demo night entry is marked active only when collapsed; expanded, its own sub-items are.
   // This one value drives both the highlight and aria-current (a plain Link, so the router's own
   // URL matching can't disagree with it).
-  const active = demoEntry ? env === 'demo' && compact : isSamePage(location.pathname, path) && environmentForPath(path, query) === env;
+  const active = demoEntry ? env === 'demo' && compact : (path === '/demo' ? location.pathname === path : isSamePage(location.pathname, path)) && environmentForPath(path, query) === env;
   return (
     <Link
       to={item.to}

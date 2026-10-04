@@ -2,6 +2,7 @@ import { ArrowRight, Check, CircleSlash, Moon, Play, Radar, ShieldCheck } from '
 import { Link } from 'react-router-dom';
 import type { ApprovalRequest, BriefNotDone, OvernightRun } from '@/domain/types';
 import { HISTORICAL_STATS, INTEGRATIONS } from '@/domain/defaults';
+import { useEnvironment } from '@/state/environment';
 import { useWorkspace } from '@/state/workspace';
 import { fmtConfidence, fmtPct } from '@/lib/format';
 import { fmtDate, fmtDuration, fmtTime } from '@/lib/time';
@@ -10,6 +11,16 @@ import { GATE_LABELS } from '@/agents/policy';
 import { useShellActions } from '@/components/shell';
 import { TryYourOwnData } from '@/components/onboarding';
 import { DemoInvestigations } from './Investigations';
+
+export function DemoBriefPage() {
+  const { state } = useWorkspace();
+  return state.run ? <Brief run={state.run} approvals={state.approvals} /> : <BeforeTheNight />;
+}
+
+export function DemoInvestigationsPage() {
+  const { state } = useWorkspace();
+  return state.run ? <DemoInvestigations /> : <BeforeTheNight />;
+}
 
 export function OverviewPage() {
   const { state } = useWorkspace();
@@ -97,6 +108,7 @@ function BeforeTheNight() {
 
 export function RunButtons() {
   const { startRun, requestDemo, running } = useShellActions();
+  const { environment } = useEnvironment();
   return (
     <>
       <button
@@ -112,7 +124,7 @@ export function RunButtons() {
       >
         <Radar size={14} /> Replay with current demo settings
       </button>
-      <TryYourOwnData />
+      {environment === 'workspace' && <TryYourOwnData />}
     </>
   );
 }

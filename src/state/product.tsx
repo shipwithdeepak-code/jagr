@@ -15,7 +15,7 @@ import { ProductContext, type ProductApi, type ProductState, type WorkspaceMode 
 import { migrateStoredProductState } from './productMigration';
 import { exportLocalWorkspace, localWorkspaceFromExport, planImport, type ImportPlan } from '@/product/export/workspace';
 import { EMAIL_FROM } from '@/product/catalog';
-import { productStateFromSnapshot, type WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
+import { hasMonitoringHistory, productStateFromSnapshot, type WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
 import { useServerSession } from './serverSession';
 import { serverApi, ServerError } from './serverApi';
 import { persistWatchAndRefresh } from '@/product/view/watchCreation';
@@ -415,6 +415,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         canApprove: snap?.membership.canApprove ?? summary?.canApprove ?? false,
         connections: snap?.connections ?? [],
         snapshotAt: snap?.at,
+        hasMonitoringHistory: snap ? hasMonitoringHistory(snap) : false,
         settings: { planner: snap?.workspace.settings.planner ?? 'deterministic', aiEgressAllowed: snap?.workspace.settings.aiEgressAllowed ?? true },
         loading: serverLoading,
         error: serverError,

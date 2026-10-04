@@ -27,6 +27,8 @@ const IntegrationsPage = lazy(() => import('@/pages/Integrations').then((m) => (
 const SettingsPage = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.SettingsPage })));
 const DemoSettingsPage = lazy(() => import('@/pages/DemoSettings').then((m) => ({ default: m.DemoSettingsPage })));
 const DemoNightPage = lazy(() => import('@/pages/Overview').then((m) => ({ default: m.OverviewPage })));
+const DemoBriefPage = lazy(() => import('@/pages/Overview').then((m) => ({ default: m.DemoBriefPage })));
+const DemoInvestigationsPage = lazy(() => import('@/pages/Overview').then((m) => ({ default: m.DemoInvestigationsPage })));
 const WatchesPage = lazy(() => import('@/pages/Watches').then((m) => ({ default: m.WatchesPage })));
 const SourcesPage = lazy(() => import('@/pages/Sources').then((m) => ({ default: m.SourcesPage })));
 const SourceRecordPage = lazy(() => import('@/pages/Sources').then((m) => ({ default: m.SourceRecordPage })));
@@ -131,6 +133,8 @@ function Screens() {
               <Route path="/" element={<ProductOverviewPage />} />
               <Route path="/overview" element={<ProductOverviewPage />} />
               <Route path="/demo" element={<DemoNightPage />} />
+              <Route path="/demo/brief" element={<DemoBriefPage />} />
+              <Route path="/demo/investigations" element={<DemoInvestigationsPage />} />
               <Route path="/watches" element={<WatchesPage />} />
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/sources/:provider/:kind/:id" element={<SourceRecordPage />} />

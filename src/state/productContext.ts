@@ -94,6 +94,8 @@ export interface ProductApi {
     connections: ConnectionView[];
     /** When the server snapshot was read (absent while loading). */
     snapshotAt?: string;
+    /** Derived only from completed server watch runs/canonical investigations, never brief documents. */
+    hasMonitoringHistory?: boolean;
     settings: { planner: 'deterministic' | 'llm'; aiEgressAllowed: boolean };
     loading: boolean;
     /** The last failed server call, shown until the next successful one. */

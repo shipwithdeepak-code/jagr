@@ -88,6 +88,13 @@ export async function buildSnapshot(repos: Repositories, ws: Workspace, membersh
   return snapshot;
 }
 
+/** Completed watch runs (including quiet ones) or canonical investigations prove monitoring happened.
+ * Composed/scheduled briefs and configured watches do not. All inputs come from this tenant's snapshot.
+ */
+export function hasMonitoringHistory(snapshot: Pick<WorkspaceSnapshot, 'runs' | 'investigations'>): boolean {
+  return !!snapshot.runs?.length || snapshot.investigations.length > 0;
+}
+
 /** The browser-local state shape a snapshot maps onto (a subset of the UI's ProductState). */
 export interface SnapshotState {
   connections: SourceConnection[];

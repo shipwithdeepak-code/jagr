@@ -12,7 +12,7 @@ import { PROVIDERS } from '@/product/integrations/adapters';
 import { nativeMetricSignal } from '@/product/integrations/bridge';
 
 export function BriefsPage() {
-  const { state, running, runMonitoring, mode } = useProduct();
+  const { state, running, runMonitoring, mode, location, server } = useProduct();
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') as 'briefs' | 'alerts') ?? 'briefs';
   const r = state.result;
@@ -20,6 +20,20 @@ export function BriefsPage() {
   const selected = emails.find((e) => e.id === params.get('alert')) ?? emails[0];
   const briefs = [...(r?.briefs ?? [])].reverse();
   const brief = briefs.find((b) => b.id === params.get('brief')) ?? briefs[0];
+
+  if (tab === 'briefs' && location === 'server' && mode === 'connected' && !server?.hasMonitoringHistory) {
+    return <>
+      <PageHeader title="Briefs" />
+      {server?.loading ? <LoadingState label="Loading briefs…" /> : (
+        <EmptyState icon={Moon} title="No briefs yet" action={
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link to="/watches?new=1" className="inline-flex h-8.5 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas">Set up your first watch</Link>
+            <Link to="/demo" className="inline-flex h-8.5 items-center rounded-lg border border-line px-3 text-[13px] font-medium text-ink">See how Jagr works</Link>
+          </div>
+        }>Once you create a watch, Jagr will summarize what it found during each monitoring window.</EmptyState>
+      )}
+    </>;
+  }
 
   return (
     <>
