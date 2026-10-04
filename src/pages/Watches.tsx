@@ -1,3 +1,7 @@
+import { CheckoutMappingEditor } from '@/components/checkoutMapping';
+import { CHECKOUT_SOURCES, checkoutConnections, checkoutBlocker, checkoutSelectionBlocker } from '@/product/view/checkoutWizard';
+import { ManualCheckStatus } from '@/components/executionStatus';
+import { executionStatusText } from '@/product/view/executionStatus';
 import { ArrowLeft, ArrowRight, Check, Pause, Play, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -43,6 +47,7 @@ export function WatchesPage() {
           </Button>
         }
       />
+      <ManualCheckStatus />
       {state.watches.length === 0 && (
         <EmptyState icon={Plus} title="Create your first watch" action={<Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>Create watch</Button>}>
           A watch is a standing question — e.g. “Is checkout healthy?” Jagr answers it over your data and opens an investigation when something meaningful changes.
@@ -54,14 +59,17 @@ export function WatchesPage() {
             const invs = r?.investigations.filter((i) => i.watchIds.includes(w.id) && i.status !== 'DISMISSED' && i.status !== 'RESOLVED') ?? [];
             const status = watchCardStatus(w, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt });
             const ran = location === 'server' ? !!status.lastRun : !!r;
+            const execution = Object.values(server?.executionStatuses ?? {}).find((entry) => entry?.watchId === w.id);
             const top = invs[0];
             const health =
               w.status === 'paused'
                 ? { label: 'Paused', dot: 'bg-line-strong' }
+                : location === 'server' && execution
+                  ? { label: executionStatusText(execution), dot: execution.publicStatus === 'quiet' ? 'bg-ok' : 'bg-line-strong' }
                 : top
                   ? { label: 'Needs attention', dot: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' }
                   : ran
-                    ? { label: 'Healthy', dot: 'bg-ok' }
+                    ? { label: location === 'server' ? 'Check result unavailable' : 'Healthy', dot: location === 'server' ? 'bg-line-strong' : 'bg-ok' }
                     : { label: 'Not run yet', dot: 'bg-line-strong' };
             const signals = w.signals
               .filter((sg) => sg.key !== 'changes')
@@ -203,7 +211,7 @@ export async function runCreatedWatch(runMonitoring: () => Promise<unknown>, onS
 }
 
 function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onClose: () => void; initialTemplate: string | null; quickStartOrigin: boolean }) {
-  const { state, createWatch, runMonitoring, running, mode, importedWorld, location } = useProduct();
+  const { state, createWatch, runMonitoring, running, mode, importedWorld, location, server } = useProduct();
   const toast = useToast();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -213,9 +221,17 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
   const [name, setName] = useState(tpl.name);
   // In a "my data" workspace, only sources that have data start ticked; in a server workspace, only
   // sources it has connected (its connection list is empty until the snapshot arrives).
-  const usable = (list: ProviderId[]) => initialWizardSources(list, state.connections, { location, mode });
+  const golden = location === 'server' && (template === 'checkout_health' || template === 'conversion');
+  const viewStep = golden && step === 1 ? 2 : golden && step === 2 ? 1 : step;
+  const connected = checkoutConnections(server?.connections ?? []);
+  const providers = golden ? CHECKOUT_SOURCES : tpl.sources;
+  const usable = (list: ProviderId[]) => golden ? connected.map(c => c.source as ProviderId) : initialWizardSources(list, state.connections, { location, mode });
+  const [pendingMappings, setPendingMappings] = useState<Record<string, boolean>>({});
+  const availableFor = (id: WatchTemplateId) => location === 'server' && (id === 'checkout_health' || id === 'conversion')
+    ? !server || server.loading ? { status: 'loading' as const } : connected.some(c => c.source === 'amplitude') ? { status: 'ready' as const } : { status: 'unavailable' as const, missing: ['amplitude' as ProviderId] }
+    : templateAvailability(WATCH_TEMPLATES.find(t => t.id === id)!.sources, state.connections, { location });
   const pending = connectionsPending(state.connections, { location });
-  const [sources, setSources] = useState<ProviderId[]>(() => usable(tpl.sources));
+  const [sources, setSources] = useState<ProviderId[]>(() => usable(providers));
   const [frequency, setFrequency] = useState<MonitoringFrequency>('30m');
   const [dailyAt, setDailyAt] = useState('07:00');
   const [interruptAt, setInterruptAt] = useState<NotificationPolicy['interruptAt']>('HIGH');
@@ -225,19 +241,20 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
   const { creating, created, error: creationError, warning: creationWarning } = creation;
   // With imported data, only metrics that are actually in the upload can be tuned.
   const importedMetrics = mode === 'imported' ? new Set<string>(importedWorld?.world?.metrics.map(nativeMetricSignal) ?? []) : undefined;
-  const metrics = tpl.signals.filter((s) => { const m = metricKeyOf(s.key); return !!m && METRIC_RULE.has(m) && (!importedMetrics || importedMetrics.has(s.key)); }).map((s) => metricKeyOf(s.key)!);
+  const metrics = (golden ? [] : tpl.signals).filter((s) => { const m = metricKeyOf(s.key); return !!m && METRIC_RULE.has(m) && (!importedMetrics || importedMetrics.has(s.key)); }).map((s) => metricKeyOf(s.key)!);
   const [thresholds, setThresholds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setName(tpl.name);
-    setSources(usable(tpl.sources));
+    setSources(usable(providers));
     setThresholds({});
+    setPendingMappings({});
   }, [tpl]);
 
   // A server workspace's connections can arrive after the wizard opens: pick sources once they do.
   useEffect(() => {
-    if (!pending) setSources(usable(tpl.sources));
-  }, [pending]);
+    if (!pending) setSources(usable(providers));
+  }, [pending, server?.workspaceId]);
 
   const dialog = useRef<HTMLDivElement>(null);
   const close = () => {
@@ -245,24 +262,28 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
   };
   useDialogFocus(true, close, dialog);
 
-  const rows = wizardSourceRows(tpl.sources, state.connections, { location });
-  const availability = templateAvailability(tpl.sources, state.connections, { location });
+  const rows = golden ? connected.map(c => ({ provider: c.source as ProviderId, status: 'ready' as const, state: c.status })) : wizardSourceRows(tpl.sources, state.connections, { location });
+  const availability = availableFor(template);
+  const goldenBlocker = golden ? checkoutBlocker(sources, server?.connections ?? []) ?? (connected.some(c => sources.includes(c.source as ProviderId) && pendingMappings[c.id]) ? 'Save source mapping changes before continuing.' : undefined) : undefined;
   const invalidThreshold = metrics.some((id) => thresholds[id] !== undefined && thresholds[id] !== '' && !(Number(thresholds[id]) > 0));
   // Every disabled Next says why, next to the button.
   const blocker =
+    golden && step === 1 && checkoutSelectionBlocker(sources, server?.connections ?? []) ? checkoutSelectionBlocker(sources, server?.connections ?? []) :
+    golden && step >= 2 && goldenBlocker ? goldenBlocker :
     step === 0 && availability.status === 'unavailable'
       ? `${tpl.name} needs a source this workspace does not have.`
       : step === 0 && availability.status === 'loading'
         ? 'Waiting for this workspace’s connections to load.'
-        : step === 1 && invalidThreshold
+        : viewStep === 1 && invalidThreshold
           ? 'Fix the highlighted threshold.'
-          : step === 2
+          : viewStep === 2
             ? sourceStepBlocker(sources, rows)
             : undefined;
-  const canNext = !blocker && (step !== 2 || canLeaveSourceStep(sources, rows));
+  const canNext = !blocker && (viewStep !== 2 || canLeaveSourceStep(sources, rows));
   const duplicateName = state.watches.some((w) => w.name.trim().toLowerCase() === name.trim().toLowerCase());
 
   const finish = async () => {
+    if (goldenBlocker) return;
     const id = `w-${template}-${Date.now().toString(36)}`;
     const watch = watchFromTemplate(id, template, {
       name: name.trim() || tpl.name,
@@ -322,16 +343,16 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
             </div>
           ) : (
             <>
-              <h2 className="text-[20px] font-semibold tracking-tight">{STEPS[step]}</h2>
+              <h2 className="text-[20px] font-semibold tracking-tight">{STEPS[viewStep]}</h2>
               {step === 0 && (
                 <div className="mt-4">
                   <div className="grid gap-2 sm:grid-cols-2">
                     {WIZARD_TEMPLATES.map((id) => {
                       const t = WATCH_TEMPLATES.find((x) => x.id === id)!;
-                      const a = templateAvailability(t.sources, state.connections, { location });
+                      const a = availableFor(id);
                       return (
                         <button key={id} type="button" aria-pressed={template === id} onClick={() => setTemplate(id)} className={cx('rounded-lg border p-3 text-left transition-colors', template === id ? 'border-ink bg-subtle' : 'border-line hover:border-line-strong')}>
-                          <div className="text-[14px] font-semibold">{t.name}</div>
+                          <div className="text-[14px] font-semibold">{location === 'server' && id === 'checkout_health' ? 'Watch my checkout conversion' : t.name}</div>
                           <div className="mt-0.5 text-[13px] text-ink-3">{t.example}</div>
                           {a.status === 'unavailable' && <div className="mt-1 text-[12px] font-medium text-ink-2">Needs {a.missing.map((p) => PROVIDERS[p].short).join(' or ')}</div>}
                         </button>
@@ -349,7 +370,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                         <Link to={location === 'server' ? '/sources' : '/settings#account'} onClick={onClose} className="interactive inline-flex h-8 items-center rounded-lg bg-ink px-3 text-[13px] font-medium text-canvas hover:opacity-90">
                           {location === 'server' ? `Connect ${PROVIDERS[availability.missing[0]].short}` : 'Sign in to a server workspace'}
                         </Link>
-                        <Button size="sm" onClick={() => setTemplate(WIZARD_TEMPLATES.find((id) => templateAvailability(WATCH_TEMPLATES.find((x) => x.id === id)!.sources, state.connections, { location }).status === 'ready') ?? 'checkout_health')}>
+                        <Button size="sm" onClick={() => setTemplate(WIZARD_TEMPLATES.find((id) => availableFor(id).status === 'ready') ?? 'checkout_health')}>
                           Choose another watch
                         </Button>
                       </div>
@@ -357,7 +378,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                   )}
                   <label className="mt-4 block text-[13px] text-ink-3">
                     Name
-                    <input value={name} onChange={(e) => setName(e.target.value)} aria-describedby={duplicateName ? 'watch-name-dup' : undefined} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink" />
+                    <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} aria-describedby={duplicateName ? 'watch-name-dup' : undefined} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink" />
                   </label>
                   {duplicateName && (
                     <p id="watch-name-dup" className="mt-1 text-[13px] text-ink-2">
@@ -366,9 +387,13 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                   )}
                 </div>
               )}
-              {step === 1 && (
-                <div className="mt-4 space-y-2">
-                  {metrics.length === 0 ? (
+              {(viewStep === 1 || golden) && (
+                <div hidden={viewStep !== 1} className="mt-4 space-y-2">
+                  {golden && server ? <>
+                    <p className="text-[13px] text-ink-2">What Jagr watches: checkout conversion and selected technical signals against the same hours over the previous seven days. Sustained changes across completed hourly buckets must also exceed normal variation.</p>
+                    {connected.filter(c => c.source !== 'github').map(c => <div hidden={!sources.includes(c.source as ProviderId)} key={`${server.workspaceId}:${c.id}:${JSON.stringify(c.config)}`}><CheckoutMappingEditor connection={c} workspaceId={server.workspaceId} canManage={server.role === 'owner' || server.role === 'admin'} refresh={server.refresh} onPending={(id, pending) => setPendingMappings(previous => ({ ...previous, [id]: pending }))} /></div>)}
+                    {sources.includes('github') && <p className="rounded-lg border border-line p-3 text-[13px]">Release/code context: releases and deployments, with links to their commits, from the repositories already configured in GitHub. Timing is context, not proof of causation.</p>}
+                  </> : metrics.length === 0 ? (
                     <p className="rounded-lg border border-dashed border-line-strong p-4 text-[13px] text-ink-2">
                       {tpl.signals.every((s) => s.key === 'changes')
                         ? `${tpl.name} reports a deployment the source marks as failed. Successful deployments and releases are listed as context in the morning brief — never as findings. There are no thresholds to set.`
@@ -415,8 +440,9 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                   )}
                 </div>
               )}
-              {step === 2 && (
+              {viewStep === 2 && (
                 <div className="mt-4 space-y-2">
+                  {golden && <p className="text-[13px] text-ink-2">Select connected sources. Amplitude is required for checkout conversion; Sentry adds technical errors and GitHub adds release/code context.</p>}
                   {rows.map((r) => {
                     const p = r.provider;
                     const on = sources.includes(p);
@@ -443,7 +469,9 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                       </label>
                     );
                   })}
-                  {pending && <p role="status" className="pt-1 text-[12px] text-ink-3">Loading this workspace’s connections…</p>}
+                  {golden && sources.filter(p => !connected.some(c => c.source === p)).map(p => <div key={p} className="rounded-lg border border-line p-3 text-[13px]">{PROVIDERS[p].short} was selected but is now unavailable. <Button size="sm" variant="ghost" onClick={() => setSources(sources.filter(source => source !== p))}>Remove unavailable source</Button></div>)}
+                  {golden && CHECKOUT_SOURCES.filter(p => !connected.some(c => c.source === p)).length > 0 && <p className="text-[13px] text-ink-2">Unavailable: {CHECKOUT_SOURCES.filter(p => !connected.some(c => c.source === p)).map(p => PROVIDERS[p].short).join(', ')}. Connect or verify them in <Link to="/sources" className="underline">Sources</Link>. Connecting a source does not guarantee evidence.</p>}
+                                    {pending && <p role="status" className="pt-1 text-[12px] text-ink-3">Loading this workspace’s connections…</p>}
                   {!pending && location === 'server' && !rows.some((r) => r.status === 'ready') && (
                     <p role="status" className="pt-1 text-[12px] text-high">
                       None of this template’s sources is connected to this workspace yet. Connect one in <Link to="/sources" className="underline">Sources</Link>, or choose another template.
@@ -454,7 +482,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                     {mode === 'imported'
                       ? 'Sources you have not imported are left out of the run — never reported as “nothing found”.'
                       : location === 'server'
-                        ? 'Only sources connected to this workspace can be watched; they are read live on every check.'
+                        ? 'Selected sources are read during checks; failed or unavailable reads are evidence gaps.'
                         : 'In the sample workspace every source is simulated — Jagr never presents fixture data as live.'}
                   </p>
                 </div>
@@ -466,7 +494,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                       <input type="radio" checked={frequency === f} onChange={() => setFrequency(f)} className="accent-[var(--ink)]" />
                       <span className="text-[14px] font-medium">{FREQUENCY_LABEL[f]}</span>
                       {f === 'daily' && frequency === 'daily' && <input type="time" value={dailyAt} onChange={(e) => setDailyAt(e.target.value || '07:00')} className="ml-auto h-8 rounded-lg border border-line bg-surface px-2 text-[13px]" />}
-                      {f === '30m' && <span className="ml-auto text-[12px] text-ink-3">Recommended for funnels</span>}
+                      {!golden && f === '30m' && <span className="ml-auto text-[12px] text-ink-3">Recommended for funnels</span>}
                     </label>
                   ))}
                   <p className="pt-1 text-[13px] text-ink-3">This is the monitoring schedule. The morning brief runs on its own schedule ({state.brief.time} {state.brief.timezone}); critical findings alert you immediately from whichever run finds them.</p>
@@ -530,16 +558,16 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                 onClick={async () => {
                   try {
                     await runCreatedWatch(runMonitoring, () => {
-                      toast({ tone: 'success', title: 'Monitoring re-run', body: `${created.name} is now part of the overnight schedule.` });
+                      toast({ tone: 'success', title: location === 'server' ? 'Check requested' : 'Monitoring re-run', body: location === 'server' ? 'Follow the requested check status to see when execution finishes.' : `${created.name} is now part of the overnight schedule.` });
                       onClose();
                       if (quickStartOrigin) navigate('/');
                     });
                   } catch (error) {
-                    toast({ tone: 'warning', title: 'The run did not complete', body: (error as Error).message });
+                    toast({ tone: 'warning', title: location === 'server' ? 'The check could not be requested' : 'The run did not complete', body: (error as Error).message });
                   }
                 }}
               >
-                {running ? 'Running…' : 'Run monitoring now'}
+                {running ? 'Running…' : location === 'server' ? 'Run check' : 'Run monitoring now'}
               </Button>
             </>
           ) : (
@@ -562,7 +590,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                     Next <ArrowRight size={14} />
                   </Button>
                 ) : (
-                  <Button variant="primary" icon={Check} onClick={() => void finish()} disabled={creating}>
+                  <Button variant="primary" icon={Check} onClick={() => void finish()} disabled={creating || !!goldenBlocker}>
                     {creating ? 'Creating…' : 'Create watch'}
                   </Button>
                 )}

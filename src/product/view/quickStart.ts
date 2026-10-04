@@ -76,7 +76,7 @@ export function connectedQuickStartState(input: ConnectedQuickStartInput): Conne
 
   const healthyConnections = input.productConnections.filter((c) => healthyIds.has(c.provider));
   const templates = WIZARD_TEMPLATES.map((id) => WATCH_TEMPLATES.find((template) => template.id === id)!).filter(Boolean);
-  const recommendedTemplate = firstCompatibleTemplate(templates, healthyConnections, { location: 'server' });
+  const recommendedTemplate = healthySources.some(c => c.source === 'amplitude' && c.status === 'connected') ? 'checkout_health' : firstCompatibleTemplate(templates, healthyConnections, { location: 'server' });
   const runnable = hasRunnableConnectedWatch(input);
   return runnable ? { stage: 'run', showChecklist: true, running: input.running, recommendedTemplate } : { stage: 'watch', showChecklist: true, running: false, recommendedTemplate };
 }

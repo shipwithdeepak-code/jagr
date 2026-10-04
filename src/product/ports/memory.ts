@@ -331,7 +331,7 @@ export function createMemoryPersistence(initialState: State = emptyState()): { r
       set: async (w, key, value) => void ws(w).cursors.set(key, value),
     },
     audit: {
-      append: async (e) => void ws(e.workspaceId).audit.push(clone(e)),
+      append: async (e) => { if (!e.executionReceipt || !ws(e.workspaceId).audit.some((entry) => entry.id === e.id)) ws(e.workspaceId).audit.push(clone(e)); },
       list: async (w) => clone(ws(w).audit),
       page: async (scope, query) => page(scope, 'audit', clone(ws(scope.workspaceId).audit), (item) => item.at, (item) => item.id, query),
       recentWatchRuns: async (scope, limit) => page(scope, 'audit', clone(ws(scope.workspaceId).audit).filter((item) => item.action === 'monitor.watch' && item.target), (item) => item.at, (item) => item.id, { limit }).items.reverse(),

@@ -6,6 +6,7 @@ import type { ConnectorCheck } from '@/product/integrations/connectors/types';
 import type { ActionDecision, AttentionLevel, BriefSchedule, Watch, WatchTemplateId } from '@/product/types';
 import type { ImportKind } from '@/product/imports/schemas';
 import type { WorkspaceExportV1 } from '@/product/export/v1';
+import type { ManualExecutionStatus } from '@/product/app/executionStatus';
 
 /**
  * The browser's client for the Jagr server API. Session cookies are httpOnly; state-changing calls
@@ -92,6 +93,7 @@ export const serverApi = {
   snapshot: (ws: string) => call<WorkspaceSnapshot>('GET', `/api/workspaces/${encodeURIComponent(ws)}/snapshot`),
   updateWorkspace: (ws: string, patch: { name?: string; brief?: BriefSchedule; planner?: 'deterministic' | 'llm'; aiEgressAllowed?: boolean }) => call('PATCH', `/api/workspaces/${encodeURIComponent(ws)}`, patch),
   runNow: (ws: string) => call<{ investigations?: number; kind?: 'run_queued'; jobs?: { watchId: string; idempotencyKey: string; enqueued: boolean }[] }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/runs`),
+  executionStatus: (ws: string, key: string) => call<ManualExecutionStatus>('GET', `/api/workspaces/${encodeURIComponent(ws)}/runs/status?key=${encodeURIComponent(key)}`),
   createWatch: (ws: string, input: WatchInput) => call<{ watch: Watch }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/watches`, input),
   setWatchStatus: (ws: string, id: string, status: 'active' | 'paused') => call('PATCH', `/api/workspaces/${encodeURIComponent(ws)}/watches/${encodeURIComponent(id)}`, { status }),
   decide: (ws: string, input: { actionId: string; status: ActionDecision['status']; optionId?: string; note?: string }) => call<{ decision: ActionDecision }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/decisions`, input),

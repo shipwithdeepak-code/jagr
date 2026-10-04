@@ -5,6 +5,7 @@ import type { SecretRef } from './secrets.js';
 import type { NormalizedEvent } from '../events.js';
 import type { Subscription, UsageEvent, UsageKind } from './controlPlane.js';
 import type { HistoryPage, HistoryQuery, HistoryScope } from './history.js';
+import type { ExecutionReceipt } from '../app/executionStatus.js';
 
 /**
  * Persistence port — the workspace's durable state, as domain records.
@@ -178,6 +179,7 @@ export interface AuditEntry {
   action: string;
   target?: string;
   detail?: string;
+  executionReceipt?: ExecutionReceipt;
 }
 
 export interface Repositories {

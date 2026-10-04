@@ -1,3 +1,4 @@
+import type { ManualExecutionStatus } from '@/product/app/executionStatus';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ActionDecision, BriefSchedule, ConnectionState, ProposedAction, ProviderId, Watch } from '@/product/types';
 import { decide as decideAction } from '@/product/agent/decisions';
@@ -95,6 +96,23 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const serverId = session.activeId;
   const [srv, setSrv] = useState<{ id: string; snapshot: WorkspaceSnapshot; state: ProductState } | undefined>();
   const [serverLoading, setServerLoading] = useState(false);
+  const [executionReads, setExecutionReads] = useState<{ workspaceId: string; keys: string[]; statuses: Record<string, ManualExecutionStatus | undefined>; error: boolean }>();
+  const executionRef = useRef(executionReads);
+  const executionReadGeneration = useRef(0);
+  useEffect(() => { executionReadGeneration.current++; }, [serverId]);
+  executionRef.current = executionReads;
+  const refreshExecutions = useCallback(async (id: string, keys?: string[]) => {
+    const generation = ++executionReadGeneration.current;
+    const current = executionRef.current;
+    const requested = keys ?? (current?.workspaceId === id ? current.keys : []);
+    if (!requested.length) return;
+    const reads = await Promise.allSettled(requested.map((key) => serverApi.executionStatus(id, key)));
+    if (generation !== executionReadGeneration.current) return;
+    const statuses: Record<string, ManualExecutionStatus | undefined> = Object.fromEntries(requested.map((key) => [key, current?.workspaceId === id ? current.statuses[key] : undefined]));
+    let error = false;
+    reads.forEach((read, index) => { if (read.status === 'fulfilled') statuses[requested[index]] = read.value; else { error = true; statuses[requested[index]] ??= undefined; } });
+    setExecutionReads({ workspaceId: id, keys: requested, statuses, error });
+  }, []);
   const [serverError, setServerError] = useState<string | undefined>();
   // A 401 from a workspace call means the session ended mid-use: re-check it, so the person gets the
   // signed-out screen with sign-in back to this route instead of a stale workspace and an error.
@@ -318,7 +336,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         setServerRunning(true);
         let failure: string | undefined;
         try {
-          await serverApi.runNow(serverId);
+          const response = await serverApi.runNow(serverId);
+          if (response.kind === 'run_queued') {
+            const keys = response.jobs?.map((job) => job.idempotencyKey) ?? [];
+            setExecutionReads({ workspaceId: serverId, keys, statuses: Object.fromEntries(keys.map((key) => [key, undefined])), error: false });
+            await refreshExecutions(serverId, keys);
+          }
           setServerError(undefined);
         } catch (e) {
           failure = (e as Error).message;
@@ -395,11 +418,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         settings: { planner: snap?.workspace.settings.planner ?? 'deterministic', aiEgressAllowed: snap?.workspace.settings.aiEgressAllowed ?? true },
         loading: serverLoading,
         error: serverError,
-        refresh: async () => void (await loadServer(serverId)),
+        executionStatuses: executionReads?.workspaceId === serverId ? executionReads.statuses : undefined,
+        executionStatusError: executionReads?.workspaceId === serverId ? executionReads.error : undefined,
+        refresh: async () => { await Promise.all([loadServer(serverId), refreshExecutions(serverId)]); },
         setAiEgressAllowed: async (allowed: boolean) => void (await onServer((id) => serverApi.updateWorkspace(id, { aiEgressAllowed: allowed }))),
       },
     };
-  }, [serverId, session, srv, view, serverRunning, onServer, health, mode, importedWorld, previewImport, serverLoading, serverError, loadServer, authLost, state.workspace?.mode, createWorkspace]);
+  }, [serverId, session, srv, view, serverRunning, executionReads, refreshExecutions, onServer, health, mode, importedWorld, previewImport, serverLoading, serverError, loadServer, authLost, state.workspace?.mode, createWorkspace]);
 
   const api = server ?? local;
   return <ProductContext.Provider value={api}>{children}</ProductContext.Provider>;

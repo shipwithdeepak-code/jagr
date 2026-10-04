@@ -497,6 +497,8 @@ export interface SchedulerLogEntry {
   outcome: string;
   investigationIds: string[];
   emailIds: string[];
+  /** Observation metadata from this evaluation; never a second detection pass. */
+  check?: { findings: boolean; coverage: 'complete' | 'incomplete' | 'unknown' };
 }
 
 /** How tool selection was planned for a monitoring run. */
