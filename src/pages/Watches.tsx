@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Check, Pause, Play, Plus, X } from 'lucide-react
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import type { AttentionLevel, MonitoringFrequency, NotificationPolicy, ProviderId, Watch, WatchTemplateId } from '@/product/types';
+import type { AttentionLevel, MetricEvaluationSummary, MonitoringFrequency, NotificationPolicy, ProviderId, SchedulerLogEntry, Watch, WatchTemplateId } from '@/product/types';
 import { metricKeyOf, signalMeta, WATCH_TEMPLATES, WIZARD_TEMPLATES, watchFromTemplate } from '@/product/catalog';
 import { metricKeyOf as nativeMetricKey, nativeMetricSignal } from '@/product/integrations/bridge';
 import type { SignalKey } from '@/product/types';
@@ -24,6 +24,50 @@ import { investigationTitle } from '@/product/view/investigation';
 import { useToast } from '@/components/toast';
 import { isQuickStartOrigin } from '@/state/firstRun';
 import type { ConnectionView } from '@/product/connections/model';
+import type { ManualExecutionStatus } from '@/product/app/executionStatus';
+
+type HistoricalMetricEvaluation = Omit<MetricEvaluationSummary, 'source' | 'zScore' | 'persistencePassed'> & {
+  source: string | null;
+  zScore?: number | null;
+  persistencePassed?: boolean | null;
+};
+
+export function runMetrics(entry: SchedulerLogEntry, statuses?: Record<string, ManualExecutionStatus | undefined>): HistoricalMetricEvaluation[] {
+  const receipt = Object.values(statuses ?? {}).find((status): status is ManualExecutionStatus =>
+    status !== undefined && status.watchId === entry.watchId && status.execution.requestedAt === entry.scheduledAt && status.result?.disposition === 'checked',
+  );
+  return receipt?.result?.disposition === 'checked' ? receipt.result.metrics ?? entry.check?.metrics ?? [] : entry.check?.metrics ?? [];
+}
+
+export function metricDiagnosticText(metric: HistoricalMetricEvaluation): string {
+  return [
+    `${metric.metricName}: ${metric.finalDecision.replace('_', ' ')}`,
+    `${metric.currentPointCount} current point${metric.currentPointCount === 1 ? '' : 's'}`,
+    metric.baselinePointCount !== null ? `${metric.baselinePointCount} baseline point${metric.baselinePointCount === 1 ? '' : 's'}` : null,
+    metric.currentValue !== null ? `current ${metric.currentValue}` : null,
+    metric.baselineValue !== null ? `baseline ${metric.baselineValue}` : null,
+    metric.threshold !== null ? `threshold ${metric.threshold}` : null,
+    metric.relativeDecline !== null ? `decline ${metric.relativeDecline}%` : null,
+    typeof metric.zScore === 'number' ? `z-score ${metric.zScore}` : null,
+    typeof metric.persistencePassed === 'boolean' ? `persistence ${metric.persistencePassed ? 'passed' : 'not met'}` : null,
+    metric.inconclusiveReason ? `reason ${metric.inconclusiveReason.replaceAll('_', ' ')}` : null,
+  ].filter((part): part is string => part !== null).join(' · ');
+}
+
+function failedGate(metric: HistoricalMetricEvaluation): string[] {
+  const reasons: string[] = [];
+  if (metric.relativeDecline !== null && metric.threshold !== null && metric.relativeDecline < metric.threshold) reasons.push('threshold gate not met');
+  if (typeof metric.zScore === 'number' && metric.zScore < 3) reasons.push('z-score gate not met');
+  if (metric.persistencePassed === false) reasons.push('persistence gate not met');
+  return reasons;
+}
+
+export function runOutcomeText(outcome: string, metrics: HistoricalMetricEvaluation[]): string {
+  const material = metrics.filter((metric) => metric.finalDecision === 'normal' && metric.relativeDecline !== null && metric.threshold !== null && metric.relativeDecline >= metric.threshold && failedGate(metric).length > 0);
+  if (!material.length) return outcome;
+  const reasons = [...new Set(material.flatMap(failedGate))];
+  return `Change observed, but anomaly gates were not fully satisfied. ${reasons.join('; ')}.`;
+}
 
 export function WatchesPage() {
   const { state, setWatchStatus, mode, importedWorld, location, server } = useProduct();
@@ -160,22 +204,23 @@ export function WatchesPage() {
       <Drawer open={!!logFor} onClose={() => setLogFor(null)} title={logFor ? `${logFor.name} — run log` : ''} subtitle={location === 'server' ? 'Recent monitoring runs of this watch' : 'Every scheduled check from the last monitoring window'}>
         {logFor && (
           <ul className="divide-y divide-line text-[13px]">
-            {watchCardStatus(logFor, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }).runs.map((l) => (
-              <li key={l.jobId} className={cx('grid gap-3 py-2', location === 'server' ? 'grid-cols-[120px_1fr]' : 'grid-cols-[72px_1fr]')}>
-                <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)} UTC`}</span>
-                <span className={l.emailIds.length ? 'font-medium text-ink' : l.investigationIds.length ? '' : 'text-ink-2'}>
-                  {l.outcome}
-                  {!!l.check?.metrics.length && <ul className="mt-1 text-[12px] text-ink-3">{l.check.metrics.map((metric) => <li key={`${metric.source ?? 'unknown'}:${metric.metricKey}`}>
-                    {metric.metricName}: {metric.finalDecision.replace('_', ' ')} · {metric.currentPointCount} current point{metric.currentPointCount === 1 ? '' : 's'}{metric.baselinePointCount !== null ? ` · ${metric.baselinePointCount} baseline point${metric.baselinePointCount === 1 ? '' : 's'}` : ''}{metric.currentValue !== null ? ` · current ${metric.currentValue}` : ''}{metric.baselineValue !== null ? ` · baseline ${metric.baselineValue}` : ''}{metric.threshold !== null ? ` · threshold ${metric.threshold}` : ''}{metric.relativeDecline !== null ? ` · decline ${metric.relativeDecline}%` : ''}{metric.inconclusiveReason ? ` · reason ${metric.inconclusiveReason.replaceAll('_', ' ')}` : ''}
-                  </li>)}</ul>}
-                  {l.investigationIds.map((id) => (
-                    <Link key={id} to={`/investigations/w/${id}`} className="ml-2 text-accent hover:underline">
-                      Open
-                    </Link>
-                  ))}
-                </span>
-              </li>
-            ))}
+            {watchCardStatus(logFor, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }).runs.map((l) => {
+              const metrics = runMetrics(l, server?.executionStatuses);
+              return <li key={l.jobId} className={cx('grid gap-3 py-2', location === 'server' ? 'grid-cols-[120px_1fr]' : 'grid-cols-[72px_1fr]')}>
+                  <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)} UTC`}</span>
+                  <span className={l.emailIds.length ? 'font-medium text-ink' : l.investigationIds.length ? '' : 'text-ink-2'}>
+                    {runOutcomeText(l.outcome, metrics)}
+                    {!!metrics.length && <ul className="mt-1 text-[12px] text-ink-3">{metrics.map((metric) => <li key={`${metric.source ?? 'unknown'}:${metric.metricKey}`}>
+                      {metricDiagnosticText(metric)}
+                    </li>)}</ul>}
+                    {l.investigationIds.map((id) => (
+                      <Link key={id} to={`/investigations/w/${id}`} className="ml-2 text-accent hover:underline">
+                        Open
+                      </Link>
+                    ))}
+                  </span>
+                </li>;
+            })}
           </ul>
         )}
       </Drawer>
