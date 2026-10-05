@@ -8,7 +8,7 @@ import type { Action, ApprovalRequest, Evidence, Task, TaskDescription, TaskDraf
 import { SOURCE_LABELS, TEAMS } from '@/domain/defaults';
 import { GATE_LABELS } from '@/agents/policy';
 import { fmtConfidence } from '@/lib/format';
-import { fmtDateTime, fmtTime } from '@/lib/time';
+import { fmtDateTime, fmtTime } from '@/lib/localTime';
 import { teamName, useWorkspace } from '@/state/workspace';
 import { Badge, Button, Card, cx, Drawer, Eyebrow, KeyValue, Modal, Mono, RiskBadge, SimulationBadge, SourceChip } from './ui';
 import { useToast } from './toast';

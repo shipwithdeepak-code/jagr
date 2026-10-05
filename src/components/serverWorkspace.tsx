@@ -142,7 +142,8 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
   const views = sourceViews(product.state.connections, { asOf: new Date().toISOString(), server: byId, canManage: manage });
   const channels = srv.connections.filter((c) => c.kind === 'channel');
   const present = new Set(srv.connections.map((c) => c.provider));
-  const addableSources = types.filter((t) => t.kind === 'source' && !present.has(t.provider));
+  const priority = ['amplitude', 'sentry', 'github'];
+  const addableSources = types.filter((t) => t.kind === 'source' && !present.has(t.provider)).sort((a, b) => (priority.includes(a.provider) ? priority.indexOf(a.provider) : 3) - (priority.includes(b.provider) ? priority.indexOf(b.provider) : 3));
   const slackType = types.find((t) => t.provider === 'slack');
 
   const act = async (view: ConnectionView | undefined, action: SourceActionId, type?: ConnectionTypeInfo) => {
@@ -180,6 +181,7 @@ export function ServerSources({ onConnectionSaved }: { onConnectionSaved?: (conn
 
       {addableSources.length > 0 && (
         <section className="mb-8" aria-labelledby="evidence-sources">
+          <p className="mb-3 text-[13px] text-ink-2">Start with Amplitude to see product behavior. Add Sentry to check technical errors and GitHub to see releases around a change. More context helps Jagr compare explanations; it does not prove a cause.</p>
           <SectionTitle id="evidence-sources" hint={manage ? 'Jagr investigates only what connected evidence sources can show. Credentials are stored encrypted and never shown again.' : 'Only workspace owners and admins can connect evidence sources.'}>Connect an evidence source</SectionTitle>
           <div className="grid gap-3 md:grid-cols-3">
             {addableSources.map((t) => (

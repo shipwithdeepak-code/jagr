@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { WatchInvestigation } from '@/product/types';
 import { useProduct } from '@/state/productContext';
 import { useWorkspace } from '@/state/workspace';
-import { fmtTime } from '@/lib/time';
+import { fmtDateTime } from '@/lib/localTime';
 import { attentionRoute, EmailPreview, ProviderName } from '@/components/product';
 import { ActionRow, AgentApprovalCard, AgentTraceTimeline, HypothesisList, PlannerModeLine } from '@/components/agent';
 import { AttentionBanner, LoadingState, MetricValue, StatusBadge } from '@/components/primitives';
@@ -19,6 +19,7 @@ import { canonicalReading, findingState, investigationTitle, investigationWatche
 import { truthfulNotificationText } from '@/product/presentation';
 import { EvidenceChain } from '@/components/evidenceChain';
 import { InvestigationReplay } from '@/components/replay';
+import { PROVIDERS } from '@/product/integrations/adapters';
 import { BUILTIN_SOURCE_ROLES } from '@/product/catalog';
 import { isSourceId } from '@/product/roles/types';
 
@@ -156,7 +157,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             .map(([k, v]) => (
               <div key={k} className="flex items-baseline gap-1.5">
                 <dt className="text-ink-3">{k}</dt>
-                <dd className="font-medium text-ink">{fmtTime(v!)} UTC</dd>
+                <dd className="font-medium text-ink">{fmtDateTime(v!)}</dd>
               </div>
             ))}
         </dl>
@@ -194,7 +195,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="min-w-0 space-y-8">
-          <Part id="what-happened" title="What happened">
+          <Part id="what-happened" title="What changed">
             {reading ? (
               <>
                 <p className="text-[16px] text-ink">
@@ -204,7 +205,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                   <dt className="text-ink-3">Observed</dt>
                   <dd className="num">
                     {reading.current}
-                    {reading.asOf && <span className="text-ink-3"> · as of {fmtTime(reading.asOf)} UTC</span>}
+                    {reading.asOf && <span className="text-ink-3"> · as of {fmtDateTime(reading.asOf)}</span>}
                   </dd>
                   <dt className="text-ink-3">Baseline</dt>
                   <dd className="num">
@@ -212,12 +213,12 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                     {reading.baselineWindow && <span className="text-ink-3"> · {reading.baselineWindow.charAt(0).toLowerCase() + reading.baselineWindow.slice(1)}</span>}
                   </dd>
                   <dt className="text-ink-3">Period</dt>
-                  <dd className="num">Since {fmtTime(reading.since)} UTC</dd>
+                  <dd className="num">Since {fmtDateTime(reading.since)}</dd>
                 </dl>
               </>
             ) : (
               <p className="text-[16px] text-ink">
-                {lead.label} {lead.magnitude} <span className="text-ink-3">· since {fmtTime(lead.onsetAt)} UTC</span>
+                {lead.label} {lead.magnitude} <span className="text-ink-3">· since {fmtDateTime(lead.onsetAt)}</span>
               </p>
             )}
             {related.length > 0 && (
@@ -226,7 +227,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                 <ul className="mt-1 space-y-0.5 text-[14px]">
                   {related.map((sig) => (
                     <li key={`${sig.key}:${sig.provider}:${sig.area}`}>
-                      {sig.label} {sig.magnitude} <span className="text-ink-3">· <ProviderName provider={sig.provider} short /> · since {fmtTime(sig.onsetAt)} UTC</span>
+                      {sig.label} {sig.magnitude} <span className="text-ink-3">· <ProviderName provider={sig.provider} short /> · since {fmtDateTime(sig.onsetAt)}</span>
                     </li>
                   ))}
                 </ul>
@@ -237,6 +238,11 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
           <Part id="why" title="Why it matters">
             <p className="text-[14px] text-ink">{inv.attentionReason}</p>
             <p className="mt-1 text-[13px] text-ink-2">{attentionRoute(inv.attention, owner?.notificationPolicy.interruptAt)}.</p>
+          </Part>
+
+          <Part id="checked" title="What Jagr checked" hint="Checks recorded in this investigation; unavailable evidence is a gap, never a negative finding.">
+            <p className="text-[14px]">{checked.length ? checked.map((provider) => PROVIDERS[provider]?.name ?? provider).join(', ') : 'No source checks are recorded.'}</p>
+            {!!gaps.length && <p className="mt-1 text-[13px] text-ink-2">{gaps.length} evidence gap{gaps.length === 1 ? '' : 's'} recorded. See what is not known below.</p>}
           </Part>
 
           <Part id="timeline" title="Timeline" hint="The sequence Jagr used to orient the investigation. Timing shows order, not causation.">
@@ -323,8 +329,8 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
                 <p className="mb-2 text-[13px] text-ink-2">{inv.runs.length} scheduled checks were merged into this investigation instead of opening duplicates.</p>
                 <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
                   {inv.runs.map((r, i) => (
-                    <div key={i} className="grid grid-cols-[64px_1fr] gap-3 border-b border-line px-3 py-1.5 text-[13px] last:border-b-0">
-                      <span className="num text-ink-3">{fmtTime(r.at)} UTC</span>
+                    <div key={i} className="grid grid-cols-[145px_1fr] gap-3 border-b border-line px-3 py-1.5 text-[13px] last:border-b-0">
+                      <span className="num text-ink-3">{fmtDateTime(r.at)}</span>
                       <span className={r.watchId !== inv.watchId ? 'text-accent' : r.anomalous ? 'text-ink-2' : 'text-ink-3'}>{truthfulNotificationText(r.note)}</span>
                     </div>
                   ))}
@@ -401,8 +407,8 @@ function InvestigationTimeline({ inv, actions }: { inv: WatchInvestigation; acti
   return (
     <ol className="overflow-hidden rounded-lg border border-line bg-surface" aria-label="Investigation timeline">
       {items.map((item, index) => (
-        <li key={`${item.at}:${item.kind}:${index}`} className="grid grid-cols-[58px_62px_minmax(0,1fr)] items-start gap-3 border-b border-line px-3 py-2.5 last:border-b-0 sm:grid-cols-[70px_72px_minmax(0,1fr)] sm:px-4">
-          <time className="num pt-0.5 text-[12px] text-ink-3">{fmtTime(item.at)} UTC</time>
+        <li key={`${item.at}:${item.kind}:${index}`} className="grid grid-cols-[100px_62px_minmax(0,1fr)] items-start gap-3 border-b border-line px-3 py-2.5 last:border-b-0 sm:grid-cols-[145px_72px_minmax(0,1fr)] sm:px-4">
+          <time className="num pt-0.5 text-[12px] text-ink-3">{fmtDateTime(item.at)}</time>
           <span className="inline-flex items-center gap-1.5 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-ink-3">
             <Clock3 size={11} aria-hidden /> {item.kind}
           </span>

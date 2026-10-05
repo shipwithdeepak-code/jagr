@@ -11,7 +11,8 @@ describe('first-run Welcome presentation', () => {
     expect(html).toContain('<h2');
     expect(html).toContain('Connect your product stack.');
     expect(html).toContain('Jagr investigates important changes across your tools.');
-    expect(html).toContain('one context source');
+    expect(html).toContain('One source can start a watch');
+    expect(html).toContain('Sentry adds errors and GitHub adds release context');
     expect(html).toContain('scripted example');
     expect(html).toContain('not your workspace data');
     expect(html).toContain('Jagr investigates before interrupting.');

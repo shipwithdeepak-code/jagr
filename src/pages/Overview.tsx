@@ -5,7 +5,7 @@ import { HISTORICAL_STATS, INTEGRATIONS } from '@/domain/defaults';
 import { useEnvironment } from '@/state/environment';
 import { useWorkspace } from '@/state/workspace';
 import { fmtConfidence, fmtPct } from '@/lib/format';
-import { fmtDate, fmtDuration, fmtTime } from '@/lib/time';
+import { fmtDate, fmtDuration, fmtTime } from '@/lib/localTime';
 import { Badge, Card, ConfidenceMeter, cx, Eyebrow, SectionTitle, SeverityBadge, SourceChip, Stat } from '@/components/ui';
 import { GATE_LABELS } from '@/agents/policy';
 import { useShellActions } from '@/components/shell';

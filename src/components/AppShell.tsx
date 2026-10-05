@@ -276,7 +276,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {product.mode && (
                 <span role="status" className="hidden min-w-0 items-center gap-2 truncate text-[13px] text-ink-2 sm:inline-flex">
                   <span aria-hidden className={cx('size-1.5 shrink-0 rounded-full', monitor.tone === 'running' ? 'animate-pulse-dot bg-ink' : monitor.tone === 'active' ? 'bg-ok' : 'bg-line-strong')} />
-                  <span className="truncate">{monitor.text}</span>
+                  <span className="truncate">{product.location === 'server' && monitor.tone === 'active' ? 'Automatic checks scheduled' : monitor.text}</span>
                 </span>
               )}
               {/* Overview owns its own Run button; before a workspace exists there is nothing to run. */}
@@ -299,7 +299,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     navigate('/');
                     toast(
                       product.location === 'server'
-                        ? { tone: 'success', title: 'Monitoring complete', body: product.mode === 'connected' ? 'Active watches ran against your live sources on the server.' : 'Watches ran on the server over this workspace’s data.' }
+                        ? { tone: 'success', title: 'Check requested', body: 'Jagr will show the result here when the check finishes. You can leave this page.' }
                         : product.mode === 'imported'
                         ? r
                           ? { tone: 'success', title: 'Monitoring complete', body: `Watches ran over your imported data (${r.investigations.length} investigation${r.investigations.length === 1 ? '' : 's'}).` }

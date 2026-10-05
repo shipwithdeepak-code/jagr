@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { acceptedCount, IMPORT_KINDS, SUPPORTED_METRICS, type ImportedDataset, type ImportKind } from '@/product/imports/schemas';
-import { fmtDate, fmtTime } from '@/lib/time';
+import { fmtDate, fmtTime } from '@/lib/localTime';
 import { Badge, Button, Card, cx, Mono, SectionTitle } from './ui';
 import { PRIVACY_NOTICE } from './onboarding';
 import { SourceGroups, SourcesOverview } from './sources';

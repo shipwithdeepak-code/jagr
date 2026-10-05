@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import type { SourceConnection, TraceStep } from '@/product/types';
 import { AUDIT_STAGE_LABEL, AUDIT_TONE, auditEvents, type AuditTone } from '@/product/view/audit';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { ProviderName } from './product';
 import { SourceStateTag } from './agent';
 import { cx } from './ui';

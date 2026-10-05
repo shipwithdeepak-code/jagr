@@ -5,7 +5,7 @@ import { externalUrl, PROVIDERS, resolveRef } from '@/product/integrations/adapt
 import { defaultWorld } from '@/product/integrations/world';
 import type { IssueRecord, MetricSeries, ReleaseRecord, ReviewRecord } from '@/product/integrations/types';
 import { useProduct } from '@/state/productContext';
-import { fmtDateTime } from '@/lib/time';
+import { fmtDateTime } from '@/lib/localTime';
 import { ConnectionBadge, ProviderName } from '@/components/product';
 import { SeriesChart } from '@/components/charts';
 import { Badge, Button, Card, cx, EmptyState, KeyValue, Mono, PageHeader } from '@/components/ui';

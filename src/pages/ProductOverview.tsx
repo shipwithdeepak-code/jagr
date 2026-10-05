@@ -1,18 +1,18 @@
 import { ManualCheckStatus } from '@/components/executionStatus';
-import { executionStatusText } from '@/product/view/executionStatus';
+import { checkResultText } from '@/lib/monitoringPresentation';
 import { signalMeta } from '@/product/catalog';
 import { nativeMetricSignal } from '@/product/integrations/bridge';
 import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProduct } from '@/state/productContext';
 import { FREQUENCY_LABEL } from '@/product/scheduler';
-import { fmtDateTime, fmtTime } from '@/lib/time';
+import { fmtDateTime, fmtTime, labelledTime } from '@/lib/localTime';
 import { PROVIDERS } from '@/product/integrations/adapters';
 import { pendingApprovals } from '@/product/agent/decisions';
 import { Button, cx } from '@/components/ui';
 import { EmptyPanel, LinkArrow, LoadingState, MetricValue, SectionHeader, StatusBadge } from '@/components/primitives';
 import { readingOf } from '@/product/presentation';
-import { findingState, investigationTitle, labelledTime } from '@/product/view/investigation';
+import { findingState, investigationTitle } from '@/product/view/investigation';
 import { watchCardStatus } from '@/product/view/watchCard';
 import { hasRunnableConnectedWatch, hasRunnableProductWatch, runHasEvidenceGap } from '@/product/view/quickStart';
 import { ConnectedWorkspaceFirstRun, GettingStarted, TryYourOwnData, WorkspaceDataBadge } from '@/components/onboarding';
@@ -39,7 +39,7 @@ export function ProductOverviewPage() {
   const signals = new Set(
     activeWatches.flatMap((w) => w.signals.filter((s) => s.key !== 'changes' && (!importedMetrics || signalMeta(s.key).kind !== 'metric' || importedMetrics.has(s.key))).map((s) => s.key)),
   ).size;
-  const cards = state.watches.map((w) => ({ w, card: watchCardStatus(w, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }) }));
+  const cards = state.watches.map((w) => { const card = watchCardStatus(w, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }); if (location === 'server' && mode !== 'connected') card.nextRun = undefined; return { w, card }; });
   // When Jagr last looked: the latest recorded run (server), or the end of the replayed window (browser).
   const lastChecked = location === 'server' ? cards.flatMap((c) => c.card.runs.map((l) => l.scheduledAt)).sort().at(-1) : r?.window.end;
   const healthy = cards.filter(({ w }) => w.status === 'active' && !open.some((i) => i.watchIds.includes(w.id))).length;
@@ -62,7 +62,7 @@ export function ProductOverviewPage() {
         <div className="min-w-0">
           <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-balance">{headline}</h1>
           <p className="num mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2">
-            {lastChecked && <span>Last checked {fmtDateTime(lastChecked)} UTC</span>}
+            {lastChecked && <span>Last checked {fmtDateTime(lastChecked)}</span>}
             {lastChecked && <span aria-hidden className="text-ink-3">·</span>}
             <span>
               {activeWatches.length} active watch{activeWatches.length === 1 ? '' : 'es'} · {signals} signal{signals === 1 ? '' : 's'}
@@ -106,18 +106,18 @@ export function ProductOverviewPage() {
       <section className="mb-10" aria-labelledby="attention-h">
         <SectionHeader title={<span id="attention-h">Needs your attention</span>} count={r ? attention.length : undefined} />
         {!r ? (
-          <EmptyPanel title="No investigations yet" why={mode === 'imported' ? 'Jagr needs a watch and product evidence before it can investigate changes.' : location === 'server' ? 'Watches run on their schedule. Run now to request a check for every active watch.' : 'Run monitoring to see what changed.'} action={mode === 'imported' && !state.watches.length ? <Link to="/watches?new=1"><LinkArrow>Create your first watch</LinkArrow></Link> : undefined} />
+          <EmptyPanel title="No investigations yet" why={mode === 'imported' ? 'Jagr needs a watch and product evidence before it can investigate changes.' : location === 'server' ? 'Jagr checks your watches automatically on a schedule. Meaningful changes open investigations here; Check now is optional.' : 'Run monitoring to see what changed.'} action={mode === 'imported' && !state.watches.length ? <Link to="/watches?new=1"><LinkArrow>Create your first watch</LinkArrow></Link> : undefined} />
         ) : attention.length === 0 ? (
           <div className="rounded-lg border border-line bg-surface px-4 py-4">
             <p className="text-[14px] text-ink">{location === 'server' ? 'No investigations currently need your attention.' : 'Nothing needs your attention.'}</p>
             <p className="num mt-0.5 text-[13px] text-ink-2">
-              {lastChecked ? `Last checked ${fmtTime(lastChecked)} UTC · ` : ''}
-              {location === 'server' ? 'Check results appear in requested checks and investigations' : `${healthy} of ${activeWatches.length} watches healthy`}
+              {lastChecked ? `Last checked ${fmtTime(lastChecked)} · ` : ''}
+              {location === 'server' ? 'Latest results appear on Watches; investigations link the evidence' : `${healthy} of ${activeWatches.length} watches healthy`}
             </p>
             {location === 'server' && latestRun && !(r?.investigations.length) && (
               <p className="mt-2 text-[13px] text-ink-2">
-                {runHasEvidenceGap(latestRun.outcome) ? `Recorded watch outcome with an evidence gap: ${latestRun.outcome}. No conclusion was drawn from the unavailable source.` : `Recorded watch outcome: ${latestRun.outcome}. Use requested check status for its execution result.`}
-                {nextRun ? ` Next scheduled check: ${fmtDateTime(nextRun)} UTC.` : ''}
+                {runHasEvidenceGap(latestRun.outcome) ? `Recorded watch outcome with an evidence gap: ${latestRun.outcome}. No conclusion was drawn from the unavailable source.` : `Recorded watch outcome: ${checkResultText(latestRun.check, latestRun.outcome)}`}
+                {nextRun ? ` Next scheduled check: ${fmtDateTime(nextRun)}.` : ''}
                 {latestWatch ? ` ${latestWatch.name} will interrupt at ${latestWatch.notificationPolicy.interruptAt} and above; CRITICAL is immediate and other qualifying findings wait for confirmation.` : ''}
               </p>
             )}
@@ -142,18 +142,18 @@ export function ProductOverviewPage() {
               {cards.map(({ w, card }) => {
                 const top = open.find((i) => i.watchIds.includes(w.id));
                 const ran = location === 'server' ? !!card.lastRun : !!r;
-                const execution = Object.values(server?.executionStatuses ?? {}).find((entry) => entry?.watchId === w.id);
-                const health = location === 'server' && execution ? { label: executionStatusText(execution), cls: execution.publicStatus === 'quiet' ? 'bg-ok' : 'bg-line-strong' } : w.status === 'paused' ? { label: 'Paused', cls: 'bg-line-strong' } : top ? { label: 'Needs attention', cls: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' } : ran ? { label: location === 'server' ? 'Check result unavailable' : 'Healthy', cls: location === 'server' ? 'bg-line-strong' : 'bg-ok' } : { label: 'Not run yet', cls: 'bg-line-strong' };
+
+                const health = w.status === 'paused' ? { label: 'Paused', cls: 'bg-line-strong' } : top ? { label: location === 'server' && mode === 'connected' ? 'Watching · needs attention' : 'Needs attention', cls: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' } : ran ? { label: location === 'server' && mode === 'connected' ? 'Watching' : 'Checked', cls: location === 'server' ? 'bg-line-strong' : 'bg-ok' } : { label: location === 'server' && mode === 'connected' ? 'Watching · awaiting first check' : 'Not run yet', cls: 'bg-line-strong' };
                 return (
                   <li key={w.id} className="flex items-center gap-3 px-4 py-3">
                     <span aria-hidden className={cx('size-2 shrink-0 rounded-full', health.cls)} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{w.name}</span>
                       <span className="block text-[13px] text-ink-2">
-                        {health.label} · {FREQUENCY_LABEL[w.schedule.frequency].toLowerCase()}
+                        {health.label} · {FREQUENCY_LABEL[w.schedule.frequency].toLowerCase()}{card.lastRun && <span className="block">{checkResultText(card.lastRun.check, card.lastRun.outcome)}</span>}
                       </span>
                     </span>
-                    {card.nextRun && <span className="num shrink-0 text-right text-[13px] text-ink-3">Next {fmtTime(card.nextRun)} UTC</span>}
+                    {card.nextRun && <span className="num shrink-0 text-right text-[13px] text-ink-3">Next {fmtTime(card.nextRun)}</span>}
                   </li>
                 );
               })}

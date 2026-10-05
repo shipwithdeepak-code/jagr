@@ -6,7 +6,7 @@ import { SOURCE_LABELS } from '@/domain/defaults';
 import { ACTION_CATALOG, GATE_LABELS } from '@/agents/policy';
 import { decisionLabel, ownerFor } from '@/agents/actions';
 import { fmtConfidence } from '@/lib/format';
-import { fmtDuration, fmtTime } from '@/lib/time';
+import { fmtDuration, fmtTime, fmtDateTime } from '@/lib/localTime';
 import { allEvents, teamName, useWorkspace } from '@/state/workspace';
 import { SeriesChart, type ChartMarker } from '@/components/charts';
 import { EvidenceGraph } from '@/components/EvidenceGraph';
@@ -36,6 +36,22 @@ import { AttentionBadge } from '@/components/product';
 import { findingState, investigationTitle, investigationWatches } from '@/product/view/investigation';
 import { AuditTable } from './Trace';
 import { EmptyPanel, LoadingState } from '@/components/primitives';
+import type { SchedulerLogEntry } from '@/product/types';
+
+function monitoringEmptyState(log: SchedulerLogEntry[], watchIds: string[]) {
+  const latest = watchIds.map((id) => log.filter((entry) => entry.type === 'watch_run' && entry.watchId === id).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)).at(-1));
+  const checks = latest.map((entry) => entry?.check);
+  if (checks.some((check) => check && (check.sourceFailures.length > 0 || check.metrics.some((metric) => metric.finalDecision === 'source_unavailable')))) {
+    return { title: "Monitoring couldn't complete", why: "Jagr couldn't read every required source for the latest monitoring checks. Check the source connections and try again when they are available." };
+  }
+  if (checks.some((check) => check && (check.classification === 'inconclusive' || check.coverage === 'incomplete' || check.metrics.some((metric) => metric.finalDecision === 'inconclusive')))) {
+    return { title: 'Monitoring was inconclusive', why: "Jagr didn't have enough evidence to determine whether a meaningful change occurred in the latest monitoring checks. Check the source data or run again when enough data is available." };
+  }
+  if (checks.length > 0 && checks.every((check) => check?.classification === 'no_meaningful_change' && (check.coverage === 'complete' || (check.metrics.length > 0 && check.metrics.every((metric) => metric.coverage === 'complete'))))) {
+    return { title: 'No investigations yet', why: "Jagr didn't find an issue in the latest monitoring checks." };
+  }
+  return { title: 'No investigations yet', why: 'No investigation is recorded. The available monitoring history does not establish whether the latest checks ruled out a meaningful change.' };
+}
 
 export function InvestigationsPage() {
   const product = useProduct();
@@ -44,6 +60,8 @@ export function InvestigationsPage() {
   const setTab = (v: 'open' | 'closed' | 'all') => setParams(v === 'open' ? {} : { status: v });
   const isClosed = (i: { status: string }) => i.status === 'DISMISSED' || i.status === 'RESOLVED';
   const watchInvs = (product.state.result?.investigations ?? []).filter((i) => (tab === 'open' ? !isClosed(i) : tab === 'closed' ? isClosed(i) : true));
+  const empty = monitoringEmptyState(product.state.result?.log ?? [], product.state.watches.map((watch) => watch.id));
+  const hasInvestigations = (product.state.result?.investigations.length ?? 0) > 0;
   const where = product.location === 'server' ? (product.mode === 'connected' ? 'on your connected sources' : 'on this workspace’s data') : product.mode === 'imported' ? 'on the data you imported into this browser' : 'on the sample data (simulated)';
   return (
     <>
@@ -69,9 +87,9 @@ export function InvestigationsPage() {
               <EmptyPanel
                 icon={Telescope}
                 title="No investigations yet"
-                why={product.state.watches.length ? 'Jagr opens an investigation when a watch sees a meaningful change. Run monitoring to check your watches now.' : 'Investigations come from watches. Create a watch, then run monitoring.'}
+                why={product.location !== 'server' || product.mode !== 'connected' ? 'Create a watch and run it over your sample or imported evidence. This workspace runs on demand.' : product.state.watches.length ? 'Jagr checks live-source watches automatically and opens an investigation when a meaningful change warrants one. Results appear here when evidence is ready.' : 'Start with one important product question. Create a watch; Jagr checks live sources automatically.'}
                 action={
-                  product.state.watches.length ? (
+                  product.location === 'server' && product.mode === 'connected' && product.state.watches.length ? <Link to="/watches" className="text-accent hover:underline">See what Jagr is watching</Link> : product.state.watches.length ? (
                     <Button variant="primary" icon={RefreshCw} onClick={() => void product.runMonitoring()} disabled={!product.mode}>
                       Run monitoring
                     </Button>
@@ -85,8 +103,8 @@ export function InvestigationsPage() {
             ) : (
               <EmptyPanel
                 icon={Telescope}
-                title={tab === 'closed' ? 'Nothing closed yet' : 'Nothing needs investigating'}
-                why={tab === 'closed' ? 'Investigations close when the signal returns to normal, or are dismissed when a change does not persist.' : 'Your watches ran and found no meaningful change. Quiet watches are reported in the morning brief.'}
+                title={tab === 'closed' ? 'Nothing closed yet' : hasInvestigations ? 'No open investigations' : empty.title}
+                why={tab === 'closed' ? 'Investigations close when the signal returns to normal, or are dismissed when a change does not persist.' : hasInvestigations ? 'There are no investigations matching this view. Select All to review the recorded investigations.' : empty.why}
               />
             )}
           </div>
@@ -107,7 +125,7 @@ export function InvestigationsPage() {
                 <span className="block text-ink">{status.signal}</span>
                 {!status.closed && <span className="block text-ink-2" title="How sure Jagr is that the signal is real — not that any explanation is the cause">{status.cause} · confidence {status.confidence.toLowerCase()}</span>}
               </span>
-              <span className="num text-[13px] text-ink-2">{fmtTime(inv.statusHistory.find((h) => h.state === 'DETECTED')?.at ?? inv.startedAt)} UTC</span>
+              <span className="num text-[13px] text-ink-2">{fmtDateTime(inv.statusHistory.find((h) => h.state === 'DETECTED')?.at ?? inv.startedAt)}</span>
               <ChevronRight size={14} aria-hidden className="hidden text-ink-3 md:block" />
             </Link>
           );

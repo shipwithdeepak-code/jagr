@@ -1,7 +1,7 @@
 import { CheckoutMappingEditor } from '@/components/checkoutMapping';
 import { CHECKOUT_SOURCES, checkoutConnections, checkoutBlocker, checkoutSelectionBlocker } from '@/product/view/checkoutWizard';
 import { ManualCheckStatus } from '@/components/executionStatus';
-import { executionStatusText } from '@/product/view/executionStatus';
+import { checkResultText, watchDelayText } from '@/lib/monitoringPresentation';
 import { ArrowLeft, ArrowRight, Check, Pause, Play, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,7 +17,7 @@ import { FREQUENCY_LABEL, toCron } from '@/product/scheduler';
 import { watchCardStatus } from '@/product/view/watchCard';
 import { createWatchWithState, initialWatchCreationState } from '@/product/view/watchCreation';
 import { useProduct } from '@/state/productContext';
-import { fmtDateTime, fmtTime } from '@/lib/time';
+import { fmtDateTime, fmtTime } from '@/lib/localTime';
 import { AttentionBadge, ConnectionBadge, ProviderName } from '@/components/product';
 import { Button, cx, Drawer, EmptyState, Mono, PageHeader, Toggle, useDialogFocus } from '@/components/ui';
 import { investigationTitle } from '@/product/view/investigation';
@@ -79,13 +79,14 @@ export function WatchesPage() {
   const [logFor, setLogFor] = useState<Watch | null>(null);
   const wizardOpen = params.get('new') === '1';
   const r = state.result;
+  const automatic = location === 'server' && mode === 'connected';
   const sourceName = (p: ProviderId) => state.connections.find((c) => c.provider === p)?.label?.short ?? PROVIDERS[p].short;
 
   return (
     <>
       <PageHeader
         title="Watches"
-        description="A watch is a standing question Jagr answers on a schedule: which signals matter, where to look, how often to check, and when it’s worth interrupting you."
+        description={automatic ? 'Tell Jagr what matters. It checks your live sources automatically on a schedule and investigates important changes across your tools.' : 'Tell Jagr what matters. Check your sample or imported evidence on demand; this workspace does not monitor live sources while you are away.'}
         actions={
           <Button variant="primary" icon={Plus} onClick={() => setParams({ new: '1' })}>
             Create watch
@@ -103,19 +104,18 @@ export function WatchesPage() {
           {state.watches.map((w) => {
             const invs = r?.investigations.filter((i) => i.watchIds.includes(w.id) && i.status !== 'DISMISSED' && i.status !== 'RESOLVED') ?? [];
             const status = watchCardStatus(w, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt });
+            if (location === 'server' && !automatic) status.nextRun = undefined;
             const ran = location === 'server' ? !!status.lastRun : !!r;
-            const execution = Object.values(server?.executionStatuses ?? {}).find((entry) => entry?.watchId === w.id);
+
             const top = invs[0];
             const health =
               w.status === 'paused'
                 ? { label: 'Paused', dot: 'bg-line-strong' }
-                : location === 'server' && execution
-                  ? { label: executionStatusText(execution), dot: execution.publicStatus === 'quiet' ? 'bg-ok' : 'bg-line-strong' }
                 : top
-                  ? { label: 'Needs attention', dot: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' }
+                  ? { label: automatic ? 'Watching · needs attention' : 'Needs attention', dot: top.attention === 'HIGH' || top.attention === 'CRITICAL' ? 'bg-high' : 'bg-med' }
                   : ran
-                    ? { label: location === 'server' ? 'Check result unavailable' : 'Healthy', dot: location === 'server' ? 'bg-line-strong' : 'bg-ok' }
-                    : { label: 'Not run yet', dot: 'bg-line-strong' };
+                    ? { label: automatic ? 'Watching' : 'Checked', dot: location === 'server' ? 'bg-line-strong' : 'bg-ok' }
+                    : { label: automatic ? 'Watching · awaiting first check' : 'Not run yet', dot: 'bg-line-strong' };
             const signals = w.signals
               .filter((sg) => sg.key !== 'changes')
               // One line per channel: with imported data both store review signals read "Customer feedback".
@@ -130,7 +130,6 @@ export function WatchesPage() {
                       {w.sources.map(sourceName).join(', ')}
                       <span className="text-ink-3"> · </span>
                       {FREQUENCY_LABEL[w.schedule.frequency]}
-                      {w.schedule.frequency === 'daily' ? ` at ${w.schedule.dailyAt}` : ''} ({w.timezone})
                       <span className="text-ink-3"> · </span>
                       {w.notificationPolicy.interruptAt === 'CRITICAL' ? 'Interrupts for CRITICAL only' : `Interrupts at ${w.notificationPolicy.interruptAt} and above`}
                     </p>
@@ -152,15 +151,16 @@ export function WatchesPage() {
                     <dd className="flex items-center gap-1.5">
                       <span aria-hidden className={cx('size-2 rounded-full', health.dot)} /> {health.label}
                     </dd>
-                    <dt className="text-ink-3">Last run</dt>
+                    <dt className="text-ink-3">Last check requested</dt>
                     <dd className="num">
-                      {location === 'server' ? (status.lastRun ? `${fmtDateTime(status.lastRun.scheduledAt)} UTC` : 'Not run yet') : r ? `${status.runs.length} checks in the last window` : 'Not run yet'}
+                      {location === 'server' ? (status.lastRun ? `${fmtDateTime(status.lastRun.scheduledAt)}` : 'Not run yet') : r ? `${status.runs.length} checks in the last window` : 'Not run yet'}
                     </dd>
-                    <dt className="text-ink-3">Next run</dt>
-                    <dd className="num">{status.nextRun ? `${fmtTime(status.nextRun)} UTC` : '—'}</dd>
+                    <dt className="text-ink-3">Next scheduled check</dt>
+                    <dd className="num">{status.nextRun ? `${fmtTime(status.nextRun)}` : '—'}</dd>
                   </dl>
                 </div>
-                {location === 'server' && status.lastRun && <p className="mt-2 text-[13px] text-ink-2">{status.lastRun.outcome}</p>}
+                {automatic && watchDelayText(w, status.lastRun, server?.snapshotAt ?? state.clock) && <p role="status" className="mt-2 text-[13px] text-high">{watchDelayText(w, status.lastRun, server?.snapshotAt ?? state.clock)}</p>}
+                {location === 'server' && status.lastRun && <p className="mt-2 text-[13px] text-ink-2">{checkResultText(status.lastRun.check, runOutcomeText(status.lastRun.outcome, runMetrics(status.lastRun, server?.executionStatuses)))}</p>}
                 {!invs.length && ran && location !== 'server' && <p className="mt-2 text-[13px] text-ink-3">{status.quiet}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <details className="group min-w-0 flex-1">
@@ -185,6 +185,7 @@ export function WatchesPage() {
                       {w.signals.some((sg) => sg.key === 'changes') && <li className="text-ink-2">{w.signals.every((sg) => sg.key === 'changes') ? 'Failed deployments; successful deployments and releases as brief context' : 'Recent releases, as context'}</li>}
                       <li className="text-ink-3">
                         Morning brief: {w.notificationPolicy.morningBrief ? `includes ${w.notificationPolicy.briefMin} and above` : 'off'} · schedule <Mono className="text-ink-3">{toCron(w)}</Mono>
+                        {w.schedule.frequency === 'daily' && ` · ${w.schedule.dailyAt} (${w.timezone} schedule)`}
                       </li>
                     </ul>
                   </details>
@@ -207,7 +208,7 @@ export function WatchesPage() {
             {watchCardStatus(logFor, { location, result: r, clock: state.clock, snapshotAt: server?.snapshotAt }).runs.map((l) => {
               const metrics = runMetrics(l, server?.executionStatuses);
               return <li key={l.jobId} className={cx('grid gap-3 py-2', location === 'server' ? 'grid-cols-[120px_1fr]' : 'grid-cols-[72px_1fr]')}>
-                  <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)} UTC`}</span>
+                  <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)}`}</span>
                   <span className={l.emailIds.length ? 'font-medium text-ink' : l.investigationIds.length ? '' : 'text-ink-2'}>
                     {runOutcomeText(l.outcome, metrics)}
                     {!!metrics.length && <ul className="mt-1 text-[12px] text-ink-3">{metrics.map((metric) => <li key={`${metric.source ?? 'unknown'}:${metric.metricKey}`}>
@@ -234,7 +235,7 @@ export function WatchesPage() {
 // Create Watch
 // ─────────────────────────────────────────────────────────────
 
-const STEPS = ['What should I watch?', 'What counts as a change?', 'Where should I look?', 'How often should I check?', 'When should I interrupt you?', 'Morning brief?'];
+const STEPS = ['What do you want Jagr to watch?', 'What counts as important?', 'Which tools should Jagr check?', 'How often should Jagr check?', 'When should Jagr interrupt you?', 'Morning brief?'];
 /** A metric's default detection rule, and how a watch may override it (see Watch.thresholds). */
 const METRIC_RULE = new Map(METRIC_DEFS.map((d) => [nativeMetricKey(d.id, d.provider, d.platform), d]));
 const unitOf = (id: string) => (METRIC_RULE.get(id)?.mode === 'absolute' ? 'pts' : '%');
@@ -392,7 +393,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
               <p className="mt-1 text-[14px] text-ink-2">
                 <span className="font-medium text-ink">{created.name}</span> checks {created.sources.map((p) => state.connections.find((c) => c.provider === p)?.label?.short ?? PROVIDERS[p].short).join(', ')} {FREQUENCY_LABEL[created.schedule.frequency].toLowerCase()}, interrupts you at {created.notificationPolicy.interruptAt === 'CRITICAL' ? 'CRITICAL only' : `${created.notificationPolicy.interruptAt}+`}, and {created.notificationPolicy.morningBrief ? 'reports in the morning brief' : 'stays out of the brief'}.
               </p>
-              <p className="mt-2 text-[13px] text-ink-3">Cron equivalent: <Mono>{toCron(created)}</Mono> ({created.timezone})</p>
+              <p className="mt-2 text-[13px] text-ink-3">{location === 'server' && mode === 'connected' ? 'Jagr checks automatically on this schedule. You can leave and return for the result.' : 'This workspace runs when you ask; it does not check sources while you are away.'}</p>
               {created.thresholds && Object.keys(created.thresholds).length > 0 && (
                 <p className="mt-1 text-[13px] text-ink-2">
                   Custom thresholds:{' '}
@@ -611,16 +612,16 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
         <div className="flex items-center justify-between border-t border-line px-5 py-3">
           {created ? (
             <>
-              <Button variant="ghost" onClick={close}>
-                Done
+              <Button variant={location === 'server' ? 'primary' : 'ghost'} onClick={close}>
+                {location === 'server' && mode === 'connected' ? 'Start watching' : 'Done'}
               </Button>
               <Button
-                variant="primary"
+                variant={location === 'server' ? 'ghost' : 'primary'}
                 disabled={running}
                 onClick={async () => {
                   try {
                     await runCreatedWatch(runMonitoring, () => {
-                      toast({ tone: 'success', title: location === 'server' ? 'Check requested' : 'Monitoring re-run', body: location === 'server' ? 'Follow the requested check status to see when execution finishes.' : `${created.name} is now part of the overnight schedule.` });
+                      toast({ tone: 'success', title: location === 'server' ? 'Check requested' : 'Monitoring re-run', body: location === 'server' ? 'The result will appear automatically when the check finishes.' : `${created.name} is now part of the overnight schedule.` });
                       onClose();
                       if (quickStartOrigin) navigate('/');
                     });
@@ -629,7 +630,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                   }
                 }}
               >
-                {running ? 'Running…' : location === 'server' ? 'Run check' : 'Run monitoring now'}
+                {running ? 'Running…' : location === 'server' ? 'Check now (optional)' : 'Run monitoring now'}
               </Button>
             </>
           ) : (

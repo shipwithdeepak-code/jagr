@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, RotateCcw } from 'lu
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ActionDecision, WatchInvestigation } from '@/product/types';
 import { defaultReplayPass, REPLAY_STAGE_LABEL, replayFrames, replayPasses, type ReplayStage } from '@/product/view/replay';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { ProviderName } from './product';
 import { Button, cx } from './ui';
 
@@ -64,7 +64,7 @@ export function InvestigationReplay({ inv, decisions, onRunAgain, running }: { i
         <div className="min-w-0">
           <h3 className="text-[14px] font-semibold">Replay original investigation</h3>
           <p className="mt-0.5 text-[12px] text-ink-3">
-            {pass === original ? 'The pass that reached this verdict' : `Pass ${pass}`} · {info && `${fmtTime(info.at)} UTC`} · from the stored trace — nothing is re-run.
+            {pass === original ? 'The pass that reached this verdict' : `Pass ${pass}`} · {info && `${fmtTime(info.at)}`} · from the stored trace — nothing is re-run.
           </p>
         </div>
         {passes.length > 1 && (

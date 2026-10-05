@@ -5,7 +5,7 @@ import type { ActionRisk, AgentHypothesis, EvidenceItem, EvidenceStrength, Plann
 import { StatusBadge, strengthOf } from './primitives';
 import type { EffectiveAction } from '@/product/agent/decisions';
 import { hypothesisLabel } from '@/product/agent/investigator';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { useProduct } from '@/state/productContext';
 import { useToast } from './toast';
 import { Badge, Button, Card, cx, Eyebrow, Mono } from './ui';
@@ -271,13 +271,13 @@ export function AgentApprovalCard({ action, inv }: { action: EffectiveAction; in
         <RiskBadge risk={action.risk} />
         {!action.reversible && <Badge tone="crit">Not easily reversible</Badge>}
         <span className="ml-auto text-[12px] text-ink-3">
-          Proposed {fmtTime(action.proposedAt)} UTC
+          Proposed {fmtTime(action.proposedAt)}
           {inv && <> · {investigationTitle(inv)}</>}
         </span>
       </div>
       <div className="grid gap-4 px-4 py-4 md:grid-cols-2">
         <Field label="Why">{action.why}</Field>
-        <Field label={`Evidence at proposal, ${fmtTime(action.proposedAt)} UTC`}>
+        <Field label={`Evidence at proposal, ${fmtTime(action.proposedAt)}`}>
           <ul className="space-y-0.5">
             {action.evidence.map((e) => (
               <li key={e} className="flex gap-1.5">

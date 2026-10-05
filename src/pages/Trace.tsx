@@ -2,7 +2,7 @@ import { Ban, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleDot, Sc
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentEvent, AgentStage } from '@/domain/types';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { allEvents, useWorkspace } from '@/state/workspace';
 import { Badge, Card, cx, EmptyState, Mono, PageHeader, Select, Tabs } from '@/components/ui';
 import { RunButtons } from './Overview';

@@ -18,6 +18,7 @@ import { EMAIL_FROM } from '@/product/catalog';
 import { hasMonitoringHistory, productStateFromSnapshot, type WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
 import { useServerSession } from './serverSession';
 import { serverApi, ServerError } from './serverApi';
+import { startWorkspaceRefresh } from './workspaceRefresh';
 import { persistWatchAndRefresh } from '@/product/view/watchCreation';
 
 /** Recorded in exports this browser produces. */
@@ -112,6 +113,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     let error = false;
     reads.forEach((read, index) => { if (read.status === 'fulfilled') statuses[requested[index]] = read.value; else { error = true; statuses[requested[index]] ??= undefined; } });
     setExecutionReads({ workspaceId: id, keys: requested, statuses, error });
+    return statuses;
   }, []);
   const [serverError, setServerError] = useState<string | undefined>();
   // A 401 from a workspace call means the session ended mid-use: re-check it, so the person gets the
@@ -120,25 +122,63 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const authLost = useCallback((e: unknown) => {
     if (e instanceof ServerError && e.status === 401) void sessionLost();
   }, [sessionLost]);
-  const loadServer = useCallback(async (id: string) => {
-    setServerLoading(true);
+  const snapshotGeneration = useRef(0);
+  useEffect(() => { snapshotGeneration.current++; }, [serverId]);
+  const loadServer = useCallback(async (id: string, background = false) => {
+    const generation = ++snapshotGeneration.current;
+    if (!background) setServerLoading(true);
     try {
       const snapshot = await serverApi.snapshot(id);
+      if (generation !== snapshotGeneration.current) return false;
       setSrv({ id, snapshot, state: fromSnapshot(snapshot) });
       setServerError(undefined);
       return true;
     } catch (e) {
+      if (generation !== snapshotGeneration.current) return false;
       setServerError((e as Error).message);
       authLost(e);
       return false;
     } finally {
-      setServerLoading(false);
+      if (generation === snapshotGeneration.current) setServerLoading(false);
     }
   }, [authLost]);
   useEffect(() => {
     if (serverId) void loadServer(serverId);
     else setSrv(undefined);
   }, [serverId, loadServer]);
+  const executionKeys = executionReads && executionReads.workspaceId === serverId ? executionReads.keys.join('|') : '';
+  useEffect(() => {
+    if (!serverId) return;
+    let active = true;
+    let snapshotReadAt = Date.now();
+    const pending = () => {
+      const reads = executionRef.current;
+      return reads?.workspaceId === serverId && reads.keys.some((key) => !reads.statuses[key] || !['settled', 'failed'].includes(reads.statuses[key]!.execution.state));
+    };
+    const stop = startWorkspaceRefresh({
+      visible: () => document.visibilityState === 'visible',
+      pending: () => !!pending(),
+      read: async () => {
+        const wasPending = pending();
+        if (wasPending) {
+          const previous = executionRef.current?.statuses ?? {};
+          const statuses = await refreshExecutions(serverId);
+          if (!active) return;
+          const completed = statuses && Object.entries(statuses).some(([key, status]) => status && ['settled', 'failed'].includes(status.execution.state) && !['settled', 'failed'].includes(previous[key]?.execution.state ?? ''));
+          if (completed || Date.now() - snapshotReadAt >= 60_000) {
+            await loadServer(serverId, true);
+            snapshotReadAt = Date.now();
+          }
+        } else {
+          await loadServer(serverId, true);
+          snapshotReadAt = Date.now();
+        }
+      },
+      onError: () => setServerError('Results could not be refreshed. Last recorded results are shown; Jagr will try again.'),
+    });
+    return () => { active = false; stop(); };
+  }, [serverId, executionKeys, loadServer, refreshExecutions]);
+
   /** Run a server call, then re-read the snapshot (the server is the source of truth). Errors are shown, never swallowed. */
   const onServer = useCallback(
     async <T,>(fn: (id: string) => Promise<T>): Promise<T | undefined> => {

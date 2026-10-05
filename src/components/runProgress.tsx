@@ -1,7 +1,7 @@
 import { Check, Circle, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { STAGES, type RunProgress } from '@/product/progress';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { cx } from './ui';
 
 function useElapsed(since: number) {

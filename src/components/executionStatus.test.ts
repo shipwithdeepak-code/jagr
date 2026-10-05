@@ -25,26 +25,26 @@ describe('requested-check UI', () => {
     const result: ExecutionResult = { disposition: 'checked', classification: 'findings', coverage: 'incomplete', investigationIds: ['inv'], truncated: false };
     expect(render({ ...job, state: 'leased' }, result)).not.toContain('Open investigation');
     const html = render({ ...job, state: 'done' }, result);
-    expect(html).toContain('Meaningful change detected.');
+    expect(html).toContain('Important change detected — review the investigation.');
     expect(html).toContain('/investigations/w/inv');
     expect(html).not.toMatch(/caused|externally executed|Healthy/);
   });
   it('distinguishes quiet, gaps, unavailable, blocked, skipped and failure', () => {
     const checked: ExecutionResult = { disposition: 'checked', classification: 'no_meaningful_change', coverage: 'complete', investigationIds: [], truncated: false };
-    expect(render({ ...job, state: 'done' }, checked)).toContain('No meaningful change detected.');
+    expect(render({ ...job, state: 'done' }, checked)).toContain('No important change detected.');
     const inconclusive = render({ ...job, state: 'done' }, { ...checked, classification: 'inconclusive', coverage: 'unknown' });
     expect(inconclusive).toContain('Not enough evidence to determine whether this changed.');
     expect(inconclusive).not.toContain('normal range');
     const unavailable = render({ ...job, state: 'done' }, { ...checked, classification: 'inconclusive', coverage: 'incomplete', sourceFailures: ['amplitude'] });
-    expect(unavailable).toContain('Jagr couldn&#x27;t read this source during the check.');
+    expect(unavailable).toContain('Source unavailable');
     expect(render({ ...job, state: 'done' })).toContain('check result unavailable');
     expect(render({ ...job, state: 'done' }, { disposition: 'blocked', reason: 'check_not_permitted' })).toContain('admission or entitlement');
     expect(render({ ...job, state: 'done' }, { disposition: 'skipped', reason: 'watch_inactive_or_missing' })).toContain('Check skipped');
     expect(render({ ...job, state: 'dead' })).toContain('Check failed');
   });
   it('qualifies retries, lease recovery, and unavailable status reads', () => {
-    expect(render({ ...job, lastFailedAt: NOW })).toContain('retry scheduled');
-    expect(render({ ...job, state: 'leased', leaseUntil: NOW })).toContain('awaiting worker recovery');
+    expect(render({ ...job, lastFailedAt: NOW })).toContain('Delayed — Jagr will try again automatically');
+    expect(render({ ...job, state: 'leased', leaseUntil: NOW })).toContain('Delayed — Jagr will try again automatically');
     expect(render(job, null, true)).toContain('Status unavailable');
     expect(render(job, null, true)).not.toContain('Check failed');
   });

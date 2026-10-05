@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Signal, SignalCategory } from '@/domain/types';
 import { fmtMetric, fmtPct } from '@/lib/format';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { useWorkspace } from '@/state/workspace';
 import { SeriesChart, Sparkline } from '@/components/charts';
 import { Badge, Card, cx, Drawer, EmptyState, KeyValue, PageHeader, SeverityBadge, Tabs } from '@/components/ui';

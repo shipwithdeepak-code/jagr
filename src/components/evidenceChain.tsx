@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ConnectionState, ProviderId } from '@/product/types';
 import { CHAIN_STAGE_LABEL, type ChainLink, type ChainProvenance, type ChainStage, type EvidenceChain as Chain } from '@/product/view/evidenceChain';
-import { fmtTime } from '@/lib/time';
+import { fmtDateTime } from '@/lib/localTime';
 import { ProviderName } from './product';
 import { StatusBadge } from './primitives';
 import { cx } from './ui';
@@ -45,8 +45,8 @@ function Provenance({ p, stateOf }: { p: ChainProvenance; stateOf: (p: ProviderI
           {modeLabel(p.mode ?? stateOf(s)) && <span className="text-[12px] font-semibold tracking-[0.06em] uppercase">{modeLabel(p.mode ?? stateOf(s))}</span>}
         </span>
       ))}
-      {p.at && <span className="num font-mono">{fmtTime(p.at)} UTC</span>}
-      {p.freshAsOf && <span className="font-medium text-high">data only to {fmtTime(p.freshAsOf)} UTC</span>}
+      {p.at && <span className="num font-mono">{fmtDateTime(p.at)}</span>}
+      {p.freshAsOf && <span className="font-medium text-high">data only to {fmtDateTime(p.freshAsOf)}</span>}
       {p.records && p.records > 1 && <span className="num">{p.records} records</span>}
       {p.query && <span>query: {p.query}</span>}
       {p.link && (

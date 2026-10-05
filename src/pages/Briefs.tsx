@@ -2,7 +2,7 @@ import { ArrowRight, Bell, Inbox, Moon, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { MorningBriefDoc } from '@/product/types';
 import { useProduct } from '@/state/productContext';
-import { fmtDate, fmtTime } from '@/lib/time';
+import { fmtDate, fmtTime } from '@/lib/localTime';
 import { AttentionBadge, EmailPreview } from '@/components/product';
 import { Button, Card, cx, EmptyState, PageHeader, Tabs } from '@/components/ui';
 import { investigationTitle } from '@/product/view/investigation';
@@ -65,7 +65,7 @@ export function BriefsPage() {
                       className={cx('interactive w-full rounded-lg px-3 py-2 text-left text-[13px]', b.id === brief?.id ? 'bg-subtle font-medium text-ink' : 'text-ink-2 hover:bg-subtle')}
                     >
                       <span className="num block">{fmtDate(b.generatedAt)}</span>
-                      <span className="num block text-[12px] text-ink-3">{fmtTime(b.generatedAt)} UTC</span>
+                      <span className="num block text-[12px] text-ink-3">{fmtTime(b.generatedAt)}</span>
                     </button>
                   </li>
                 ))}
@@ -88,7 +88,7 @@ export function BriefsPage() {
                 icon={Moon}
                 title="No brief yet"
                 action={
-                  mode && (mode !== 'imported' || state.watches.length > 0) ? (
+                  location === 'server' ? <Link to="/watches" className="text-accent hover:underline">See what Jagr is watching</Link> : mode && (mode !== 'imported' || state.watches.length > 0) ? (
                     <Button variant="primary" icon={RefreshCw} onClick={() => void runMonitoring()}>
                       Run monitoring
                     </Button>
@@ -114,7 +114,7 @@ export function BriefsPage() {
             {emails.map((e) => (
               <button key={e.id} onClick={() => setParams({ tab: 'alerts', alert: e.id })} aria-current={selected?.id === e.id ? 'true' : undefined} className={cx('flex w-full flex-col gap-1 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-subtle', selected?.id === e.id && 'bg-subtle')}>
                 <span className="num flex items-center gap-2 text-[12px] text-ink-3">
-                  <Bell size={12} aria-hidden /> {fmtDate(e.sentAt)} {fmtTime(e.sentAt)} UTC {e.attention && <AttentionBadge level={e.attention} className="ml-auto" />}
+                  <Bell size={12} aria-hidden /> {fmtDate(e.sentAt)} {fmtTime(e.sentAt)} {e.attention && <AttentionBadge level={e.attention} className="ml-auto" />}
                 </span>
                 <span className="text-[13px] font-medium">{e.subject}</span>
               </button>
@@ -145,7 +145,7 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
   return (
     <article aria-label={`Morning brief, ${fmtDate(view.generatedAt)}`} className={cx('rounded-lg border border-line bg-surface', compact ? 'p-4' : 'px-5 py-6 sm:px-8 sm:py-8')}>
       <p className="num text-[13px] text-ink-3">
-        {fmtDate(view.generatedAt)} · {fmtTime(view.generatedAt)} UTC · covers {fmtTime(view.window.start)}–{fmtTime(view.window.end)} UTC
+        {fmtDate(view.generatedAt)} · {fmtTime(view.generatedAt)} · covers {fmtTime(view.window.start)}–{fmtTime(view.window.end)}
       </p>
       {!compact && <h2 className="mt-3 text-[28px] leading-tight font-semibold tracking-[-0.02em]">Good morning.</h2>}
       <p className={cx('text-ink-2', compact ? 'mt-1 text-[16px] font-medium text-ink' : 'mt-1.5 text-[20px]')}>{view.headline}</p>
@@ -158,7 +158,7 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-ink-3">
                   <StatusBadge kind="attention" value={it.attention} size="md" />
                   <span>{it.watchNames.join(' + ')}</span>
-                  <span>{it.emailedAt ? `Alert recorded ${fmtTime(it.emailedAt)} UTC` : 'New in this brief'}</span>
+                  <span>{it.emailedAt ? `Alert recorded ${fmtTime(it.emailedAt)}` : 'New in this brief'}</span>
                 </div>
                 <h3 className="mt-2.5 text-[20px] leading-snug font-semibold tracking-[-0.01em]">{it.headline}</h3>
                 {!compact && (
@@ -207,7 +207,7 @@ export function BriefDocument({ brief, compact = false }: { brief: MorningBriefD
             <ul className="mt-2 space-y-1 text-[13px] text-ink">
               {view.shipped.map((c) => (
                 <li key={`${c.source}|${c.title}|${c.at}`} className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="num text-[13px] text-ink-3">{fmtTime(c.at)} UTC</span>
+                  <span className="num text-[13px] text-ink-3">{fmtTime(c.at)}</span>
                   <span className="min-w-0 break-words">{c.title}</span>
                   <span className="text-[13px] text-ink-3">
                     {PROVIDERS[c.source as keyof typeof PROVIDERS]?.short ?? c.source} · {c.kind === 'release' ? 'release published' : 'deployment succeeded'}

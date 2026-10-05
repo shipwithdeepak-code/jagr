@@ -2,7 +2,7 @@ import { BarChart3, ExternalLink, Mail, Play, Smartphone, Ticket, type LucideIco
 import { Link } from 'react-router-dom';
 import type { AttentionLevel, ConnectionState, EmailNotification, InvestigationState, ProviderId, SourceLink } from '@/product/types';
 import { PROVIDERS } from '@/product/integrations/adapters';
-import { fmtDate, fmtTime } from '@/lib/time';
+import { fmtDate, fmtTime } from '@/lib/localTime';
 import { Badge, cx, Eyebrow, type Tone } from './ui';
 import { StatusBadge } from './primitives';
 import { useContext } from 'react';
@@ -171,7 +171,7 @@ export function EmailPreview({ email }: { email: EmailNotification }) {
           <span className="font-medium text-ink-2">Alert</span>
         )}
         <span className="ml-auto">
-          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} UTC · {email.trigger === 'immediate' ? 'raised immediately' : email.trigger === 'escalated' ? 'escalation' : 'raised once confirmed'}
+          {fmtDate(email.sentAt)} {fmtTime(email.sentAt)} · {email.trigger === 'immediate' ? 'raised immediately' : email.trigger === 'escalated' ? 'escalation' : 'raised once confirmed'}
         </span>
         {email.to && (
           <Badge tone="neutral" className="border border-dashed border-line-strong">

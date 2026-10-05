@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { MetricUnit, SeriesPoint } from '@/domain/types';
 import { fmtMetric } from '@/lib/format';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 
 /** Compact trend line for tables. Baseline drawn as a faint rule. */
 export function Sparkline({ points, baseline, tone = 'neutral', width = 96, height = 24 }: { points: SeriesPoint[]; baseline?: number; tone?: 'bad' | 'neutral' | 'good'; width?: number; height?: number }) {

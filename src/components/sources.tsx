@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { fmtDate, fmtTime } from '@/lib/time';
+import { fmtDate, fmtTime } from '@/lib/localTime';
 import { fmtBehind, groupSources, ROLE_LABEL, SOURCE_GROUP_LABEL, type SourceActionId, type SourceGroup, type SourceView } from '@/product/view/sources';
 import { ProviderLogo } from './product';
 import { StatusBadge } from './primitives';
@@ -40,7 +40,7 @@ function healthText(v: SourceView): { text: string; tone: string } {
 }
 
 function when(iso: string) {
-  return `${fmtDate(iso)} · ${fmtTime(iso)} UTC`;
+  return `${fmtDate(iso)} · ${fmtTime(iso)}`;
 }
 
 /** At-a-glance coverage: how many sources feed investigations, and where the gaps are. */

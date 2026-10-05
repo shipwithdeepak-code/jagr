@@ -1,7 +1,7 @@
 import { Check, Pause, Play, SkipForward, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentEvent, AgentStage, OvernightRun } from '@/domain/types';
-import { fmt12h, fmtTime } from '@/lib/time';
+import { fmt12h, fmtTime } from '@/lib/localTime';
 import { cx } from './ui';
 import { LogoMark } from './Logo';
 

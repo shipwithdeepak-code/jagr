@@ -81,22 +81,22 @@ export function GettingStarted() {
 
 /** Connected server workspaces: the shortest truthful path to a first completed check. */
 export function ConnectedWorkspaceQuickStart() {
-  const { state, server, runMonitoring, running } = useProduct();
+  const { state, server, running } = useProduct();
   if (!server) return null;
   const quickStart = connectedQuickStartState({ loading: server.loading, connections: server.connections, productConnections: state.connections, watches: state.watches, result: state.result, running, clock: state.clock, snapshotAt: server.snapshotAt });
   if (!quickStart.showChecklist) return null;
 
   const steps = [
-    { done: quickStart.stage !== 'loading' && quickStart.stage !== 'source', title: 'Connect your product stack', body: quickStart.stage === 'loading' ? 'Checking source readiness…' : quickStart.stage === 'source' ? 'Jagr needs a successfully verified evidence source before it can monitor your product.' : 'An evidence source is verified. Connect an independent context source to help explain changes.' },
-    { done: quickStart.stage === 'run', title: 'Create a watch', body: quickStart.stage === 'watch' ? state.watches.length ? 'An active watch must use at least one verified source. Open Watches to resume or create one.' : quickStart.recommendedTemplate ? 'A watch supported by your verified source is ready to configure.' : 'No built-in watch matches the verified source yet. Open the watch creator to review the available questions.' : 'Your first watch is ready.' },
-    { done: false, title: 'Run the first check', body: quickStart.running ? 'Jagr is checking your watch against the live source.' : 'Run now to confirm the setup. A quiet check is a successful result.' },
+    { done: quickStart.stage !== 'loading' && quickStart.stage !== 'source', title: 'Connect your product stack', body: quickStart.stage === 'loading' ? 'Checking source readiness…' : quickStart.stage === 'source' ? 'Start with Amplitude for product behavior. Add Sentry for errors and GitHub for release context.' : 'An evidence source is verified. Connect an independent context source to help explain changes.' },
+    { done: quickStart.stage === 'run', title: 'Tell Jagr what matters', body: quickStart.stage === 'watch' ? state.watches.length ? 'An active watch must use at least one verified source. Open Watches to resume or create one.' : quickStart.recommendedTemplate ? 'A watch supported by your verified source is ready to configure.' : 'No built-in watch matches the verified source yet. Open the watch creator to review the available questions.' : 'Your first watch is ready.' },
+    { done: false, title: 'Jagr checks automatically', body: quickStart.running ? 'Your immediate check is being requested.' : 'Your watch is scheduled. Jagr opens an investigation when evidence warrants one. You can leave and return for the result; Check now is optional.' },
   ];
   const current = quickStart.stage === 'loading' || quickStart.stage === 'source' ? 0 : quickStart.stage === 'watch' ? 1 : 2;
   const watchHref = state.watches.length ? '/watches?from=quick-start' : quickStart.recommendedTemplate ? `/watches?new=1&template=${quickStart.recommendedTemplate}&from=quick-start` : '/watches?new=1&from=quick-start';
 
   return (
     <Card className="mb-6">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] font-semibold">Jagr investigates important changes across your tools. <span className="font-normal text-ink-3">· connect, watch, then verify the first check</span></div>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] font-semibold">Jagr investigates important changes across your tools. <span className="font-normal text-ink-3">· connect, tell Jagr what matters, then return for an explanation</span></div>
       <ol className="grid gap-3 md:grid-cols-3">
         {steps.map((step, index) => (
           <li key={step.title} className={cx('rounded-lg border p-3', index === current ? 'border-accent bg-accent-soft/40' : 'border-line')}>
@@ -107,7 +107,7 @@ export function ConnectedWorkspaceQuickStart() {
             <p className="mt-1.5 text-[12px] text-ink-2">{step.body}</p>
             {index === current && index === 0 && quickStart.stage !== 'loading' && <Link to="/sources?from=quick-start" className="mt-2 inline-flex h-7 items-center gap-1 rounded bg-ink px-2.5 text-[12px] font-medium text-canvas"><Plus size={12} /> Connect source</Link>}
             {index === current && index === 1 && <Link to={watchHref} className="mt-2 inline-flex h-7 items-center gap-1 rounded bg-ink px-2.5 text-[12px] font-medium text-canvas"><Plus size={12} /> Create watch</Link>}
-            {index === current && index === 2 && <Button size="sm" variant="primary" icon={RefreshCw} className="mt-2" disabled={running} onClick={() => void runMonitoring().catch(() => undefined)}>{running ? 'Checking…' : 'Run monitoring'}</Button>}
+            {index === current && index === 2 && <Link to="/watches" className="mt-2 inline-flex text-[12px] font-medium text-accent hover:underline">See what Jagr is watching →</Link>}
           </li>
         ))}
       </ol>
@@ -123,7 +123,7 @@ export function FirstRunWelcome({ onContinue, onSkip }: { onContinue: () => void
         <div className="min-w-0 lg:self-end">
           <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">Welcome to Jagr</p>
           <h2 className="mt-1.5 max-w-2xl text-[24px] leading-tight font-semibold tracking-[-0.025em] text-balance sm:mt-2 sm:text-[28px]">Connect your product stack.</h2>
-          <p className="mt-2 max-w-xl text-[13px] leading-5 text-ink-2 sm:mt-3 sm:text-[14px] sm:leading-6">Jagr investigates important changes across your tools. Connect product analytics and one context source, then create your first watch.</p>
+          <p className="mt-2 max-w-xl text-[13px] leading-5 text-ink-2 sm:mt-3 sm:text-[14px] sm:leading-6">Jagr investigates important changes across your tools. Start with one product question, such as “Is checkout healthy?” Amplitude shows product behavior; Sentry adds errors and GitHub adds release context. One source can start a watch; another context source helps explain changes.</p>
         </div>
 
         <div aria-label="Conceptual example of how Jagr investigates" className="min-w-0 rounded-xl border border-line bg-subtle/40 p-3 sm:p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">

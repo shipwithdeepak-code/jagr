@@ -65,7 +65,7 @@ describe('real workspace briefs', () => {
     expect(html).toContain('href="/settings#monitoring"');
     expect(render(createElement(BriefsPage), '/briefs?tab=alerts', api)).toContain('No alerts');
     api.state.result!.briefs = [];
-    expect(render(createElement(BriefsPage), '/briefs', api)).toContain('Run monitoring');
+    expect(render(createElement(BriefsPage), '/briefs', api)).toContain('See what Jagr is watching');
   });
 
   it('leaves sample/imported brief behavior intact', () => {

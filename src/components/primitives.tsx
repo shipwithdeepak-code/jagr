@@ -1,7 +1,7 @@
 import { ChevronRight, Loader2, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { AgentHypothesis, AttentionLevel, ConnectionState, EvidenceItem as EvidenceRecord } from '@/product/types';
-import { fmtTime } from '@/lib/time';
+import { fmtTime } from '@/lib/localTime';
 import { cx } from './ui';
 
 /**
@@ -177,7 +177,7 @@ export function EvidenceItem({ evidence, source, state, action }: { evidence: Ev
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-3">
           {source}
           {state && <StatusBadge kind="source" value={state} />}
-          {evidence.onsetAt && <span className="num font-mono">{fmtTime(evidence.onsetAt)} UTC</span>}
+          {evidence.onsetAt && <span className="num font-mono">{fmtTime(evidence.onsetAt)}</span>}
           <span>· {d.label}</span>
         </p>
       </div>

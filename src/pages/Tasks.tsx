@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { Task } from '@/domain/types';
 import { GATE_LABELS } from '@/agents/policy';
-import { fmtDate, fmtTime } from '@/lib/time';
+import { fmtDate, fmtTime } from '@/lib/localTime';
 import { teamName, useWorkspace } from '@/state/workspace';
 import { Badge, Card, cx, Mono, PageHeader, RiskBadge, SimulationBadge, Tabs } from '@/components/ui';
 import { CreatedByBadge, PriorityBadge, TaskDraftCard, TaskDrawer, TaskStatusBadge } from '@/components/work';
