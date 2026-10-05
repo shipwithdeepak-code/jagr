@@ -1,4 +1,4 @@
-import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, MorningBriefDoc, ProviderId, Watch, WatchInvestigation } from '../types.js';
+import type { ActionDecision, BriefSchedule, ConnectionState, EmailNotification, ISO, MorningBriefDoc, ProviderId, SchedulerLogEntry, Watch, WatchInvestigation } from '../types.js';
 import type { ImportedDataset } from '../imports/schemas.js';
 import type { Role } from '../roles/types.js';
 import type { SecretRef } from './secrets.js';
@@ -180,6 +180,8 @@ export interface AuditEntry {
   target?: string;
   detail?: string;
   executionReceipt?: ExecutionReceipt;
+  /** Structured, bounded result for watch-run history. Older audit records omit it. */
+  watchRun?: NonNullable<SchedulerLogEntry['check']>;
 }
 
 export interface Repositories {

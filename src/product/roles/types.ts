@@ -76,7 +76,7 @@ export interface MetricPoint {
 }
 
 export interface MetricSeries extends MetricDefinition, RoleRecord {
-  baseline: { mean: number; stdDev: number; window: string };
+  baseline: { mean: number; stdDev: number; window: string; /** Number of readings used, when the source can report it. */ samples?: number };
   points: MetricPoint[];
 }
 

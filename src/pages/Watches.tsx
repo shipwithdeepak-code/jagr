@@ -23,6 +23,7 @@ import { Button, cx, Drawer, EmptyState, Mono, PageHeader, Toggle, useDialogFocu
 import { investigationTitle } from '@/product/view/investigation';
 import { useToast } from '@/components/toast';
 import { isQuickStartOrigin } from '@/state/firstRun';
+import type { ConnectionView } from '@/product/connections/model';
 
 export function WatchesPage() {
   const { state, setWatchStatus, mode, importedWorld, location, server } = useProduct();
@@ -127,7 +128,7 @@ export function WatchesPage() {
                         const missing = importedMetrics && signalMeta(sg.key).kind === 'metric' && !importedMetrics.has(sg.key);
                         if (missing) return <li key={sg.key + (sg.area ?? '')} className="text-ink-3">{signalMeta(sg.key).label} — not in your imported data, skipped</li>;
                         const metric = metricKeyOf(sg.key);
-                        const rule = metric ? ruleText(metric, w.thresholds) : null;
+                        const rule = metric ? ruleText(metric, w.thresholds, effectiveMetricThreshold(metric, w, server?.connections ?? [])) : null;
                         const custom = !!metric && w.thresholds?.[metric] !== undefined;
                         return (
                           <li key={sg.key + (sg.area ?? '')}>
@@ -164,6 +165,9 @@ export function WatchesPage() {
                 <span className="num text-ink-3">{location === 'server' ? `${fmtDateTime(l.scheduledAt)}` : `${fmtTime(l.scheduledAt)} UTC`}</span>
                 <span className={l.emailIds.length ? 'font-medium text-ink' : l.investigationIds.length ? '' : 'text-ink-2'}>
                   {l.outcome}
+                  {!!l.check?.metrics.length && <ul className="mt-1 text-[12px] text-ink-3">{l.check.metrics.map((metric) => <li key={`${metric.source ?? 'unknown'}:${metric.metricKey}`}>
+                    {metric.metricName}: {metric.finalDecision.replace('_', ' ')} · {metric.currentPointCount} current point{metric.currentPointCount === 1 ? '' : 's'}{metric.baselinePointCount !== null ? ` · ${metric.baselinePointCount} baseline point${metric.baselinePointCount === 1 ? '' : 's'}` : ''}{metric.currentValue !== null ? ` · current ${metric.currentValue}` : ''}{metric.baselineValue !== null ? ` · baseline ${metric.baselineValue}` : ''}{metric.threshold !== null ? ` · threshold ${metric.threshold}` : ''}{metric.relativeDecline !== null ? ` · decline ${metric.relativeDecline}%` : ''}{metric.inconclusiveReason ? ` · reason ${metric.inconclusiveReason.replaceAll('_', ' ')}` : ''}
+                  </li>)}</ul>}
                   {l.investigationIds.map((id) => (
                     <Link key={id} to={`/investigations/w/${id}`} className="ml-2 text-accent hover:underline">
                       Open
@@ -191,11 +195,24 @@ const METRIC_RULE = new Map(METRIC_DEFS.map((d) => [nativeMetricKey(d.id, d.prov
 const unitOf = (id: string) => (METRIC_RULE.get(id)?.mode === 'absolute' ? 'pts' : '%');
 const verbOf = (id: string) => (METRIC_RULE.get(id)?.badDirection === 'up' ? 'rises' : 'drops');
 /** Human rule for a watch card, e.g. "drops more than 3% vs baseline". */
-export function ruleText(id: string, thresholds?: Watch['thresholds']) {
+export function ruleText(id: string, thresholds?: Watch['thresholds'], connectedThreshold?: number) {
   const def = METRIC_RULE.get(id);
   if (!def) return null;
-  const th = thresholds?.[id] ?? def.threshold;
+  const th = thresholds?.[id] ?? connectedThreshold ?? def.threshold;
   return `${verbOf(id)} more than ${th}${unitOf(id) === '%' ? '%' : ' pts'} vs baseline`;
+}
+
+/** Watch overrides win; otherwise use the connected metric binding that execution reads. */
+export function effectiveMetricThreshold(id: string, watch: Pick<Watch, 'sources' | 'thresholds'>, connections: ConnectionView[]): number | undefined {
+  const override = watch.thresholds?.[id];
+  if (override !== undefined && Number.isFinite(override) && override > 0) return override;
+  for (const connection of connections) {
+    if (connection.status !== 'connected' || !watch.sources.includes(connection.source as ProviderId)) continue;
+    const metrics = Array.isArray(connection.config.metrics) ? connection.config.metrics : [];
+    const binding = metrics.find((metric): metric is { key: string; threshold: number } => !!metric && typeof metric === 'object' && (metric as { key?: unknown }).key === id && Number.isFinite((metric as { threshold?: unknown }).threshold) && Number((metric as { threshold?: unknown }).threshold) > 0);
+    if (binding) return Number(binding.threshold);
+  }
+  return undefined;
 }
 
 const FREQS: MonitoringFrequency[] = ['15m', '30m', '1h', '4h', 'daily'];

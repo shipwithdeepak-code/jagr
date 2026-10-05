@@ -125,7 +125,7 @@ export function seasonalBaseline(all: MetricPoint[], recentCount: number, days =
   }
   const mean = values.length ? median(values) : 0;
   const sd = values.length > 1 ? Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / (values.length - 1)) : 0;
-  return { mean, stdDev: Math.max(sd, 0.01 * Math.abs(mean), 1e-9), window };
+  return { mean, stdDev: Math.max(sd, 0.01 * Math.abs(mean), 1e-9), window, samples: values.length };
 }
 
 function eventParam(e: z.infer<typeof EventSpec>): string {

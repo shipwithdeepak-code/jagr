@@ -25,15 +25,18 @@ describe('requested-check UI', () => {
     const result: ExecutionResult = { disposition: 'checked', classification: 'findings', coverage: 'incomplete', investigationIds: ['inv'], truncated: false };
     expect(render({ ...job, state: 'leased' }, result)).not.toContain('Open investigation');
     const html = render({ ...job, state: 'done' }, result);
-    expect(html).toContain('Change detected');
-    expect(html).toContain('coverage incomplete or unknown');
+    expect(html).toContain('Meaningful change detected.');
     expect(html).toContain('/investigations/w/inv');
     expect(html).not.toMatch(/caused|externally executed|Healthy/);
   });
   it('distinguishes quiet, gaps, unavailable, blocked, skipped and failure', () => {
     const checked: ExecutionResult = { disposition: 'checked', classification: 'no_meaningful_change', coverage: 'complete', investigationIds: [], truncated: false };
-    expect(render({ ...job, state: 'done' }, checked)).toContain('No meaningful change');
-    expect(render({ ...job, state: 'done' }, { ...checked, classification: 'inconclusive', coverage: 'unknown' })).toContain('evidence incomplete or unknown');
+    expect(render({ ...job, state: 'done' }, checked)).toContain('No meaningful change detected.');
+    const inconclusive = render({ ...job, state: 'done' }, { ...checked, classification: 'inconclusive', coverage: 'unknown' });
+    expect(inconclusive).toContain('Not enough evidence to determine whether this changed.');
+    expect(inconclusive).not.toContain('normal range');
+    const unavailable = render({ ...job, state: 'done' }, { ...checked, classification: 'inconclusive', coverage: 'incomplete', sourceFailures: ['amplitude'] });
+    expect(unavailable).toContain('Jagr couldn&#x27;t read this source during the check.');
     expect(render({ ...job, state: 'done' })).toContain('check result unavailable');
     expect(render({ ...job, state: 'done' }, { disposition: 'blocked', reason: 'check_not_permitted' })).toContain('admission or entitlement');
     expect(render({ ...job, state: 'done' }, { disposition: 'skipped', reason: 'watch_inactive_or_missing' })).toContain('Check skipped');

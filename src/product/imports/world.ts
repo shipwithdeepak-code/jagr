@@ -54,13 +54,16 @@ function buildSeries(metricId: string, rows: MetricRow[], notes: string[]): Metr
   const given = rows.map((r) => r.baseline).filter((b): b is number => b !== undefined);
   let mean: number;
   let source: string;
+  let baselineSamples: number;
   if (given.length) {
     mean = median(given);
     source = 'Baseline column in your import';
+    baselineSamples = given.length;
   } else {
     const n = Math.max(1, Math.ceil(points.length / 3));
     mean = median(points.slice(0, n).map((p) => p.value));
     source = `Estimated from the first ${n} point${n === 1 ? '' : 's'} (no baseline column)`;
+    baselineSamples = n;
     notes.push(`${def.name}: no baseline column, so the baseline (${mean}) was estimated from the first ${n} point${n === 1 ? '' : 's'}. Add a baseline column for a more reliable comparison.`);
   }
   // Spread: how much "normal" points vary around the baseline, floored at 1% so a flat series
@@ -71,7 +74,7 @@ function buildSeries(metricId: string, rows: MetricRow[], notes: string[]): Metr
   const { base: _b, std: _s, ...rest } = def;
   void _b;
   void _s;
-  return { ...rest, name: def.name, baseline: { mean, stdDev: Math.max(sd, 0.01 * Math.abs(mean)), window: source }, points };
+  return { ...rest, name: def.name, baseline: { mean, stdDev: Math.max(sd, 0.01 * Math.abs(mean)), window: source, samples: baselineSamples }, points };
 }
 
 export function buildImportedWorld(datasets: ImportedDataset[], updatedAt: string): ImportedWorld {

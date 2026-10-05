@@ -97,7 +97,7 @@ export function buildWorld(spec: WorldSpec): World {
       return { t: at, value: Math.round(value * 1000) / 1000 };
     });
     const { base, std, ...rest } = d;
-    return { ...rest, baseline: { mean: base, stdDev: std, window: 'Same hours, previous 28 nights' }, points };
+    return { ...rest, baseline: { mean: base, stdDev: std, window: 'Same hours, previous 28 nights', samples: 28 }, points };
   });
   return {
     id: spec.id,

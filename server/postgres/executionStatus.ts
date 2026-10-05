@@ -35,7 +35,7 @@ export async function readManualExecution(sql: SqlClient, scope: { organizationI
   let result = matching ? receipt.result : null;
   if (result?.disposition === 'checked') {
     if (!row.refs_owned) result = null;
-    else if (result.classification === 'no_meaningful_change' && result.coverage !== 'complete') result = null;
+    else if (result.classification === 'no_meaningful_change' && result.coverage !== 'complete' && !(result.metrics?.length && result.metrics.every((metric) => metric.coverage === 'complete' && metric.finalDecision === 'normal'))) result = null;
   }
   const iso = (v: string | Date | null) => v ? new Date(v).toISOString() : undefined;
   return executionStatus({ workspaceId: scope.workspaceId, watchId: row.watch_id, executionKey: key, requestedAt: row.due_at }, {

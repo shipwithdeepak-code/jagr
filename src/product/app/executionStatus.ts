@@ -2,7 +2,13 @@ import { z } from 'zod';
 import type { JobStatus, LeasedJob } from '../ports/jobs.js';
 import type { Repositories } from '../ports/persistence.js';
 
-const Checked = z.object({ disposition: z.literal('checked'), classification: z.enum(['findings', 'no_meaningful_change', 'inconclusive']), coverage: z.enum(['complete', 'incomplete', 'unknown']), investigationIds: z.array(z.string().min(1)).max(100), truncated: z.boolean() }).strict();
+const MetricEvaluation = z.object({
+  source: z.string().max(40).nullable(), metricKey: z.string().min(1).max(80), metricName: z.string().min(1).max(120),
+  coverage: z.enum(['complete', 'incomplete', 'unknown']), currentPointCount: z.number().int().min(0).max(10_000), baselinePointCount: z.number().int().min(0).max(10_000).nullable(),
+  currentValue: z.number().nullable(), baselineValue: z.number().nullable(), threshold: z.number().nullable(), relativeDecline: z.number().nullable(), zScore: z.number().nullable(), persistencePassed: z.boolean().nullable(),
+  finalDecision: z.enum(['normal', 'watching', 'anomalous', 'inconclusive', 'source_unavailable']), inconclusiveReason: z.enum(['insufficient_current_points', 'metric_unavailable', 'source_unavailable']).nullable(),
+}).strict();
+const Checked = z.object({ disposition: z.literal('checked'), classification: z.enum(['findings', 'no_meaningful_change', 'inconclusive']), coverage: z.enum(['complete', 'incomplete', 'unknown']), investigationIds: z.array(z.string().min(1)).max(100), truncated: z.boolean(), sourceFailures: z.array(z.string().min(1).max(40)).max(25).optional(), metrics: z.array(MetricEvaluation).max(25).optional() }).strict();
 const Skipped = z.object({ disposition: z.literal('skipped'), reason: z.literal('watch_inactive_or_missing') }).strict();
 const Blocked = z.object({ disposition: z.literal('blocked'), reason: z.literal('check_not_permitted') }).strict();
 export const ExecutionResultSchema = z.discriminatedUnion('disposition', [Checked, Skipped, Blocked]);
@@ -48,7 +54,7 @@ export function executionStatus(identity: { workspaceId: string; watchId: string
   const state = job.state === 'done' ? 'settled' : job.state === 'dead' ? 'failed' : job.state === 'queued' ? (job.lastFailedAt ? 'retrying' : 'queued') : !job.leaseUntil || job.leaseUntil <= asOf ? 'recovering' : 'running';
   const terminal = job.state === 'done' || job.state === 'dead';
   const checked = job.state === 'done' ? result : null;
-  const quiet = checked?.disposition === 'checked' && checked.classification === 'no_meaningful_change' && checked.coverage === 'complete';
+  const quiet = checked?.disposition === 'checked' && checked.classification === 'no_meaningful_change';
   return {
     workspaceId: identity.workspaceId, watchId: identity.watchId, executionKey: identity.executionKey, asOf,
     execution: { state, attempts: job.attempts, requestedAt: identity.requestedAt, createdAt: job.createdAt, firstAttemptedAt: job.firstAttemptedAt, lastAttemptedAt: job.lastAttemptedAt, completedAt: job.completedAt, lastFailedAt: job.lastFailedAt, ...(state === 'retrying' ? { nextAttemptAt: job.runAt } : {}) },

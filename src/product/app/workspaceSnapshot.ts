@@ -1,4 +1,4 @@
-import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SourceConnection, Watch, WatchInvestigation } from '../types.js';
+import type { ActionDecision, BriefSchedule, EmailNotification, ISO, MonitoringResult, MorningBriefDoc, ProviderId, SchedulerLogEntry, SourceConnection, Watch, WatchInvestigation } from '../types.js';
 import type { AuditEntry, Decision, Membership, Repositories, Workspace } from '../ports/persistence.js';
 import type { ImportedDataset } from '../imports/schemas.js';
 import { connectionView, type ConnectionView } from '../connections/model.js';
@@ -36,6 +36,7 @@ export interface WatchRunRecord {
   watchId: string;
   at: ISO;
   outcome: string;
+  check?: NonNullable<SchedulerLogEntry['check']>;
 }
 
 /** The audit action a watch run is recorded under (target: the watch id). */
@@ -54,7 +55,7 @@ export function watchRunsFromAudit(entries: AuditEntry[]): WatchRunRecord[] {
   return entries
     .filter((e) => e.action === WATCH_RUN_ACTION && !!e.target)
     .slice(-RECENT_RUNS)
-    .map((e) => ({ watchId: e.target!, at: e.at, outcome: (e.detail ?? '').replace(RUN_COUNTS, '') || 'Run completed' }));
+    .map((e) => ({ watchId: e.target!, at: e.at, outcome: (e.detail ?? '').replace(RUN_COUNTS, '') || 'Run completed', ...(e.watchRun ? { check: e.watchRun } : {}) }));
 }
 
 /** The server route calls this inside Transactor.readSnapshot; never return a partial history. */
@@ -131,7 +132,7 @@ export function productStateFromSnapshot(s: WorkspaceSnapshot, defaults: { email
   const starts = invs.map((i) => i.startedAt).sort();
   const ends = invs.map((i) => i.updatedAt).sort();
   const runs = s.runs ?? [];
-  const log: MonitoringResult['log'] = runs.map((r) => ({ jobId: `run:${r.watchId}:${r.at}`, type: 'watch_run', watchId: r.watchId, scheduledAt: r.at, outcome: r.outcome, investigationIds: [], emailIds: [] }));
+  const log: MonitoringResult['log'] = runs.map((r) => ({ jobId: `run:${r.watchId}:${r.at}`, type: 'watch_run', watchId: r.watchId, scheduledAt: r.at, outcome: r.outcome, ...(r.check ? { check: r.check } : {}), investigationIds: [], emailIds: [] }));
   return {
     connections,
     watches: s.watches,

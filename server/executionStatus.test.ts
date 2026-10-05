@@ -71,10 +71,10 @@ describe('manual execution contract on Postgres', () => {
     t.fail(new ProviderUnavailableError('github', 'unavailable', 'provider outage'));
     const key = await t.enqueue();
     expect(await t.worker()).toMatchObject({ state: 'completed' });
-    expect(await t.status(key)).toMatchObject({ publicStatus: 'completed', result: { classification: 'inconclusive', coverage: 'incomplete' } });
+    expect(await t.status(key)).toMatchObject({ publicStatus: 'completed', result: { classification: 'inconclusive', coverage: 'incomplete', sourceFailures: ['github'] } });
   });
 
-  it.each([null, 0, 3, 4])('does not infer complete metric coverage from a %s-point response', async (count) => {
+  it.each([null, 0, 3, 4])('classifies a %s-point metric response truthfully and persists bounded diagnostics', async (count) => {
     const t = await setup();
     const watch = (await t.rt.repos.watches.list('w'))[0];
     await t.rt.repos.watches.save('w', { ...watch, signals: [{ key: 'metric:checkout_conversion', area: 'checkout' }] });
@@ -88,7 +88,11 @@ describe('manual execution contract on Postgres', () => {
     } });
     const key = await t.enqueue();
     expect(await t.worker()).toMatchObject({ state: 'completed' });
-    expect(await t.status(key)).toMatchObject({ publicStatus: 'completed', result: { classification: 'inconclusive', coverage: count === 4 ? 'unknown' : 'incomplete' } });
+    const status = await t.status(key);
+    expect(status).toMatchObject({ publicStatus: count === 4 ? 'quiet' : 'completed', result: { classification: count === 4 ? 'no_meaningful_change' : 'inconclusive', coverage: count === 4 ? 'unknown' : 'incomplete' } });
+    expect(status.result).toMatchObject({ metrics: [{ source: 'github', metricKey: 'checkout_conversion', currentPointCount: count ?? 0, threshold: 10, finalDecision: count === 4 ? 'normal' : 'inconclusive' }] });
+    const persisted = JSON.stringify((await t.rt.repos.audit.list('w')).filter((entry) => entry.executionReceipt));
+    expect(persisted).not.toMatch(/Authorization|apiKey|secretKey|raw provider|private provider token/);
   });
 
   it('tracks queued/running/recovering/retrying/quiet with current-attempt gating and duplicate identity', async () => {

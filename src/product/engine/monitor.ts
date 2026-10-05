@@ -9,6 +9,7 @@ import type {
   EmailNotification,
   InvestigationState,
   MonitoringResult,
+  MetricEvaluationSummary,
   MorningBriefDoc,
   ProviderId,
   ScheduledJob,
@@ -149,22 +150,24 @@ async function observe(
   at: string,
   worldStart: string,
   P: (p: ProviderId) => ProviderLabel,
-): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[]; changeReads: ChangeRead[]; coverage: 'complete' | 'incomplete' | 'unknown' }> {
+): Promise<{ findings: Finding[]; gaps: ProviderId[]; failedDeployments: ObservedChange[]; shipped: ObservedChange[]; changeReads: ChangeRead[]; metricEvaluations: MetricEvaluationSummary[]; coverage: 'complete' | 'incomplete' | 'unknown' }> {
   const findings: Finding[] = [];
   const failedDeployments: ObservedChange[] = [];
   const shipped: ObservedChange[] = [];
   const changeReads: ChangeRead[] = [];
+  const metricEvaluations: MetricEvaluationSummary[] = [];
   const gaps = new Set<ProviderId>();
   let coverage: 'complete' | 'incomplete' | 'unknown' = watch.signals.length ? 'complete' : 'incomplete';
   const among = watch.sources.filter((p): p is SourceId => p !== 'email');
   if (among.some((source) => !reg.get(source))) coverage = 'incomplete';
-  const read = async (source: SourceId, fn: () => Promise<void>) => {
+  const read = async (source: SourceId, fn: () => Promise<void>): Promise<boolean> => {
     const freshAsOf = reg.connection(source)?.freshAsOf;
     if (freshAsOf && freshAsOf < at) coverage = 'incomplete';
     try {
       await fn();
+      return true;
     } catch (err) {
-      if (err instanceof ProviderUnavailableError) { gaps.add(source); coverage = 'incomplete'; }
+      if (err instanceof ProviderUnavailableError) { gaps.add(source); coverage = 'incomplete'; return false; }
       else throw err;
     }
   };
@@ -189,16 +192,42 @@ async function observe(
     }
     if (meta.kind === 'metric') {
       const m = reg.metricSource(metricKeyOf(sig.key)!, among);
-      if (!m) { coverage = 'incomplete'; continue; }
+      if (!m) {
+        coverage = 'incomplete';
+        metricEvaluations.push({ source: null, metricKey: metricKeyOf(sig.key)!, metricName: meta.label, coverage: 'incomplete', currentPointCount: 0, baselinePointCount: null, currentValue: null, baselineValue: null, threshold: null, relativeDecline: null, zScore: null, persistencePassed: null, finalDecision: 'inconclusive', inconclusiveReason: 'metric_unavailable' });
+        continue;
+      }
       const provider = m.source;
-      await read(provider, async () => {
+      const readSucceeded = await read(provider, async () => {
         const raw = await reg.get(provider)!.metrics!.getSeries({ metric: m.def.key, window: { start: worldStart, end: at } });
-        if (!raw) { coverage = 'incomplete'; return; }
+        const threshold = withWatchThreshold({ ...m.def, points: [], baseline: { mean: 0, stdDev: 0 } }, watch.thresholds).threshold;
+        if (!raw) {
+          coverage = 'incomplete';
+          metricEvaluations.push({ source: provider, metricKey: m.def.key, metricName: m.def.name, coverage: 'incomplete', currentPointCount: 0, baselinePointCount: null, currentValue: null, baselineValue: null, threshold, relativeDecline: null, zScore: null, persistencePassed: null, finalDecision: 'inconclusive', inconclusiveReason: 'metric_unavailable' });
+          return;
+        }
         // The portable series has no completeness/freshness guarantee. Do not invent one.
         if (raw.points.length < 4) coverage = 'incomplete';
         else if (coverage !== 'incomplete') coverage = 'unknown';
         const series = withWatchThreshold(raw, watch.thresholds);
         const r = readMetric(series);
+        const sufficient = series.points.length >= 4;
+        metricEvaluations.push({
+          source: provider,
+          metricKey: series.key,
+          metricName: series.name,
+          coverage: sufficient ? 'complete' : 'incomplete',
+          currentPointCount: Math.min(series.points.length, 10_000),
+          baselinePointCount: series.baseline.samples === undefined ? null : Math.min(series.baseline.samples, 10_000),
+          currentValue: sufficient && Number.isFinite(r.current) ? r.current : null,
+          baselineValue: Number.isFinite(series.baseline.mean) ? series.baseline.mean : null,
+          threshold: series.threshold,
+          relativeDecline: sufficient && series.mode === 'relative' && series.badDirection === 'down' && Number.isFinite(r.bad) ? r.bad : null,
+          zScore: sufficient && Number.isFinite(r.zScore) ? r.zScore : null,
+          persistencePassed: sufficient ? r.persistencePassed ?? null : null,
+          finalDecision: sufficient ? r.status : 'inconclusive',
+          inconclusiveReason: sufficient ? null : 'insufficient_current_points',
+        });
         if (r.status === 'normal') return;
         findings.push({
           status: r.status,
@@ -206,6 +235,10 @@ async function observe(
           signal: { key: sig.key, provider, area: series.area, label: series.name, magnitude: fmtMagnitude(series, r), ratio: r.ratio, onsetAt: r.onsetAt!, detectedAt: at, refs: [series.ref], ...(series.telemetry ? { telemetry: series.telemetry } : {}) },
         });
       });
+      if (!readSucceeded) {
+        const threshold = withWatchThreshold({ ...m.def, points: [], baseline: { mean: 0, stdDev: 0 } }, watch.thresholds).threshold;
+        metricEvaluations.push({ source: provider, metricKey: m.def.key, metricName: m.def.name, coverage: 'incomplete', currentPointCount: 0, baselinePointCount: null, currentValue: null, baselineValue: null, threshold, relativeDecline: null, zScore: null, persistencePassed: null, finalDecision: 'source_unavailable', inconclusiveReason: 'source_unavailable' });
+      }
     } else if (meta.kind === 'work_items') {
       if (!reg.withRole('work_items', among).length) coverage = 'incomplete';
       for (const s of reg.withRole('work_items', among)) {
@@ -245,7 +278,7 @@ async function observe(
       }
     }
   }
-  return { findings, gaps: [...gaps], failedDeployments, shipped, changeReads, coverage };
+  return { findings, gaps: [...gaps], failedDeployments, shipped, changeReads, metricEvaluations: metricEvaluations.slice(0, 25), coverage };
 }
 
 /** Group findings that describe one problem: same area (or an area-specific watch) and onsets within 2 hours. */
@@ -320,7 +353,12 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
 
     const watch = o.watches.find((w) => w.id === job.watchId)!;
     const at = job.at;
-    const { findings, gaps, failedDeployments, shipped: seen, changeReads, coverage } = await observe(reg, watch, at, o.world.start, P);
+    const { findings, gaps, failedDeployments, shipped: seen, changeReads, metricEvaluations, coverage } = await observe(reg, watch, at, o.world.start, P);
+    const classification = findings.length || failedDeployments.length
+      ? 'findings' as const
+      : gaps.length || metricEvaluations.some((m) => m.finalDecision === 'inconclusive' || m.finalDecision === 'source_unavailable')
+        ? 'inconclusive' as const
+        : 'no_meaningful_change' as const;
     const changesOnly = watch.signals.every((sig) => signalMeta(sig.key).kind === 'changes');
     for (const c of seen) shipped.set(c.record.id, c);
     const touched = new Set<string>();
@@ -659,14 +697,22 @@ export async function runMonitoring(o: MonitorOptions): Promise<MonitoringResult
       watchId: watch.id,
       scheduledAt: at,
       outcome: [
-        changesOnly ? changeReadSummary(changeReads, P) || (gaps.length ? '' : 'No change source to read') : findings.length ? `${findings.length} signal${findings.length === 1 ? '' : 's'} outside normal range` : 'All signals within normal range',
+        changesOnly
+          ? changeReadSummary(changeReads, P) || (gaps.length ? '' : 'No change source to read')
+          : classification === 'findings'
+            ? 'Meaningful change detected.'
+            : gaps.length
+              ? `Jagr couldn't read this source during the check.`
+              : classification === 'inconclusive'
+                ? 'Not enough evidence to determine whether this changed.'
+                : 'No meaningful change detected.',
         failedDeployments.length ? `${failedDeployments.length} failed deployment${failedDeployments.length === 1 ? '' : 's'} reported` : '',
         gaps.length ? `${gaps.map((g) => P(g).name).join(', ')} unavailable` : '',
         sent.length ? `${sent.length} email sent` : '',
       ]
         .filter(Boolean)
         .join(' · '),
-      check: { findings: findings.length > 0 || failedDeployments.length > 0, coverage },
+      check: { findings: findings.length > 0 || failedDeployments.length > 0, classification, coverage, sourceFailures: gaps, metrics: metricEvaluations },
       investigationIds: opened,
       emailIds: sent,
     });

@@ -142,11 +142,12 @@ describe('GitHub production changes — server, end to end', () => {
     await work(app);
 
     snap = (await app(req('GET', `/api/workspaces/${id}/snapshot`, s))).body as WorkspaceSnapshot;
-    expect(snap.runs).toEqual([
+    expect(snap.runs?.map(({ check: _check, ...run }) => run)).toEqual([
       { watchId: watch.id, at: '2026-09-25T10:00:00.000Z', outcome: 'GitHub: 0 deployments, 0 releases in the last 6h' },
       { watchId: watch.id, at: '2026-09-25T10:15:00.000Z', outcome: 'GitHub: 0 deployments, 0 releases in the last 6h' },
       { watchId: watch.id, at: '2026-09-25T10:20:00.000Z', outcome: 'GitHub: 1 deployment, 0 releases in the last 6h' },
     ]);
+    expect(snap.runs?.every((run) => run.check?.classification === 'no_meaningful_change' && run.check.metrics.length === 0)).toBe(true);
     const state = productStateFromSnapshot(snap, { emailFrom: 'jagr@test' });
     const card = watchCardStatus(snap.watches[0], { location: 'server', result: state.result, clock: state.clock, snapshotAt: snap.at });
     expect(card.runs).toHaveLength(3);
@@ -259,7 +260,8 @@ describe('production-path regressions (scheduler → GitHub → audit → snapsh
     const { app, id, s, watch } = await githubWatch();
     await tick(app);
     const snap = (await app(req('GET', `/api/workspaces/${id}/snapshot`, s))).body as WorkspaceSnapshot;
-    expect(snap.runs).toEqual([{ watchId: watch.id, at: '2026-09-25T10:00:00.000Z', outcome: 'GitHub: 0 deployments, 0 releases in the last 6h' }]);
+    expect(snap.runs?.map(({ check: _check, ...run }) => run)).toEqual([{ watchId: watch.id, at: '2026-09-25T10:00:00.000Z', outcome: 'GitHub: 0 deployments, 0 releases in the last 6h' }]);
+    expect(snap.runs?.[0].check).toMatchObject({ classification: 'no_meaningful_change', metrics: [] });
     const state = productStateFromSnapshot(snap, { emailFrom: 'jagr@test' });
     const card = watchCardStatus(snap.watches[0], { location: 'server', result: state.result, clock: state.clock, snapshotAt: snap.at });
     expect(card.lastRun).toMatchObject({ scheduledAt: '2026-09-25T10:00:00.000Z', outcome: 'GitHub: 0 deployments, 0 releases in the last 6h' });

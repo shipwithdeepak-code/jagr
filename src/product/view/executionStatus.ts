@@ -13,8 +13,9 @@ export function executionStatusText(status?: ManualExecutionStatus): string {
     case 'failed': return 'Check failed';
     case 'settled':
       if (!status.result) return 'Completed — check result unavailable';
-      if (status.publicStatus === 'quiet') return 'No meaningful change';
-      if (status.result.disposition === 'checked' && status.result.classification === 'findings') return status.result.coverage === 'complete' ? 'Change detected' : 'Change detected — evidence coverage incomplete or unknown';
-      return 'Completed — evidence incomplete or unknown';
+      if (status.result.disposition === 'checked' && status.result.classification === 'findings') return 'Meaningful change detected.';
+      if (status.result.disposition === 'checked' && status.result.classification === 'no_meaningful_change') return 'No meaningful change detected.';
+      if (status.result.disposition === 'checked' && (status.result.sourceFailures?.length || status.result.metrics?.some((metric) => metric.finalDecision === 'source_unavailable'))) return `Jagr couldn't read this source during the check.`;
+      return 'Not enough evidence to determine whether this changed.';
   }
 }

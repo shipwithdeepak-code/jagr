@@ -183,12 +183,13 @@ describe('GitHub change detection', () => {
     expect(failed.outcome).toBe('GitHub: 1 deployment, 0 releases in the last 6h · 1 failed deployment reported');
   });
 
-  it('a watch with metric signals keeps its existing wording', async () => {
+  it('a quiet watch with metric signals uses truthful no-change wording', async () => {
     const sample = createRegistry(world, defaultConnections()).registry;
     const checkout = watchFromTemplate('w-checkout', 'checkout_health', {}, world.start);
     const r = await runMonitoring({ world, registry: sample, watches: [checkout], connections: defaultConnections(), brief: defaultBriefSchedule() });
     const runs = r.log.filter((l) => l.type === 'watch_run');
-    expect(runs.some((l) => /^All signals within normal range/.test(l.outcome))).toBe(true);
+    expect(runs.some((l) => /^No meaningful change detected\./.test(l.outcome))).toBe(true);
+    expect(runs.some((l) => /All signals within normal range/.test(l.outcome))).toBe(false);
     expect(runs.some((l) => /in the last 6h/.test(l.outcome))).toBe(false);
   });
 

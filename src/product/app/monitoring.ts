@@ -151,7 +151,8 @@ async function persistRun(deps: MonitoringDeps, ws: Workspace, r: MonitoringResu
     }
     // A watch run is recorded against its watch (target) with that watch's own outcome: the run history servers show.
     const outcome = (watchId ? r.log.filter((l) => l.type === 'watch_run' && l.watchId === watchId) : r.log).map((l) => l.outcome).join(' | ').slice(0, 400);
-    const audit: AuditEntry = { id: uniqueId(`audit-${kind}`, at), workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, ...(watchId ? { target: watchId } : {}), detail: runAuditDetail(r.investigations.length, r.emails.length, outcome) };
+    const run = watchId ? r.log.find((entry) => entry.type === 'watch_run' && entry.watchId === watchId) : undefined;
+    const audit: AuditEntry = { id: uniqueId(`audit-${kind}`, at), workspaceId: ws.id, at, actor: { ref: 'system', displayName: 'Jagr' }, action: kind, ...(watchId ? { target: watchId } : {}), detail: runAuditDetail(r.investigations.length, r.emails.length, outcome), ...(run?.check ? { watchRun: run.check } : {}) };
     await repos.audit.append(audit);
     return { workspaceId: ws.id, investigations: r.investigations.length, touched: [...new Set(r.log.flatMap((l) => l.investigationIds))], notifications };
   });
@@ -256,7 +257,7 @@ async function runWatchJobLocked(deps: MonitoringDeps, job: Pick<LeasedJob, 'wor
   const log = r.log.find((entry) => entry.type === 'watch_run' && entry.watchId === watchId);
   const ids = [...new Set(log?.investigationIds ?? [])];
   const coverage = log?.check?.coverage ?? 'unknown';
-  summary.executionResult = { disposition: 'checked', classification: log?.check?.findings ? 'findings' : coverage === 'complete' ? 'no_meaningful_change' : 'inconclusive', coverage, investigationIds: ids.slice(0, 100), truncated: ids.length > 100 };
+  summary.executionResult = { disposition: 'checked', classification: log?.check?.classification ?? 'inconclusive', coverage, investigationIds: ids.slice(0, 100), truncated: ids.length > 100, ...(log?.check?.sourceFailures.length ? { sourceFailures: log.check.sourceFailures } : {}), ...(log?.check?.metrics.length ? { metrics: log.check.metrics } : {}) };
   return summary;
 }
 

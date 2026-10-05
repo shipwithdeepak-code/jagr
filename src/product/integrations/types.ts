@@ -27,7 +27,7 @@ export interface MetricSeries {
   mode: 'relative' | 'absolute';
   /** Default detection threshold (% or points, depending on mode). */
   threshold: number;
-  baseline: { mean: number; stdDev: number; window: string };
+  baseline: { mean: number; stdDev: number; window: string; samples?: number };
   points: MetricPoint[];
   platform?: 'ios' | 'android' | 'web';
 }

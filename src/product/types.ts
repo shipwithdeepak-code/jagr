@@ -489,6 +489,24 @@ export interface ScheduledJob {
   watchId?: string;
 }
 
+/** Bounded, derived facts explaining one metric decision. Never contains provider payloads or identities. */
+export interface MetricEvaluationSummary {
+  source: ProviderId | null;
+  metricKey: string;
+  metricName: string;
+  coverage: 'complete' | 'incomplete' | 'unknown';
+  currentPointCount: number;
+  baselinePointCount: number | null;
+  currentValue: number | null;
+  baselineValue: number | null;
+  threshold: number | null;
+  relativeDecline: number | null;
+  zScore: number | null;
+  persistencePassed: boolean | null;
+  finalDecision: 'normal' | 'watching' | 'anomalous' | 'inconclusive' | 'source_unavailable';
+  inconclusiveReason: 'insufficient_current_points' | 'metric_unavailable' | 'source_unavailable' | null;
+}
+
 export interface SchedulerLogEntry {
   jobId: string;
   type: JobType;
@@ -498,7 +516,13 @@ export interface SchedulerLogEntry {
   investigationIds: string[];
   emailIds: string[];
   /** Observation metadata from this evaluation; never a second detection pass. */
-  check?: { findings: boolean; coverage: 'complete' | 'incomplete' | 'unknown' };
+  check?: {
+    findings: boolean;
+    classification: 'findings' | 'no_meaningful_change' | 'inconclusive';
+    coverage: 'complete' | 'incomplete' | 'unknown';
+    sourceFailures: ProviderId[];
+    metrics: MetricEvaluationSummary[];
+  };
 }
 
 /** How tool selection was planned for a monitoring run. */

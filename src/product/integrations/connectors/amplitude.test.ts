@@ -61,6 +61,19 @@ const route = (u: URL): Reply | undefined => {
   return undefined;
 };
 
+const exactFixtureRoute = (currentPoints = 4) => {
+  const baselineHours = Array.from({ length: 4 }, (_, i) => Date.parse(NOW) - (28 - i) * HOUR);
+  const currentHours = Array.from({ length: currentPoints }, (_, i) => Date.parse(NOW) - (currentPoints - i) * HOUR);
+  const hours = [...baselineHours, ...currentHours];
+  return (u: URL): Reply | undefined => {
+    if (u.hostname !== 'amplitude.com') return undefined;
+    if (u.pathname === '/api/2/annotations') return { body: { data: [] } };
+    if (u.pathname !== '/api/2/events/segmentation') return undefined;
+    const event = (JSON.parse(u.searchParams.get('e') ?? '{}') as { event_type?: string }).event_type;
+    return { body: { data: { series: [hours.map((_, i) => event === 'Checkout Started' ? 100 : i < 4 ? 80 : 40)], seriesLabels: [0], xValues: hours.map(local) } } };
+  };
+};
+
 const CONFIG = {
   region: 'us',
   metrics: [
@@ -158,6 +171,20 @@ describe('Amplitude mapping', () => {
 });
 
 describe('Amplitude in a connected workspace (end to end, no sample data)', () => {
+  async function runExactFixture(currentPoints: number) {
+    const { repos, tx } = createMemoryPersistence();
+    const secrets = createMemorySecretStore();
+    const clock = manualClock(NOW);
+    await repos.workspaces.create({ id: 'ws-1', name: 'Acme', mode: 'connected', createdAt: NOW, settings: { planner: 'deterministic', aiEgressAllowed: false, timezone: 'UTC' }, brief: { enabled: true, time: '08:00', timezone: 'UTC' }, importedExportIds: [], version: 1 });
+    const ref = await secrets.put({ workspaceId: 'ws-1', connectionId: connection.id }, secret);
+    await repos.connections.save('ws-1', { ...connection, secretRef: ref });
+    const deps = { repos, tx, secrets, clock, http: scriptedHttp(exactFixtureRoute(currentPoints)).http, connectors: connectorsFrom([amplitudeConnector as ConnectorDescriptor<unknown>]) };
+    const watch = watchFromTemplate('w-checkout', 'checkout_health', { sources: ['amplitude'], metricKeys: ['checkout_conversion'] }, NOW);
+    await repos.watches.save('ws-1', watch);
+    const summary = await runWatchJob(deps, { workspaceId: 'ws-1', payload: { watchId: watch.id, dueAt: NOW } });
+    return { summary, investigations: await repos.investigations.list('ws-1'), audit: await repos.audit.list('ws-1') };
+  }
+
   it('a scheduled watch run detects the drop from Amplitude and cites it as connected evidence', async () => {
     const { repos, tx } = createMemoryPersistence();
     const secrets = createMemorySecretStore();
@@ -181,5 +208,26 @@ describe('Amplitude in a connected workspace (end to end, no sample data)', () =
     expect(inv.sourceLinks.every((l) => !l.simulated)).toBe(true);
     // The rollout annotation (timed) is change evidence; the date-only one never claims timing.
     expect(text).toContain('Checkout v2 rollout 100%');
+  });
+
+  it('persists the exact 100/80 to 100/40 fixture decision and keeps investigation creation intact', async () => {
+    const { summary, investigations, audit } = await runExactFixture(4);
+    expect(summary.executionResult).toMatchObject({ classification: 'findings', metrics: [{
+      source: 'amplitude', metricKey: 'checkout_conversion', currentPointCount: 4, baselinePointCount: 4,
+      currentValue: 40, baselineValue: 80, threshold: 10, relativeDecline: 50, zScore: 50,
+      persistencePassed: true, finalDecision: 'anomalous', inconclusiveReason: null,
+    }] });
+    expect(investigations).toHaveLength(1);
+    expect(investigations[0].signals[0]).toMatchObject({ key: 'metric:checkout_conversion', magnitude: '−50%' });
+    expect(audit.find((entry) => entry.action === 'monitor.watch')?.watchRun?.metrics[0]).toMatchObject({ currentValue: 40, baselineValue: 80, finalDecision: 'anomalous' });
+  });
+
+  it('three usable current points are inconclusive and never presented as normal', async () => {
+    const { summary, investigations, audit } = await runExactFixture(3);
+    expect(summary.executionResult).toMatchObject({ classification: 'inconclusive', metrics: [{ currentPointCount: 3, currentValue: null, finalDecision: 'inconclusive', inconclusiveReason: 'insufficient_current_points' }] });
+    expect(investigations).toEqual([]);
+    const run = audit.find((entry) => entry.action === 'monitor.watch')!;
+    expect(run.detail).toContain('Not enough evidence to determine whether this changed.');
+    expect(run.detail).not.toContain('normal range');
   });
 });

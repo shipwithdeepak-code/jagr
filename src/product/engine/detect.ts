@@ -37,6 +37,8 @@ export interface MetricReading {
   badSinceOnset: number;
   onsetAt?: string;
   zScore: number;
+  /** Whether at least three of the latest four buckets crossed half the configured threshold. */
+  persistencePassed?: boolean;
 }
 
 const WINDOW = 4;
@@ -77,7 +79,7 @@ export function readMetric(series: SeriesLike): MetricReading {
   }
   const recent = onsetAt ? win.filter((p) => p.t >= onsetAt!) : win;
   const currentSinceOnset = recent.length ? recent.reduce((a, p) => a + p.value, 0) / recent.length : current;
-  return { status, bad, ratio: bad / th, current, currentSinceOnset, badSinceOnset: badOf(series, currentSinceOnset), onsetAt, zScore: z };
+  return { status, bad, ratio: bad / th, current, currentSinceOnset, badSinceOnset: badOf(series, currentSinceOnset), onsetAt, zScore: z, persistencePassed: persistent };
 }
 
 export function fmtMagnitude(series: SeriesLike, reading: MetricReading): string {
