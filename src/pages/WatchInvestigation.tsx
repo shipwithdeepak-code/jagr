@@ -1,3 +1,4 @@
+import { InvestigationFeedbackForm } from '@/components/investigationFeedback';
 import { ArrowLeft, ChevronRight, CircleAlert, Clock3, Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -92,7 +93,7 @@ function Part({ id, title, hint, children }: { id: string; title: string; hint?:
  * run history) is available but collapsed — nobody should have to read it to understand the incident.
  */
 function Detail({ inv }: { inv: WatchInvestigation }) {
-  const { state, runMonitoring, running, location } = useProduct();
+  const { state, runMonitoring, running, location, server } = useProduct();
   const { createTaskFromDraft, state: ws } = useWorkspace();
   const [filed, setFiled] = useState<string | null>(visibleSimulatedTasks(ws.tasks, 'workspace', location, [inv])[0]?.id ?? null);
   const owner = state.watches.find((w) => w.id === inv.watchId);
@@ -105,7 +106,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
   const approvals = actions.filter((a) => a.risk === 'HIGH' || a.risk === 'CRITICAL');
   const waiting = approvals.filter((a) => a.effective === 'awaiting_approval');
   const fileTask = async () => {
-    if (filed) return;
+    if (location === 'server' || filed) return;
     const task = await createTaskFromDraft(taskDraftFor(inv));
     if (task) setFiled(task.id);
   };
@@ -183,7 +184,7 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
             <p className="font-medium text-ink">{inv.recommendedNextStep}</p>
             {primaryAction && (
               <a href="#what-to-do" className="interactive mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
-                {primaryAction.effective === 'awaiting_approval' ? 'Approval required' : primaryAction.effective === 'rejected' ? 'Not permitted' : primaryAction.effective === 'executed' || primaryAction.effective === 'done' || primaryAction.effective === 'approved' ? 'View recorded decision' : 'Review recommendation'}
+                {location === 'server' ? 'Review recommendation' : primaryAction.effective === 'awaiting_approval' ? 'Approval required' : primaryAction.effective === 'rejected' ? 'Not permitted' : primaryAction.effective === 'executed' || primaryAction.effective === 'done' || primaryAction.effective === 'approved' ? 'View recorded decision' : 'Review recommendation'}
                 <ChevronRight size={11} aria-hidden />
               </a>
             )}
@@ -267,19 +268,20 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
 
           <Part id="what-to-do" title="What to do">
             <p className="text-[16px] font-medium text-ink">{inv.recommendedNextStep}</p>
+            {location === 'server' && <p className="mt-2 text-[13px] text-ink-3">Recommendations only. Carry out the next step in your own tools; Jagr does not create external tasks, change production, or contact customers.</p>}
             {actions.length > 0 && (
               <div className="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
                 {actions.map((a) => (
-                  <ActionRow key={a.id} action={a} onDo={location === 'browser' && (a.kind === 'create_work_item' || a.kind === 'create_incident') ? fileTask : undefined} />
+                  location === 'server' ? <div key={a.id} className="border-b border-line p-4 last:border-b-0"><p className="font-medium">{a.title}</p><p className="mt-1 text-[13px] text-ink-2">{a.why}</p></div> : <ActionRow key={a.id} action={a} onDo={a.kind === 'create_work_item' || a.kind === 'create_incident' ? fileTask : undefined} />
                 ))}
               </div>
             )}
-            {filed && (
+            {location !== 'server' && filed && (
               <Link to={`/tasks?open=${filed}`} className="mt-2 inline-block text-[13px] font-medium text-accent hover:underline">
                 Simulated task {filed} recorded locally — view in Tasks
               </Link>
             )}
-            {approvals.length > 0 && (
+            {location !== 'server' && approvals.length > 0 && (
               <div className="mt-4 space-y-4">
                 {approvals.map((a) => (
                   <AgentApprovalCard key={a.id} action={a} />
@@ -290,6 +292,10 @@ function Detail({ inv }: { inv: WatchInvestigation }) {
               <Lock size={12} aria-hidden className="mt-0.5 shrink-0" /> Rollbacks, pricing, refunds and customer messages always need a person’s approval.
             </p>
           </Part>
+
+          <section aria-label="Investigation feedback" className="border-t border-line pt-6">
+            <InvestigationFeedbackForm key={`${server?.workspaceId ?? 'local'}:${inv.id}`} workspaceId={location === 'server' ? server?.workspaceId : undefined} investigationId={inv.id} />
+          </section>
 
           <details className="group border-t border-line pt-6">
             <summary className="interactive flex cursor-pointer list-none items-center gap-2 rounded text-[16px] font-semibold tracking-tight hover:text-ink [&::-webkit-details-marker]:hidden">

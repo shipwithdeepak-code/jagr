@@ -1,3 +1,4 @@
+import { initialMetricMappings, MetricMappings } from './metricMappings';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, LogOut, Mail, Monitor, Server } from 'lucide-react';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
@@ -309,7 +310,7 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
     }
     return next;
   });
-  const [advanced, setAdvanced] = useState(() => JSON.stringify(initialConfig, null, 2));
+  const [metrics, setMetrics] = useState(() => initialMetricMappings(type.provider, initialConfig, !!view));
   const [cred, setCred] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -319,13 +320,7 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
     setError(undefined);
     let parsed: Record<string, unknown> = {};
     if (!reconnect) {
-      let base: Record<string, unknown>;
-      try {
-        base = JSON.parse(advanced) as Record<string, unknown>;
-      } catch {
-        setError('The advanced configuration is not valid JSON.');
-        return;
-      }
+      const base = ['amplitude', 'sentry'].includes(type.provider) ? { ...initialConfig, metrics } : initialConfig;
       const result = connectionConfigFromFields(type.provider, fields, base);
       if ('error' in result) { setError(result.error); return; }
       parsed = result.config;
@@ -375,7 +370,7 @@ function ConnectForm({ workspaceId, type, view, mode, onCancel, onSuccess }: { w
           : setup?.access ?? 'The connection is tested as soon as it is saved.'}
       </p>
       {!reconnect && <div className="mt-4 space-y-3">{Object.keys(fields).map((key) => <ConnectionField key={key} provider={type.provider} name={key} value={fields[key]} onChange={(value) => setFields((current) => ({ ...current, [key]: value }))} />)}</div>}
-      {!reconnect && ['amplitude', 'sentry'].includes(type.provider) && <details className="mt-4 rounded-lg border border-line bg-subtle/40 p-3"><summary className="cursor-pointer text-[13px] font-medium text-ink-2">Advanced configuration</summary><p className="mt-2 text-[12px] text-ink-3">Signal mappings use the connector’s existing validated schema. Change them only if you already know the required event or telemetry definitions.</p><label className="mt-2 block text-[12px] text-ink-2">Validated connector configuration<textarea aria-label={`${type.name} advanced configuration`} className={cx(inputCls, 'h-36 py-1.5 font-mono text-[12px]')} value={advanced} onChange={(e) => setAdvanced(e.target.value)} spellCheck={false} /></label></details>}
+      {!reconnect && ['amplitude', 'sentry'].includes(type.provider) && <MetricMappings provider={type.provider} value={metrics} onChange={setMetrics} />}
       {!configure && setup && <div className="mt-4 rounded-lg border border-line bg-subtle/40 p-3"><p className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">Give Jagr read access</p><ol className="mt-2 space-y-1 text-[13px] text-ink-2">{setup.guide.map((item, index) => <li key={item}>{index + 1}. {item}</li>)}</ol></div>}
       {!configure && type.credentialFields.map((f) => (
         <label key={f.key} className="mt-3 block text-[13px] text-ink-2" htmlFor={`credential-${f.key}`}>

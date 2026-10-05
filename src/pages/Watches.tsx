@@ -498,7 +498,7 @@ function CreateWatchWizard({ onClose, initialTemplate, quickStartOrigin }: { onC
                     })
                   )}
                   {metrics.length > 0 && (
-                    <p className="pt-1 text-[13px] text-ink-3">A change must also hold for most of an hour and sit well outside normal variation before Jagr investigates. “Usual level” is the metric’s baseline from previous nights (or, for imported data, the earliest part of your upload). Who gets interrupted is set two steps from now.</p>
+                    <p className="pt-1 text-[13px] text-ink-3">Changes must persist across multiple readings and sit outside normal variation before Jagr investigates. Baselines and reading intervals come from each source. Who gets interrupted is set two steps from now.</p>
                   )}
                 </div>
               )}

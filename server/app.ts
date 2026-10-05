@@ -27,6 +27,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { resolveWorkspaceContext } from './authorization.js';
 import { AdmissionDenied } from '../src/product/app/admission.js';
 import { HistoryCursorError, HistorySizeError } from '../src/product/ports/history.js';
+import { InvestigationFeedback } from '../src/product/investigationFeedback.js';
 import { readManualExecution } from './postgres/executionStatus.js';
 
 /** Constant-time comparison (hashing first makes the lengths equal). */
@@ -251,6 +252,15 @@ export function createApp(rt: Runtime) {
         to: req.query.to,
         limit,
       }) });
+    }
+    if (section === 'investigations' && sub && rest[2] === 'feedback' && rest.length === 3) {
+      if (req.method !== 'POST') return json(405, { error: 'Method not allowed.' });
+      const inv = await rt.repos.investigations.get(id, sub);
+      if (!inv) return json(404, { error: 'Investigation not found.' });
+      const body = InvestigationFeedback.safeParse(req.body);
+      if (!body.success) return json(400, { error: 'Choose a usefulness rating and valid feedback fields.' });
+      await audit(id, p, 'investigation.feedback', inv.id, JSON.stringify(body.data));
+      return json(201, { saved: true });
     }
     if (section === 'investigations' && sub && rest[2] === 'events' && req.method === 'GET') {
       const inv = await rt.repos.investigations.get(id, sub);

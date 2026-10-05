@@ -87,7 +87,7 @@ export function ConnectedWorkspaceQuickStart() {
   if (!quickStart.showChecklist) return null;
 
   const steps = [
-    { done: quickStart.stage !== 'loading' && quickStart.stage !== 'source', title: 'Connect a live source', body: quickStart.stage === 'loading' ? 'Checking source readiness…' : quickStart.stage === 'source' ? 'Jagr needs a successfully verified evidence source before it can monitor your product.' : 'A live evidence source is verified.' },
+    { done: quickStart.stage !== 'loading' && quickStart.stage !== 'source', title: 'Connect your product stack', body: quickStart.stage === 'loading' ? 'Checking source readiness…' : quickStart.stage === 'source' ? 'Jagr needs a successfully verified evidence source before it can monitor your product.' : 'An evidence source is verified. Connect an independent context source to help explain changes.' },
     { done: quickStart.stage === 'run', title: 'Create a watch', body: quickStart.stage === 'watch' ? state.watches.length ? 'An active watch must use at least one verified source. Open Watches to resume or create one.' : quickStart.recommendedTemplate ? 'A watch supported by your verified source is ready to configure.' : 'No built-in watch matches the verified source yet. Open the watch creator to review the available questions.' : 'Your first watch is ready.' },
     { done: false, title: 'Run the first check', body: quickStart.running ? 'Jagr is checking your watch against the live source.' : 'Run now to confirm the setup. A quiet check is a successful result.' },
   ];
@@ -96,7 +96,7 @@ export function ConnectedWorkspaceQuickStart() {
 
   return (
     <Card className="mb-6">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] font-semibold">Quick Start <span className="font-normal text-ink-3">· connect, watch, then verify the first check</span></div>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] font-semibold">Jagr investigates important changes across your tools. <span className="font-normal text-ink-3">· connect, watch, then verify the first check</span></div>
       <ol className="grid gap-3 md:grid-cols-3">
         {steps.map((step, index) => (
           <li key={step.title} className={cx('rounded-lg border p-3', index === current ? 'border-accent bg-accent-soft/40' : 'border-line')}>
@@ -122,8 +122,8 @@ export function FirstRunWelcome({ onContinue, onSkip }: { onContinue: () => void
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.88fr)_minmax(390px,1.12fr)] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-5">
         <div className="min-w-0 lg:self-end">
           <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">Welcome to Jagr</p>
-          <h2 className="mt-1.5 max-w-2xl text-[24px] leading-tight font-semibold tracking-[-0.025em] text-balance sm:mt-2 sm:text-[28px]">Jagr watches your product while you’re away.</h2>
-          <p className="mt-2 max-w-xl text-[13px] leading-5 text-ink-2 sm:mt-3 sm:text-[14px] sm:leading-6">It detects meaningful changes, checks the evidence, and interrupts only when needed.</p>
+          <h2 className="mt-1.5 max-w-2xl text-[24px] leading-tight font-semibold tracking-[-0.025em] text-balance sm:mt-2 sm:text-[28px]">Connect your product stack.</h2>
+          <p className="mt-2 max-w-xl text-[13px] leading-5 text-ink-2 sm:mt-3 sm:text-[14px] sm:leading-6">Jagr investigates important changes across your tools. Connect product analytics and one context source, then create your first watch.</p>
         </div>
 
         <div aria-label="Conceptual example of how Jagr investigates" className="min-w-0 rounded-xl border border-line bg-subtle/40 p-3 sm:p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">

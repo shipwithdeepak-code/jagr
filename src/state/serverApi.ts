@@ -1,3 +1,4 @@
+import type { InvestigationFeedbackInput } from '@/product/investigationFeedback';
 import type { WorkspaceSnapshot } from '@/product/app/workspaceSnapshot';
 import type { InvestigationReplay } from '@/product/app/replay';
 import type { ConnectionTypeInfo } from '@/product/app/connections';
@@ -100,6 +101,7 @@ export const serverApi = {
   addImport: (ws: string, kind: ImportKind, filename: string, text: string) => call('POST', `/api/workspaces/${encodeURIComponent(ws)}/imports`, { kind, filename, text }),
   removeImport: (ws: string, id: string) => call('DELETE', `/api/workspaces/${encodeURIComponent(ws)}/imports/${encodeURIComponent(id)}`),
   exportWorkspace: (ws: string) => call<WorkspaceExportV1>('GET', `/api/workspaces/${encodeURIComponent(ws)}/export`),
+  investigationFeedback: (ws: string, inv: string, input: InvestigationFeedbackInput) => call<{ saved: true }>('POST', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/feedback`, input),
   /** The original investigation from storage (no provider is read). */
   replay: (ws: string, inv: string, pass?: number) => call<InvestigationReplay>('GET', `/api/workspaces/${encodeURIComponent(ws)}/investigations/${encodeURIComponent(inv)}/replay${pass !== undefined ? `?pass=${pass}` : ''}`),
   /** A new run over current data (connected workspaces); the original investigation is kept as recorded. */

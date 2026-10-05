@@ -77,6 +77,32 @@ async function importFixture(app: ReturnType<typeof createApp>, s: Session): Pro
 }
 
 describe('auth', () => {
+  it('persists investigation usefulness without changing its verdict, and enforces tenant, session and CSRF boundaries', async () => {
+    const { app, rt } = await setup();
+    const ana = await signIn(app, 'code-ana');
+    const ben = await signIn(app, 'code-ben');
+    const workspaceId = await importFixture(app, ana);
+    const inv = (await rt.repos.investigations.list(workspaceId))[0];
+    expect(inv).toBeDefined();
+    const before = JSON.stringify(inv);
+    const path = `/api/workspaces/${workspaceId}/investigations/${inv.id}/feedback`;
+    const feedback = { usefulness: 'somewhat_useful', reasons: ['missing_evidence', 'unclear_next_step'], missing: 'A provider incident status' };
+    expect((await app(req('POST', path, undefined, feedback))).status).toBe(401);
+    expect((await app(req('POST', path, ana, feedback, { 'x-jagr-csrf': '' }))).status).toBe(403);
+    expect((await app(req('POST', path, ben, feedback))).status).toBe(404);
+    expect((await app(req('POST', path, ana, { ...feedback, actor: 'system' }))).status).toBe(400);
+    expect((await app(req('POST', path.replace(inv.id, 'missing'), ana, feedback))).status).toBe(404);
+    expect((await app(req('GET', path, ana))).status).toBe(405);
+    expect((await app(req('POST', path, ana, feedback))).status).toBe(201);
+    const entries = (await rt.repos.audit.list(workspaceId)).filter((entry) => entry.action === 'investigation.feedback');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].target).toBe(inv.id);
+    expect(entries[0].actor.displayName).toBe('Ana');
+    expect(JSON.parse(entries[0].detail!)).toEqual(feedback);
+    expect(JSON.stringify(await rt.repos.investigations.get(workspaceId, inv.id))).toBe(before);
+  });
+
+
   it('serves bounded, tenant-scoped history pages and rejects a foreign cursor', async () => {
     const { app, rt } = await setup();
     const ana = await signIn(app, 'code-ana');

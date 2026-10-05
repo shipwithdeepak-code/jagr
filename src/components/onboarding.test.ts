@@ -9,7 +9,9 @@ describe('first-run Welcome presentation', () => {
     const welcome = createElement(FirstRunWelcome, { onContinue: vi.fn(), onSkip: vi.fn() });
     const html = renderToStaticMarkup(createElement(MemoryRouter, undefined, welcome));
     expect(html).toContain('<h2');
-    expect(html).toContain('Jagr watches your product while you’re away.');
+    expect(html).toContain('Connect your product stack.');
+    expect(html).toContain('Jagr investigates important changes across your tools.');
+    expect(html).toContain('one context source');
     expect(html).toContain('scripted example');
     expect(html).toContain('not your workspace data');
     expect(html).toContain('Jagr investigates before interrupting.');
